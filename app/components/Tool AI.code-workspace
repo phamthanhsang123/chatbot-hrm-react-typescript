@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../../../Tool AI"
+		},
+		{
+			"path": "../../../chatbot_hrm_backend"
+		},
+		{
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "Me_Ri_Chit_Mot"
+	}
+}
