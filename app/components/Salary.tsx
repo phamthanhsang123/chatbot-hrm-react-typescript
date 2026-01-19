@@ -1,4 +1,5 @@
-import { DollarSign, TrendingUp, Users, Download, Calculator, Eye } from "lucide-react";
+'use client';
+import { DollarSign, TrendingUp, Users, Download, Calculator } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
@@ -624,27 +625,25 @@ export function Salary() {
 
                                         <td className="px-4 py-2">
                                             <div className="flex justify-end gap-2">
-
+                                                <Button size="sm" variant="outline" onClick={() => handleViewDetail(item)}>
+                                                    Chi tiết
+                                                </Button>
 
                                                 {item.status === "calculated" && (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
-                                                        className="text-green-600 hover:bg-green-50"
                                                         onClick={() => handleApproveSalary(item)}
                                                     >
                                                         Duyệt
                                                     </Button>
                                                 )}
 
-
                                                 {item.status === "approved" && (
                                                     <Button size="sm" variant="outline" onClick={() => handlePaySalary(item)}>
                                                         Thanh toán
                                                     </Button>
                                                 )}
-
-
 
                                                 {item.status === "paid" && (
                                                     <Button
@@ -655,11 +654,6 @@ export function Salary() {
                                                         Gửi phiếu lương
                                                     </Button>
                                                 )}
-
-                                                <Button size="sm" variant="outline" onClick={() => handleViewDetail(item)}>
-                                                    <Eye className="size-3 mr-1" />
-                                                    Chi tiết
-                                                </Button>
                                             </div>
                                         </td>
                                     </tr>
