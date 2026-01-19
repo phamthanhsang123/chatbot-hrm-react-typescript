@@ -33,13 +33,13 @@ export function Sidebar({ isOpen, onClose, currentPage, onNavigate }: SidebarPro
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     const menuItems: MenuItem[] = [
-        { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="size-5" /> },
-        { id: 'employees', label: 'Nhân viên', icon: <Users className="size-5" />, badge: '125', active: true },
-        { id: 'salary', label: 'Lương thưởng', icon: <Wallet className="size-5" /> },
-        { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 5 },
-        { id: 'chatbot', label: 'HR Chatbot', icon: <MessageSquare className="size-5" />, badge: 'New' },
-        { id: 'reports', label: 'Báo cáo', icon: <FileText className="size-5" /> },
-        { id: 'analytics', label: 'Phân tích', icon: <BarChart3 className="size-5" /> },
+        { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="size-4" /> },
+        { id: 'employees', label: 'Quản Lý Nhân viên', icon: <Users className="size-3" />, badge: '125', active: true },
+        { id: 'salary', label: 'Quản Lý Lương', icon: <Wallet className="size-4" /> },
+        { id: 'leave', label: 'Quản Lý Phép', icon: <Calendar className="size-4" />, badge: 5 },
+        { id: 'chatbot', label: 'Quản Lý Chatbot', icon: <MessageSquare className="size-4" />, badge: 'New' },
+        { id: 'reports', label: 'Quản Lý Báo cáo', icon: <FileText className="size-4" /> },
+        { id: 'analytics', label: 'Quản Lý Phân tích', icon: <BarChart3 className="size-4" /> },
     ];
 
     const handleNavigate = (pageId: string) => {

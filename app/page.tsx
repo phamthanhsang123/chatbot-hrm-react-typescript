@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
-import { EmployeeTable } from './components/EmployeeTable';
+import { EmployeeTable } from './employees/components/EmployeeTable';
 import { Salary } from './components/Salary';
 import { Leave } from './components/Leave';
 import { Chatbot } from './components/Chatbot';
@@ -38,8 +38,8 @@ export default function Home() {
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">
-      <Sidebar 
-        isOpen={sidebarOpen} 
+      <Sidebar
+        isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         currentPage={currentPage}
         onNavigate={setCurrentPage}
@@ -52,7 +52,7 @@ export default function Home() {
           </div>
         </main>
       </div>
-      
+
     </div>
   );
 }
