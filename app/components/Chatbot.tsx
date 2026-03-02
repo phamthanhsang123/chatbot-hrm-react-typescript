@@ -6,6 +6,8 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
+import { Trash2 } from 'lucide-react';
+import { chatWithBot, fetchChatHistory, fetchSessions, deleteSession } from '@/services/chatbot';
 
 interface Message {
   id: number;
@@ -14,18 +16,65 @@ interface Message {
   time: string;
 }
 
+interface SessionItem {
+  session_id: number;
+  created_at: string;
+  title?: string;
+  last_message?: string;
+}
+
+
 export function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
-    { 
-      id: 1, 
-      text: 'Xin chào! Tôi là HR Assistant, trợ lý ảo của hệ thống HRM. Tôi có thể giúp gì cho bạn hôm nay? 😊', 
-      sender: 'bot', 
+    {
+      id: 1,
+      text: 'Xin chào! Tôi là HR Assistant, trợ lý ảo của hệ thống HRM. Tôi có thể giúp gì cho bạn hôm nay? 😊',
+      sender: 'bot',
       time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     },
   ]);
+
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [creatingSession, setCreatingSession] = useState(false);
+
+  const USER_ID = 3; // TODO: sau này lấy từ login/JWT
+  const API_BASE = 'http://localhost:8000';
+
+  const handleDeleteSession = async (sid: number) => {
+    const ok = confirm(`Xóa Session #${sid}? (Sẽ mất toàn bộ lịch sử)`);
+    if (!ok) return;
+
+    try {
+      await deleteSession(USER_ID, sid);
+      const list = await loadSessions();
+
+      // nếu đang mở đúng session bị xóa -> chuyển sang session gần nhất hoặc reset
+      if (sessionId === sid) {
+        if (list.length > 0) {
+          await selectSession(list[0].session_id);
+        } else {
+          setSessionId(null);
+          setMessages([
+            {
+              id: Date.now(),
+              text: 'Đã xóa. Bạn có thể bấm "Chat mới" để bắt đầu 😊',
+              sender: 'bot',
+              time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+            },
+          ]);
+        }
+      }
+    } catch (err) {
+      console.error('Delete session lỗi:', err);
+      alert('❌ Xóa thất bại. Kiểm tra backend/log.');
+    }
+  };
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,53 +84,199 @@ export function Chatbot() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const getBotResponse = (userMessage: string): string => {
-    const message = userMessage.toLowerCase();
-    
-    if (message.includes('nghỉ phép') || message.includes('ngày nghỉ')) {
-      return 'Bạn hiện có 12 ngày nghỉ phép năm còn lại. Bạn có muốn tạo đơn xin nghỉ phép không? Tôi có thể hướng dẫn bạn quy trình đăng ký đơn nghỉ phép.';
-    } else if (message.includes('lương') || message.includes('thu nhập')) {
-      return 'Bảng lương tháng này sẽ được phát hành vào ngày 5. Bạn có thể xem chi tiết bảng lương tại mục "Lương thưởng" trên hệ thống.';
-    } else if (message.includes('quên chấm công') || message.includes('thiếu chấm công') || message.includes('bổ sung chấm công')) {
-      return '🔔 Nếu bạn quên chấm công:\n\n1️⃣ Vào trang "Chấm công"\n2️⃣ Xem cảnh báo ngày thiếu chấm công\n3️⃣ Nhấn "Gửi đơn bổ sung ngay"\n4️⃣ Điền thông tin: Ngày, giờ vào/ra, lý do\n5️⃣ HR sẽ duyệt trong 24h\n\n⚠️ Lưu ý: Chỉ được gửi đơn bổ sung trong vòng 7 ngày. Vui lòng mô tả rõ lý do để HR dễ xem xét!';
-    } else if (message.includes('hr') || message.includes('liên hệ')) {
-      return 'Bạn có thể liên hệ bộ phận HR qua email: hr@company.com hoặc số điện thoại: 1900-xxxx. Thời gian làm việc: 8:00 - 17:30 các ngày trong tuần.';
-    } else if (message.includes('chấm công') || message.includes('attendance')) {
-      return 'Bạn đã chấm công đầy đủ trong tháng này. Tổng số ngày c��ng: 22 ngày. Bạn có thể xem chi tiết tại trang "Chấm công".\n\nNếu bạn quên chấm công, vui lòng gửi đơn bổ sung chấm công ngay!';
-    } else if (message.includes('thưởng') || message.includes('bonus')) {
-      return 'Thông tin về thưởng sẽ được công bố sau khi kết thúc quý. Bạn có thể theo dõi KPI của mình tại trang "Phân tích".';
-    } else if (message.includes('bảo hiểm') || message.includes('bhxh')) {
-      return 'Công ty đóng đầy đủ bảo hiểm xã hội, bảo hiểm y tế và bảo hiểm thất nghiệp theo quy định của pháp luật. Bạn cần hỗ trợ gì về bảo hiểm?';
-    } else if (message.includes('tài liệu') || message.includes('hợp đồng')) {
-      return 'Bạn có thể tải các tài liệu và hợp đồng lao động tại mục "Hồ sơ cá nhân". Nếu cần hỗ trợ, vui lòng liên hệ HR.';
-    } else {
-      return 'Cảm ơn bạn đã liên hệ! Tôi đã ghi nhận yêu cầu của bạn. Vui lòng chọn một trong các câu hỏi thường gặp bên cạnh hoặc bộ phận HR sẽ hỗ trợ bạn sớm nhất.';
+  // ====== helper: tạo session chắc chắn ======
+  const createSession = async (): Promise<number> => {
+    setCreatingSession(true);
+    try {
+      const res = await fetch(`${API_BASE}/chat/session?user_id=${USER_ID}`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Create session failed: ${res.status} ${txt}`);
+      }
+
+      const data = await res.json();
+
+      if (!data?.session_id) {
+        throw new Error(`Create session response missing session_id: ${JSON.stringify(data)}`);
+      }
+
+      const sid = Number(data.session_id);
+      setSessionId(sid);
+      return sid;
+    } finally {
+      setCreatingSession(false);
     }
   };
 
-  const handleSendMessage = () => {
-    if (inputMessage.trim()) {
-      const userMessage: Message = {
-        id: messages.length + 1,
-        text: inputMessage,
-        sender: 'user',
-        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => [...prev, userMessage]);
-      setInputMessage('');
-      setIsTyping(true);
+  // ====== helper: load list session ======
+  const loadSessions = async (): Promise<SessionItem[]> => {
+    try {
+      const list = await fetchSessions(USER_ID);
+      setSessions(list);
+      return list;
+    } catch (err) {
+      console.error('Load sessions lỗi:', err);
+      setSessions([]);
+      return [];
+    }
+  };
 
-      // Simulate bot typing and response
-      setTimeout(() => {
-        setIsTyping(false);
-        const botResponse: Message = {
-          id: messages.length + 2,
-          text: getBotResponse(inputMessage),
+
+  // ====== INIT: tạo session mới khi vào trang (1 lần) + load session list ======
+  useEffect(() => {
+    const init = async () => {
+      const list = await loadSessions();
+
+      // ✅ Nếu có session thì mở session gần nhất (list đã sort DESC từ backend)
+      if (list.length > 0) {
+        await selectSession(list[0].session_id);
+        return;
+      }
+
+      // ✅ Không có session nào: chỉ hiện lời chào, chờ user bấm "Chat mới" hoặc gửi tin nhắn
+      setSessionId(null);
+      setMessages([
+        {
+          id: Date.now(),
+          text: 'Xin chào! Tôi là HR Assistant, trợ lý ảo của hệ thống HRM. Tôi có thể giúp gì cho bạn hôm nay? 😊',
           sender: 'bot',
-          time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-        };
-        setMessages(prev => [...prev, botResponse]);
-      }, 1500);
+          time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        },
+      ]);
+    };
+
+    init();
+  }, []);
+
+  // ====== CLICK SESSION: load 10 messages gần nhất ======
+  const selectSession = async (sid: number) => {
+    try {
+      setSessionId(sid);
+      const history = await fetchChatHistory(sid);
+
+      if (history && history.length > 0) {
+        setMessages(history);
+      } else {
+        setMessages([
+          {
+            id: Date.now(),
+            text: 'Session này chưa có tin nhắn. Bạn có thể bắt đầu chat 😊',
+            sender: 'bot',
+            time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error('Load history lỗi:', err);
+    }
+  };
+
+  // ====== TẠO CHAT MỚI ======
+  const createNewSession = async () => {
+    try {
+      const sid = await createSession();
+      await loadSessions();
+
+      setMessages([
+        {
+          id: Date.now(),
+          text: 'Xin chào! Tôi là HR Assistant, trợ lý ảo của hệ thống HRM. Tôi có thể giúp gì cho bạn hôm nay? 😊',
+          sender: 'bot',
+          time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        },
+      ]);
+
+      // nếu muốn load history (thường sẽ rỗng)
+      // const history = await fetchChatHistory(sid);
+      // if (history?.length) setMessages(history);
+
+    } catch (err) {
+      console.error('Create new session lỗi:', err);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || isTyping) return;
+
+    const userText = inputMessage;
+
+    // ✅ nếu sessionId null (do init chưa xong), tự tạo session ngay tại đây
+    let sid = sessionId;
+    if (!sid) {
+      try {
+        sid = await createSession();
+        await loadSessions();
+      } catch (err) {
+        console.error('Không tạo được session khi gửi:', err);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            text: '❌ Không tạo được session. Kiểm tra backend đang chạy chưa (http://localhost:8000).',
+            sender: 'bot',
+            time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          },
+        ]);
+        return;
+      }
+    }
+
+    const userMessage: Message = {
+      id: Date.now(),
+      text: userText,
+      sender: 'user',
+      time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInputMessage('');
+    setIsTyping(true);
+
+    const loadingId = Date.now() + 1;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: loadingId,
+        text: 'Đang xử lý...',
+        sender: 'bot',
+        time: '',
+      },
+    ]);
+
+    try {
+      // ✅ GỌI BACKEND có session_id
+      const data = await chatWithBot(userText, sid);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loadingId
+            ? {
+              ...m,
+              text: data.reply,
+              time: new Date().toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+            }
+            : m
+        )
+      );
+
+      // refresh list session
+      await loadSessions();
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loadingId
+            ? { ...m, text: '❌ Không kết nối được server hoặc server lỗi' }
+            : m
+        )
+      );
+    } finally {
+      setIsTyping(false);
     }
   };
 
@@ -109,15 +304,61 @@ export function Chatbot() {
                 <Sparkles className="size-3 mr-1" />
                 AI Powered
               </Badge>
+              <Badge className="bg-gray-100 text-gray-700 border-0">
+                {sessionId ? `Session #${sessionId}` : (creatingSession ? 'Đang tạo session...' : 'Chưa có session')}
+              </Badge>
             </div>
             <p className="text-gray-500 mt-1">Trợ lý ảo hỗ trợ nhân viên 24/7</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chatbot Interface */}
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* LEFT: SESSION LIST */}
+        <div className="lg:col-span-1">
+          <Card className="p-4 shadow-lg border-0 h-[650px] flex flex-col">
+            <Button onClick={createNewSession} className="w-full mb-4" disabled={creatingSession || isTyping}>
+              + Chat mới
+            </Button>
+
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {sessions.map((s) => (
+                <div
+                  key={s.session_id}
+                  className={`w-full p-3 rounded-xl border transition-all flex items-center justify-between gap-2 ${sessionId === s.session_id
+                      ? 'bg-blue-100 border-blue-200'
+                      : 'bg-white hover:bg-gray-50 border-gray-100'
+                    }`}
+                >
+                  <button
+                    onClick={() => selectSession(s.session_id)}
+                    className="flex-1 text-left"
+                  >
+                    <div className="text-sm font-medium line-clamp-1">
+                      {s.title?.trim() ? s.title : `Session #${s.session_id}`}
+                    </div>
+                    <div className="text-xs text-gray-500 line-clamp-1">
+                      {s.last_message?.trim() ? s.last_message : s.created_at}
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteSession(s.session_id)}
+                    className="p-2 rounded-lg hover:bg-white/60"
+                    title="Xóa session"
+                    disabled={creatingSession || isTyping}
+                  >
+                    <Trash2 className="size-4 text-gray-500 hover:text-red-600" />
+                  </button>
+                </div>
+              ))}
+
+            </div>
+          </Card>
+        </div>
+
+        {/* RIGHT: CHAT UI */}
+        <div className="lg:col-span-3">
           <Card className="h-[650px] flex flex-col overflow-hidden shadow-xl border-0">
             {/* Chat Header */}
             <div className="p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white relative overflow-hidden">
@@ -136,8 +377,10 @@ export function Chatbot() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-blue-100">Phản hồi trong</div>
-                  <div className="text-sm font-semibold">~2 giây</div>
+                  <div className="text-xs text-blue-100">Session</div>
+                  <div className="text-sm font-semibold">
+                    {sessionId ? `#${sessionId}` : (creatingSession ? 'Đang tạo...' : '...')}
+                  </div>
                 </div>
               </div>
             </div>
@@ -149,23 +392,26 @@ export function Chatbot() {
                   key={message.id}
                   className={`flex gap-3 animate-fadeIn ${message.sender === 'user' ? 'flex-row-reverse' : ''}`}
                 >
-                  <div className={`size-10 shrink-0 rounded-xl flex items-center justify-center shadow-md ${
-                    message.sender === 'bot' 
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' 
+                  <div
+                    className={`size-10 shrink-0 rounded-xl flex items-center justify-center shadow-md ${message.sender === 'bot'
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
                       : 'bg-gradient-to-br from-gray-600 to-gray-700 text-white'
-                  }`}>
+                      }`}
+                  >
                     {message.sender === 'bot' ? <Bot className="size-5" /> : <User className="size-5" />}
                   </div>
                   <div className={`flex-1 ${message.sender === 'user' ? 'flex justify-end' : ''}`}>
-                    <div className={`max-w-md p-4 rounded-2xl shadow-md ${
-                      message.sender === 'bot'
+                    <div
+                      className={`max-w-md p-4 rounded-2xl shadow-md ${message.sender === 'bot'
                         ? 'bg-white border border-gray-100'
                         : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
-                    }`}>
-                      <p className="text-sm leading-relaxed">{message.text}</p>
-                      <div className={`flex items-center gap-1 text-xs mt-2 ${
-                        message.sender === 'bot' ? 'text-gray-400' : 'text-blue-100'
-                      }`}>
+                        }`}
+                    >
+                      <p className="text-sm leading-relaxed whitespace-pre-line">{message.text}</p>
+                      <div
+                        className={`flex items-center gap-1 text-xs mt-2 ${message.sender === 'bot' ? 'text-gray-400' : 'text-blue-100'
+                          }`}
+                      >
                         <Clock className="size-3" />
                         <span>{message.time}</span>
                       </div>
@@ -173,7 +419,7 @@ export function Chatbot() {
                   </div>
                 </div>
               ))}
-              
+
               {/* Typing Indicator */}
               {isTyping && (
                 <div className="flex gap-3 animate-fadeIn">
@@ -191,7 +437,7 @@ export function Chatbot() {
                   </div>
                 </div>
               )}
-              
+
               <div ref={messagesEndRef} />
             </div>
 
@@ -201,14 +447,14 @@ export function Chatbot() {
                 <Input
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                   placeholder="Nhập tin nhắn của bạn..."
                   className="flex-1 h-12 border-2 focus:border-blue-600 transition-all"
-                  disabled={isTyping}
+                  disabled={isTyping || creatingSession}
                 />
-                <Button 
+                <Button
                   onClick={handleSendMessage}
-                  disabled={isTyping || !inputMessage.trim()}
+                  disabled={isTyping || creatingSession || !inputMessage.trim()}
                   className="h-12 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200 transition-all hover:scale-105"
                 >
                   <Send className="size-5" />
@@ -217,87 +463,26 @@ export function Chatbot() {
             </div>
           </Card>
         </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          <Card className="p-6 shadow-lg border-0">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="size-5 text-blue-600" />
-              <h3 className="font-semibold text-lg">Thao tác nhanh</h3>
-            </div>
-            <div className="space-y-2">
-              {quickActions.map((action, index) => (
-                <button
-                  key={index}
-                  className="w-full text-left p-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all text-sm border border-gray-100 hover:border-blue-200 flex items-center gap-3 group"
-                  onClick={() => setInputMessage(action.text)}
-                >
-                  <span className="text-lg">{action.icon}</span>
-                  <span className="group-hover:text-blue-700 transition-colors">{action.text}</span>
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Stats */}
-          <Card className="p-6 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white shadow-xl border-0 relative overflow-hidden">
-            <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="size-5" />
-                <h3 className="font-semibold text-lg">Thống kê</h3>
-              </div>
-              <div className="space-y-4">
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                  <p className="text-sm text-blue-100 mb-1">Tổng cuộc hội thoại</p>
-                  <p className="text-3xl font-bold">1,234</p>
-                  <div className="text-xs text-green-300 mt-1">+12% so với tháng trước</div>
-                </div>
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                  <p className="text-sm text-blue-100 mb-1">Hôm nay</p>
-                  <p className="text-3xl font-bold">47</p>
-                  <div className="text-xs text-green-300 mt-1">+5 so với hôm qua</div>
-                </div>
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                  <p className="text-sm text-blue-100 mb-1">Độ hài lòng</p>
-                  <p className="text-3xl font-bold">96%</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <div className="flex gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <span key={i} className="text-yellow-300">⭐</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* FAQs */}
-          <Card className="p-6 shadow-lg border-0">
-            <h3 className="font-semibold mb-4 text-lg">Câu hỏi thường gặp</h3>
-            <div className="space-y-3 text-sm">
-              <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                <p className="font-medium text-gray-900 mb-1">⚠️ Quên chấm công?</p>
-                <p className="text-gray-600 text-xs">Hỏi: "Quên chấm công - Bổ sung"</p>
-              </div>
-              <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                <p className="font-medium text-gray-900 mb-1">💰 Làm sao để xem lương?</p>
-                <p className="text-gray-600 text-xs">Hỏi: "Xem bảng lương"</p>
-              </div>
-              <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                <p className="font-medium text-gray-900 mb-1">📅 Cách tạo đơn nghỉ phép?</p>
-                <p className="text-gray-600 text-xs">Hỏi: "Tạo đơn nghỉ phép"</p>
-              </div>
-              <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                <p className="font-medium text-gray-900 mb-1">📞 Liên hệ HR?</p>
-                <p className="text-gray-600 text-xs">Hỏi: "Liên hệ HR"</p>
-              </div>
-            </div>
-          </Card>
-        </div>
       </div>
+
+      {/* Quick actions */}
+      <Card className="p-6 shadow-lg border-0">
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="size-5 text-blue-600" />
+          <h3 className="font-semibold text-lg">Thao tác nhanh</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {quickActions.map((action, index) => (
+            <Button
+              key={index}
+              variant="outline"
+              onClick={() => setInputMessage(action.text)}
+            >
+              {action.icon} {action.text}
+            </Button>
+          ))}
+        </div>
+      </Card>
 
       <style>{`
         @keyframes fadeIn {

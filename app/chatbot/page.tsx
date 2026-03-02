@@ -1,10 +1,5 @@
-import ChatbotBox from "@/components/Chatbot";
+import { Chatbot } from "@/app/components/Chatbot";
 
-export default function ChatbotPage() {
-  return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">HR Assistant Chatbot</h2>
-      <ChatbotBox />
-    </div>
-  );
+export default function Page() {
+  return <Chatbot />;
 }

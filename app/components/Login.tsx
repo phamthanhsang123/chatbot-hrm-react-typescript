@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LogIn, Mail, Lock, Eye, EyeOff, Sparkles, Shield } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,6 +11,13 @@ interface LoginProps {
   onLogin: (role: 'admin' | 'employee') => void;
 }
 
+type Particle = {
+  left: number;
+  top: number;
+  delay: number;
+  duration: number;
+};
+
 export function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,9 +25,21 @@ export function Login({ onLogin }: LoginProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'admin' | 'employee' | null>(null);
 
+  // ✅ FIX hydration: generate particles only on client
+  const [particles, setParticles] = useState<Particle[]>([]);
+  useEffect(() => {
+    const generated: Particle[] = Array.from({ length: 20 }, () => ({
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      delay: Math.random() * 5,
+      duration: 5 + Math.random() * 10,
+    }));
+    setParticles(generated);
+  }, []);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       return;
     }
@@ -36,8 +55,7 @@ export function Login({ onLogin }: LoginProps) {
       // Employee login
       else if (email === 'employee@company.com' && password === 'emp123') {
         onLogin('employee');
-      }
-      else {
+      } else {
         setIsLoading(false);
       }
     }, 800);
@@ -46,7 +64,7 @@ export function Login({ onLogin }: LoginProps) {
   const handleQuickLogin = (role: 'admin' | 'employee') => {
     setSelectedRole(role);
     setIsLoading(true);
-    
+
     setTimeout(() => {
       onLogin(role);
     }, 600);
@@ -57,21 +75,27 @@ export function Login({ onLogin }: LoginProps) {
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-purple-400/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div
+          className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-purple-400/20 rounded-full blur-3xl animate-pulse"
+          style={{ animationDelay: '1s' }}
+        ></div>
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl animate-pulse"
+          style={{ animationDelay: '2s' }}
+        ></div>
       </div>
 
       {/* Floating Particles */}
       <div className="absolute inset-0 pointer-events-none">
-        {[...Array(20)].map((_, i) => (
+        {particles.map((p, i) => (
           <div
             key={i}
             className="absolute size-2 bg-white/30 rounded-full animate-float"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${5 + Math.random() * 10}s`,
+              left: `${p.left}%`,
+              top: `${p.top}%`,
+              animationDelay: `${p.delay}s`,
+              animationDuration: `${p.duration}s`,
             }}
           />
         ))}
@@ -83,17 +107,17 @@ export function Login({ onLogin }: LoginProps) {
           {/* Left Side - Branding */}
           <div className="hidden md:flex flex-col justify-center p-12 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white relative overflow-hidden">
             <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
-            
+
             {/* Logo */}
             <div className="relative z-10">
               <div className="size-24 bg-white/20 rounded-3xl flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-black/20 backdrop-blur-sm mb-6 animate-float">
                 <Sparkles className="size-12" />
               </div>
-              <h1 className="text-5xl font-bold mb-4 drop-shadow-lg">
-                HRM System
-              </h1>
+              <h1 className="text-5xl font-bold mb-4 drop-shadow-lg">HRM System</h1>
               <p className="text-xl text-blue-100 mb-8 leading-relaxed">
-                Hệ thống quản lý nhân sự<br />thông minh và hiện đại
+                Hệ thống quản lý nhân sự
+                <br />
+                thông minh và hiện đại
               </p>
 
               {/* Features */}
@@ -141,18 +165,18 @@ export function Login({ onLogin }: LoginProps) {
                 <button
                   onClick={() => handleQuickLogin('admin')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
-                    selectedRole === 'admin'
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'admin'
                       ? 'border-blue-600 bg-blue-50 scale-95'
                       : 'border-gray-200 hover:border-blue-300 hover:shadow-lg'
-                  } ${isLoading && selectedRole !== 'admin' ? 'opacity-50' : ''}`}
+                    } ${isLoading && selectedRole !== 'admin' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
-                    <div className={`size-16 rounded-2xl flex items-center justify-center text-2xl transition-all duration-300 ${
-                      selectedRole === 'admin'
-                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg'
-                        : 'bg-gradient-to-br from-blue-400 to-indigo-500 group-hover:scale-110 group-hover:shadow-md'
-                    }`}>
+                    <div
+                      className={`size-16 rounded-2xl flex items-center justify-center text-2xl transition-all duration-300 ${selectedRole === 'admin'
+                          ? 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg'
+                          : 'bg-gradient-to-br from-blue-400 to-indigo-500 group-hover:scale-110 group-hover:shadow-md'
+                        }`}
+                    >
                       👨‍💼
                     </div>
                     <div className="text-center">
@@ -170,18 +194,18 @@ export function Login({ onLogin }: LoginProps) {
                 <button
                   onClick={() => handleQuickLogin('employee')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
-                    selectedRole === 'employee'
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'employee'
                       ? 'border-green-600 bg-green-50 scale-95'
                       : 'border-gray-200 hover:border-green-300 hover:shadow-lg'
-                  } ${isLoading && selectedRole !== 'employee' ? 'opacity-50' : ''}`}
+                    } ${isLoading && selectedRole !== 'employee' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
-                    <div className={`size-16 rounded-2xl flex items-center justify-center text-2xl transition-all duration-300 ${
-                      selectedRole === 'employee'
-                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg'
-                        : 'bg-gradient-to-br from-green-400 to-emerald-500 group-hover:scale-110 group-hover:shadow-md'
-                    }`}>
+                    <div
+                      className={`size-16 rounded-2xl flex items-center justify-center text-2xl transition-all duration-300 ${selectedRole === 'employee'
+                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg'
+                          : 'bg-gradient-to-br from-green-400 to-emerald-500 group-hover:scale-110 group-hover:shadow-md'
+                        }`}
+                    >
                       👤
                     </div>
                     <div className="text-center">
@@ -211,7 +235,9 @@ export function Login({ onLogin }: LoginProps) {
               <form onSubmit={handleLogin} className="space-y-5">
                 {/* Email */}
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-gray-700">Email</Label>
+                  <Label htmlFor="email" className="text-gray-700">
+                    Email
+                  </Label>
                   <div className="relative group">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400 group-focus-within:text-blue-600 transition-colors" />
                     <Input
@@ -228,7 +254,9 @@ export function Login({ onLogin }: LoginProps) {
 
                 {/* Password */}
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-gray-700">Mật khẩu</Label>
+                  <Label htmlFor="password" className="text-gray-700">
+                    Mật khẩu
+                  </Label>
                   <div className="relative group">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400 group-focus-within:text-blue-600 transition-colors" />
                     <Input
@@ -254,10 +282,16 @@ export function Login({ onLogin }: LoginProps) {
                 {/* Remember & Forgot */}
                 <div className="flex items-center justify-between text-sm">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-600" />
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                    />
                     <span className="text-gray-600 group-hover:text-gray-900">Ghi nhớ</span>
                   </label>
-                  <a href="#" className="text-blue-600 hover:text-blue-700 font-medium hover:underline">
+                  <a
+                    href="#"
+                    className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                  >
                     Quên mật khẩu?
                   </a>
                 </div>
@@ -289,8 +323,12 @@ export function Login({ onLogin }: LoginProps) {
                   Thông tin đăng nhập Demo
                 </p>
                 <div className="text-xs text-blue-700 space-y-1">
-                  <p><strong>Admin:</strong> admin@company.com / admin123</p>
-                  <p><strong>Nhân viên:</strong> employee@company.com / emp123</p>
+                  <p>
+                    <strong>Admin:</strong> admin@company.com / admin123
+                  </p>
+                  <p>
+                    <strong>Nhân viên:</strong> employee@company.com / emp123
+                  </p>
                 </div>
               </div>
             </div>
