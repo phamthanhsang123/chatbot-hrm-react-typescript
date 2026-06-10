@@ -13,7 +13,11 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 
-export function Dashboard() {
+interface DashboardProps {
+  onNavigate?: (page: string) => void;
+}
+
+export function Dashboard({ onNavigate }: DashboardProps) {
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [showApproveLeave, setShowApproveLeave] = useState(false);
   const [showExportReport, setShowExportReport] = useState(false);
@@ -151,28 +155,28 @@ export function Dashboard() {
         <h3 className="text-lg font-semibold mb-4">Thao tác nhanh</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button
-            onClick={() => setShowAddEmployee(true)}
+            onClick={() => (onNavigate ? onNavigate('employees') : setShowAddEmployee(true))}
             className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
           >
             <div className="text-3xl mb-2">👥</div>
             <p className="text-sm font-medium">Thêm nhân viên</p>
           </button>
           <button
-            onClick={() => setShowApproveLeave(true)}
+            onClick={() => (onNavigate ? onNavigate('leave') : setShowApproveLeave(true))}
             className="p-4 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
           >
             <div className="text-3xl mb-2">✅</div>
             <p className="text-sm font-medium">Duyệt nghỉ phép</p>
           </button>
           <button
-            onClick={() => setShowExportReport(true)}
+            onClick={() => (onNavigate ? onNavigate('reports') : setShowExportReport(true))}
             className="p-4 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
           >
             <div className="text-3xl mb-2">📄</div>
             <p className="text-sm font-medium">Xuất báo cáo</p>
           </button>
           <button
-            onClick={() => setShowCalculateSalary(true)}
+            onClick={() => (onNavigate ? onNavigate('salary') : setShowCalculateSalary(true))}
             className="p-4 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
           >
             <div className="text-3xl mb-2">💵</div>

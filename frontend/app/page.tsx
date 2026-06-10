@@ -4,6 +4,8 @@ import { Login } from './components/Login';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
+import { ManagerDashboard } from './components/ManagerDashboard';
+import { ManagerTasks } from './components/ManagerTasks';
 import { EmployeeTable } from './components/EmployeeTable';
 import { Salary } from './components/Salary';
 import { Leave } from './components/Leave';
@@ -21,14 +23,16 @@ import { Attendance } from './employees/Attendance';
 import { EmployeeLeave } from './employees/EmployeeLeave'; 
 import { EmployeeSalary } from './employees/EmployeeSalary'; 
 import { EmployeeProfile } from './employees/EmployeeProfile';
+import type { UserRole } from './types';
+import { MANAGER_DEPARTMENT } from './types';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<'admin' | 'employee' | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
 
-  const handleLogin = (role: 'admin' | 'employee') => {
+  const handleLogin = (role: UserRole) => {
     setUserRole(role);
     setIsLoggedIn(true);
     setCurrentPage('dashboard');
@@ -96,13 +100,37 @@ export default function App() {
     );
   }
 
-  // Admin Dashboard
-  const renderAdminPage = () => {
+  const renderManagementPage = () => {
+    if (userRole === 'manager') {
+      switch (currentPage) {
+        case 'dashboard':
+          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
+        case 'employees':
+          return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
+        case 'manager-tasks':
+          return <ManagerTasks departmentName={MANAGER_DEPARTMENT} />;
+        case 'task-review':
+          return <ManagerTasks departmentName={MANAGER_DEPARTMENT} mode="review" />;
+        case 'leave':
+          return <Leave />;
+        case 'attendance-approval':
+          return <AttendanceApproval />;
+        case 'competency':
+          return <CompetencyEvaluation userRole="manager" departmentScope={MANAGER_DEPARTMENT} />;
+        case 'reports':
+          return <Reports />;
+        case 'chatbot':
+          return <Chatbot />;
+        default:
+          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
+      }
+    }
+
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentPage} />;
       case 'employees':
-        return <EmployeeTable />;
+        return <EmployeeTable userRole="admin" />;
       case 'salary':
         return <Salary />;
       case 'leave':
@@ -110,7 +138,7 @@ export default function App() {
       case 'attendance-approval':
         return <AttendanceApproval />;
       case 'competency':
-        return <CompetencyEvaluation />;
+        return <CompetencyEvaluation userRole="admin" />;
       case 'chatbot':
         return <Chatbot />;
       case 'reports':
@@ -118,18 +146,19 @@ export default function App() {
       case 'analytics':
         return <Analytics />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentPage} />;
     }
   };
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">
-      {/* Admin Sidebar */}
+      {/* Admin / Manager Sidebar */}
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
         currentPage={currentPage}
         onNavigate={setCurrentPage}
+        userRole={userRole === 'manager' ? 'manager' : 'admin'}
       />
 
       {/* Main Content */}
@@ -143,7 +172,7 @@ export default function App() {
         {/* Page Content */}
         <main className="hide-scrollbar flex-1 overflow-y-auto">
           <div className="container mx-auto px-4 py-8">
-            {renderAdminPage()}
+            {renderManagementPage()}
           </div>
         </main>
       </div>

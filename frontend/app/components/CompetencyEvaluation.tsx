@@ -22,8 +22,16 @@ import {
   fetchCompetencyDashboard,
   fetchCompetencyList,
 } from '@/services/competency';
+import type { ManagementRole } from '../types';
 
 const now = new Date();
+
+type AiActionStatus = 'new' | 'in-progress' | 'done';
+
+interface CompetencyEvaluationProps {
+  userRole?: ManagementRole;
+  departmentScope?: string;
+}
 
 const fallbackData: CompetencyItem[] = [
   {
@@ -110,7 +118,7 @@ function ScoreBar({ value }: { value: number }) {
   );
 }
 
-export function CompetencyEvaluation() {
+export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: CompetencyEvaluationProps) {
   const [items, setItems] = useState<CompetencyItem[]>(fallbackData);
   const [dashboard, setDashboard] = useState<CompetencyDashboard>(buildFallbackDashboard(fallbackData));
   const [selected, setSelected] = useState<CompetencyItem>(fallbackData[0]);
@@ -118,6 +126,7 @@ export function CompetencyEvaluation() {
   const [ratingFilter, setRatingFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [usingFallback, setUsingFallback] = useState(true);
+  const [aiActions, setAiActions] = useState<Record<number, AiActionStatus>>({});
 
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -148,8 +157,39 @@ export function CompetencyEvaluation() {
     load();
   }, [month, year]);
 
+  const scopedItems = useMemo(() => {
+    if (!departmentScope) return items;
+    return items.filter((item) => item.department === departmentScope);
+  }, [departmentScope, items]);
+
+  useEffect(() => {
+    if (scopedItems.length > 0 && !scopedItems.some((item) => item.employeeId === selected.employeeId)) {
+      setSelected(scopedItems[0]);
+    }
+  }, [scopedItems, selected.employeeId]);
+
+  const visibleDashboard = useMemo(() => {
+    if (!departmentScope) return dashboard;
+
+    const source = scopedItems.length > 0 ? scopedItems : items;
+    const averageScore = source.length
+      ? Number((source.reduce((sum, item) => sum + item.totalScore, 0) / source.length).toFixed(1))
+      : 0;
+
+    return {
+      ...dashboard,
+      totalEmployees: source.length,
+      averageScore,
+      excellent: source.filter((item) => item.rating === 'Xuất sắc').length,
+      good: source.filter((item) => item.rating === 'Tốt').length,
+      average: source.filter((item) => item.rating === 'Trung bình').length,
+      needsImprovement: source.filter((item) => item.rating === 'Cần cải thiện').length,
+      topEmployees: [...source].sort((a, b) => b.totalScore - a.totalScore).slice(0, 5),
+    };
+  }, [dashboard, departmentScope, items, scopedItems]);
+
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    return scopedItems.filter((item) => {
       const keyword = search.trim().toLowerCase();
       const matchesSearch =
         !keyword ||
@@ -160,7 +200,14 @@ export function CompetencyEvaluation() {
 
       return matchesSearch && matchesRating;
     });
-  }, [items, ratingFilter, search]);
+  }, [ratingFilter, scopedItems, search]);
+
+  const selectedActionStatus = aiActions[selected.employeeId] || 'new';
+  const actionLabel = {
+    new: 'Mới đề xuất',
+    'in-progress': 'Đang xử lý',
+    done: 'Đã hoàn thành',
+  }[selectedActionStatus];
 
   const handleAnalyze = async (item: CompetencyItem) => {
     setSelected(item);
@@ -185,7 +232,11 @@ export function CompetencyEvaluation() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Đánh giá năng lực</h1>
-              <p className="text-sm text-gray-500">Agentic AI phân tích chuyên cần, hiệu suất, kỹ năng và kỷ luật nhân sự</p>
+              <p className="text-sm text-gray-500">
+                {userRole === 'manager'
+                  ? `Agentic AI phân tích năng lực nhân viên phòng ban ${departmentScope || 'được phân quyền'}`
+                  : 'Agentic AI phân tích chuyên cần, hiệu suất, kỹ năng và kỷ luật nhân sự'}
+              </p>
             </div>
           </div>
         </div>
@@ -200,7 +251,7 @@ export function CompetencyEvaluation() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Nhân viên đánh giá</p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">{dashboard.totalEmployees}</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{visibleDashboard.totalEmployees}</p>
             </div>
             <Users className="size-8 text-blue-600" />
           </div>
@@ -210,7 +261,7 @@ export function CompetencyEvaluation() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Điểm trung bình</p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">{dashboard.averageScore}</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{visibleDashboard.averageScore}</p>
             </div>
             <TrendingUp className="size-8 text-emerald-600" />
           </div>
@@ -220,7 +271,7 @@ export function CompetencyEvaluation() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Xuất sắc / Tốt</p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">{dashboard.excellent + dashboard.good}</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{visibleDashboard.excellent + visibleDashboard.good}</p>
             </div>
             <Award className="size-8 text-amber-600" />
           </div>
@@ -230,7 +281,7 @@ export function CompetencyEvaluation() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Cần theo dõi</p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">{dashboard.average + dashboard.needsImprovement}</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{visibleDashboard.average + visibleDashboard.needsImprovement}</p>
             </div>
             <AlertTriangle className="size-8 text-rose-600" />
           </div>
@@ -358,13 +409,54 @@ export function CompetencyEvaluation() {
                 </div>
                 <p className="text-sm leading-6 text-indigo-900">{selected.aiRecommendation}</p>
               </div>
+
+              <div className="rounded-md border border-gray-200 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Trạng thái xử lý đề xuất</p>
+                    <p className="text-xs text-gray-500">Manager/HR cập nhật sau khi xem khuyến nghị AI</p>
+                  </div>
+                  <Badge className={
+                    selectedActionStatus === 'done'
+                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+                      : selectedActionStatus === 'in-progress'
+                        ? 'bg-blue-100 text-blue-700 hover:bg-blue-100'
+                        : 'bg-amber-100 text-amber-700 hover:bg-amber-100'
+                  }>
+                    {actionLabel}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    variant={selectedActionStatus === 'new' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAiActions((prev) => ({ ...prev, [selected.employeeId]: 'new' }))}
+                  >
+                    Mới
+                  </Button>
+                  <Button
+                    variant={selectedActionStatus === 'in-progress' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAiActions((prev) => ({ ...prev, [selected.employeeId]: 'in-progress' }))}
+                  >
+                    Xử lý
+                  </Button>
+                  <Button
+                    variant={selectedActionStatus === 'done' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAiActions((prev) => ({ ...prev, [selected.employeeId]: 'done' }))}
+                  >
+                    Hoàn thành
+                  </Button>
+                </div>
+              </div>
             </div>
           </Card>
 
           <Card className="p-5">
             <h2 className="mb-3 text-lg font-semibold text-gray-900">Top năng lực</h2>
             <div className="space-y-3">
-              {dashboard.topEmployees.map((item, index) => (
+              {visibleDashboard.topEmployees.map((item, index) => (
                 <button
                   key={item.employeeId}
                   onClick={() => handleAnalyze(item)}

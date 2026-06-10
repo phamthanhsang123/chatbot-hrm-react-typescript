@@ -26,9 +26,13 @@ frontend/.env.*
 
 # Logs
 *.log
+frontend/*.err
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# Local package cache
+frontend/.npm-cache/
 
 # OS/editor
 .DS_Store

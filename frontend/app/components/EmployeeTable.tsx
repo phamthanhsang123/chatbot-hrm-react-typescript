@@ -21,6 +21,7 @@ import {
   fetchPositions,
   updateEmployee,
 } from '@/services/employees';
+import type { ManagementRole } from '../types';
 
 const ACTIVE_STATUS = 'Đang làm việc';
 const INACTIVE_STATUS = 'Đã nghỉ việc';
@@ -56,6 +57,12 @@ interface EmployeeFormState {
 interface PositionChoice {
   id: string;
   title: string;
+}
+
+interface EmployeeTableProps {
+  userRole?: ManagementRole;
+  departmentScope?: string;
+  readOnly?: boolean;
 }
 
 const emptyForm: EmployeeFormState = {
@@ -194,7 +201,7 @@ function buildEmployeeFromForm(
   };
 }
 
-export function EmployeeTable() {
+export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = false }: EmployeeTableProps) {
   const [employees, setEmployees] = useState<EmployeeView[]>([]);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [positions, setPositions] = useState<PositionOption[]>([]);
@@ -265,12 +272,19 @@ export function EmployeeTable() {
     }));
   }, [positions, selectedDepartmentName]);
 
-  const inactiveEmployees = employees.filter((employee) => employee.status === INACTIVE_STATUS);
+  const isManagerView = userRole === 'manager';
+  const canManageEmployees = userRole === 'admin' && !readOnly;
+  const scopedEmployees = useMemo(() => {
+    if (!departmentScope) return employees;
+    return employees.filter((employee) => employee.departmentName === departmentScope);
+  }, [departmentScope, employees]);
+
+  const inactiveEmployees = scopedEmployees.filter((employee) => employee.status === INACTIVE_STATUS);
 
   const filteredEmployees = useMemo(() => {
     const keyword = searchQuery.trim().toLowerCase();
 
-    return employees.filter((employee) => {
+    return scopedEmployees.filter((employee) => {
       const matchesSearch =
         !keyword ||
         employee.fullName.toLowerCase().includes(keyword) ||
@@ -278,15 +292,15 @@ export function EmployeeTable() {
         employee.cccd.toLowerCase().includes(keyword) ||
         employee.departmentName.toLowerCase().includes(keyword) ||
         employee.positionTitle.toLowerCase().includes(keyword);
-      const matchesDepartment = departmentFilter === 'all' || employee.departmentName === departmentFilter;
+      const matchesDepartment = Boolean(departmentScope) || departmentFilter === 'all' || employee.departmentName === departmentFilter;
       const matchesStatus = employee.status === ACTIVE_STATUS;
       const matchesRole = roleFilter === 'all' || normalizeRole(employee.role) === roleFilter;
 
       return matchesSearch && matchesDepartment && matchesStatus && matchesRole;
     });
-  }, [departmentFilter, employees, roleFilter, searchQuery]);
+  }, [departmentFilter, departmentScope, roleFilter, scopedEmployees, searchQuery]);
 
-  const selectedScopeLabel = departmentFilter === 'all' ? '' : departmentFilter;
+  const selectedScopeLabel = departmentScope || (departmentFilter === 'all' ? '' : departmentFilter);
   const scopedManagerCount = filteredEmployees.filter((employee) => normalizeRole(employee.role) === 'MANAGER').length;
   const scopedSalary = filteredEmployees.reduce((sum, employee) => sum + employee.salaryBase, 0);
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / itemsPerPage));
@@ -574,24 +588,38 @@ export function EmployeeTable() {
     <div className="flex min-h-[calc(100vh-8rem)] flex-col gap-5 pb-24">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Quản lý nhân viên</h1>
-          <p className="mt-1 text-gray-500">Danh sách nhân viên đang làm việc, phòng ban, chức vụ và lương cơ bản</p>
+          <h1 className="text-3xl font-bold text-gray-900">{isManagerView ? 'Nhân viên phòng ban' : 'Quản lý nhân viên'}</h1>
+          <p className="mt-1 text-gray-500">
+            {isManagerView
+              ? `Manager chỉ xem nhân viên thuộc phòng ban ${departmentScope || 'được phân quyền'} và dùng dữ liệu này để theo dõi năng lực team.`
+              : 'Danh sách nhân viên đang làm việc, phòng ban, chức vụ và lương cơ bản'}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setShowInactiveDialog(true)}>
-            <Archive className="size-4" />
-            Đã nghỉ việc ({inactiveEmployees.length})
-          </Button>
+          {!isManagerView && (
+            <Button variant="outline" className="gap-2" onClick={() => setShowInactiveDialog(true)}>
+              <Archive className="size-4" />
+              Đã nghỉ việc ({inactiveEmployees.length})
+            </Button>
+          )}
           <Button variant="outline" className="gap-2" onClick={loadData} disabled={loading}>
             <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
             Làm mới
           </Button>
-          <Button className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600" onClick={handleOpenAdd}>
-            <Plus className="size-4" />
-            Thêm nhân viên
-          </Button>
+          {canManageEmployees && (
+            <Button className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600" onClick={handleOpenAdd}>
+              <Plus className="size-4" />
+              Thêm nhân viên
+            </Button>
+          )}
         </div>
       </div>
+
+      {isManagerView && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Chế độ Manager: dữ liệu được giới hạn theo phòng ban {departmentScope}. Các thao tác thêm, sửa và chuyển nghỉ việc thuộc quyền Admin/HR.
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -631,14 +659,20 @@ export function EmployeeTable() {
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
-          <select className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
-            <option value="all">Tất cả phòng ban</option>
-            {Array.from(new Set(employees.map((employee) => employee.departmentName))).map((department) => (
-              <option key={department} value={department}>
-                {department}
-              </option>
-            ))}
-          </select>
+          {departmentScope ? (
+            <div className="flex h-10 items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-medium text-blue-700">
+              Phòng ban: {departmentScope}
+            </div>
+          ) : (
+            <select className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
+              <option value="all">Tất cả phòng ban</option>
+              {Array.from(new Set(employees.map((employee) => employee.departmentName))).map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          )}
           <select className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
             <option value="all">Tất cả vai trò</option>
             <option value="EMPLOYEE">Nhân viên</option>
@@ -703,10 +737,14 @@ export function EmployeeTable() {
                     <td className="px-5 py-4 text-sm font-medium text-gray-900">{formatCurrency(employee.salaryBase)}</td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" className="text-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={() => handleOpenEdit(employee)}>
-                          <Edit className="size-4" />
-                        </Button>
-                        {employee.status === ACTIVE_STATUS && (
+                        {canManageEmployees ? (
+                          <Button variant="ghost" size="sm" className="text-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={() => handleOpenEdit(employee)}>
+                            <Edit className="size-4" />
+                          </Button>
+                        ) : (
+                          <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">Chỉ xem</Badge>
+                        )}
+                        {canManageEmployees && employee.status === ACTIVE_STATUS && (
                           <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => handleDelete(employee)}>
                             <Trash2 className="size-4" />
                           </Button>

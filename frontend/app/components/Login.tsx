@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { LogIn, Mail, Lock, Eye, EyeOff, Sparkles, Shield } from 'lucide-react';
+import { BriefcaseBusiness, LogIn, Mail, Lock, Eye, EyeOff, Sparkles, Shield } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card } from './ui/card';
+import type { UserRole } from '../types';
 
 interface LoginProps {
-  onLogin: (role: 'admin' | 'employee') => void;
+  onLogin: (role: UserRole) => void;
 }
 
 type Particle = {
@@ -30,7 +31,7 @@ export function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'admin' | 'employee' | null>(null);
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +48,10 @@ export function Login({ onLogin }: LoginProps) {
       if (email === 'admin@company.com' && password === 'admin123') {
         onLogin('admin');
       }
+      // Manager login
+      else if (email === 'manager@company.com' && password === 'manager123') {
+        onLogin('manager');
+      }
       // Employee login
       else if (email === 'employee@company.com' && password === 'emp123') {
         onLogin('employee');
@@ -56,7 +61,7 @@ export function Login({ onLogin }: LoginProps) {
     }, 800);
   };
 
-  const handleQuickLogin = (role: 'admin' | 'employee') => {
+  const handleQuickLogin = (role: UserRole) => {
     setSelectedRole(role);
     setIsLoading(true);
 
@@ -97,7 +102,7 @@ export function Login({ onLogin }: LoginProps) {
       </div>
 
       {/* Login Card */}
-      <Card className="relative w-full max-w-5xl shadow-2xl backdrop-blur-xl bg-white/95 overflow-hidden border-0">
+      <Card className="relative w-full max-w-5xl overflow-hidden border-0 bg-white/95 py-0 shadow-2xl backdrop-blur-xl">
         <div className="grid md:grid-cols-2 min-h-[600px]">
           {/* Left Side - Branding */}
           <div className="hidden md:flex flex-col justify-center p-12 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white relative overflow-hidden">
@@ -156,7 +161,7 @@ export function Login({ onLogin }: LoginProps) {
               <p className="text-gray-600 mb-8">Chọn vai trò để tiếp tục</p>
 
               {/* Role Selection */}
-              <div className="grid grid-cols-2 gap-4 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
                 <button
                   onClick={() => handleQuickLogin('admin')}
                   disabled={isLoading}
@@ -182,6 +187,35 @@ export function Login({ onLogin }: LoginProps) {
                   {isLoading && selectedRole === 'admin' && (
                     <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-2xl backdrop-blur-sm">
                       <div className="animate-spin rounded-full size-8 border-3 border-blue-600 border-t-transparent"></div>
+                    </div>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => handleQuickLogin('manager')}
+                  disabled={isLoading}
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'manager'
+                      ? 'border-indigo-600 bg-indigo-50 scale-95'
+                      : 'border-gray-200 hover:border-indigo-300 hover:shadow-lg'
+                    } ${isLoading && selectedRole !== 'manager' ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <div
+                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedRole === 'manager'
+                          ? 'bg-gradient-to-br from-indigo-500 to-sky-600 text-white shadow-lg'
+                          : 'bg-gradient-to-br from-indigo-400 to-sky-500 text-white group-hover:scale-110 group-hover:shadow-md'
+                        }`}
+                    >
+                      <BriefcaseBusiness className="size-8" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-semibold text-gray-900 mb-1">Manager</p>
+                      <p className="text-xs text-gray-500">Department Lead</p>
+                    </div>
+                  </div>
+                  {isLoading && selectedRole === 'manager' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-2xl backdrop-blur-sm">
+                      <div className="animate-spin rounded-full size-8 border-3 border-indigo-600 border-t-transparent"></div>
                     </div>
                   )}
                 </button>
@@ -320,6 +354,9 @@ export function Login({ onLogin }: LoginProps) {
                 <div className="text-xs text-blue-700 space-y-1">
                   <p>
                     <strong>Admin:</strong> admin@company.com / admin123
+                  </p>
+                  <p>
+                    <strong>Manager:</strong> manager@company.com / manager123
                   </p>
                   <p>
                     <strong>Nhân viên:</strong> employee@company.com / emp123
