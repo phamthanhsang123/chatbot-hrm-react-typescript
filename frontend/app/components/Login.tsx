@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { BriefcaseBusiness, LogIn, Mail, Lock, Eye, EyeOff, Sparkles, Shield } from 'lucide-react';
+import { BriefcaseBusiness, Eye, EyeOff, Lock, LogIn, Mail, Shield, Sparkles, UserRound } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card } from './ui/card';
 import type { UserRole } from '../types';
+import { API_BASE } from '@/services/chatbot';
 
 interface LoginProps {
   onLogin: (role: UserRole) => void;
@@ -26,42 +27,98 @@ const particles: Particle[] = Array.from({ length: 20 }, (_, index) => ({
   duration: 6 + (index % 7),
 }));
 
+const mapApiRole = (role?: string): UserRole => {
+  const normalizedRole = (role || '').trim().toUpperCase();
+
+  if (normalizedRole === 'ADMIN' || normalizedRole === 'QUAN_TRI' || normalizedRole === 'QUẢN TRỊ') {
+    return 'admin';
+  }
+
+  if (normalizedRole === 'MANAGER' || normalizedRole === 'QUAN_LY' || normalizedRole === 'QUẢN LÝ') {
+    return 'manager';
+  }
+
+  return 'employee';
+};
+
 export function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [message, setMessage] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMessage('');
+    setSelectedRole(null);
 
-    if (!email || !password) {
+    if (!email.trim() || !password) {
+      setMessage('Vui lòng nhập email và mật khẩu.');
       return;
     }
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      // Admin login
-      if (email === 'admin@company.com' && password === 'admin123') {
-        onLogin('admin');
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: email.trim(),
+          password,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.success) {
+        const errorMessage = data?.message || `Đăng nhập thất bại (${response.status}).`;
+        console.error('Login failed:', errorMessage, data);
+        setMessage(errorMessage);
+        return;
       }
-      // Manager login
-      else if (email === 'manager@company.com' && password === 'manager123') {
-        onLogin('manager');
+
+      if (data.token) {
+        localStorage.setItem('hrm_token', data.token);
       }
-      // Employee login
-      else if (email === 'employee@company.com' && password === 'emp123') {
-        onLogin('employee');
-      } else {
-        setIsLoading(false);
-      }
-    }, 800);
+      localStorage.setItem('hrm_role', data.role || '');
+
+      onLogin(mapApiRole(data.role));
+    } catch (error) {
+      console.error('Login request error:', error);
+      setMessage(`Không kết nối được API đăng nhập (${API_BASE}). Kiểm tra backend đang chạy chưa.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetPasswordByEmail = async () => {
+    setMessage('');
+
+    if (!email.trim()) {
+      setMessage('Nhập email trước khi dùng chức năng quên mật khẩu.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+
+      const data = await response.json().catch(() => null);
+      setMessage(data?.message || (response.ok ? 'Đã gửi yêu cầu đặt lại mật khẩu.' : 'Không thể đặt lại mật khẩu.'));
+    } catch (error) {
+      console.error('Forgot password request error:', error);
+      setMessage(`Không kết nối được API quên mật khẩu (${API_BASE}).`);
+    }
   };
 
   const handleQuickLogin = (role: UserRole) => {
+    setMessage('Đăng nhập nhanh chỉ để xem giao diện demo. Muốn dùng dữ liệu thật hãy nhập email/mật khẩu từ MySQL.');
     setSelectedRole(role);
     setIsLoading(true);
 
@@ -72,7 +129,6 @@ export function Login({ onLogin }: LoginProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800 p-4 overflow-hidden relative">
-      {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
         <div
@@ -85,7 +141,6 @@ export function Login({ onLogin }: LoginProps) {
         ></div>
       </div>
 
-      {/* Floating Particles */}
       <div className="absolute inset-0 pointer-events-none">
         {particles.map((p, i) => (
           <div
@@ -101,34 +156,30 @@ export function Login({ onLogin }: LoginProps) {
         ))}
       </div>
 
-      {/* Login Card */}
       <Card className="relative w-full max-w-5xl overflow-hidden border-0 bg-white/95 py-0 shadow-2xl backdrop-blur-xl">
         <div className="grid md:grid-cols-2 min-h-[600px]">
-          {/* Left Side - Branding */}
           <div className="hidden md:flex flex-col justify-center p-12 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white relative overflow-hidden">
             <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
 
-            {/* Logo */}
             <div className="relative z-10">
               <div className="size-24 bg-white/20 rounded-3xl flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-black/20 backdrop-blur-sm mb-6 animate-float">
                 <Sparkles className="size-12" />
               </div>
               <h1 className="text-5xl font-bold mb-4 drop-shadow-lg">HRM System</h1>
               <p className="text-xl text-blue-100 mb-8 leading-relaxed">
-                Hệ thống quản lý nhân sự
+                Hệ thống quản trị nhân sự
                 <br />
-                thông minh và hiện đại
+                tích hợp Agentic AI
               </p>
 
-              {/* Features */}
               <div className="space-y-4">
                 <div className="flex items-start gap-3 bg-white/10 rounded-xl p-4 backdrop-blur-sm">
                   <div className="size-10 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
                     <Shield className="size-6" />
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">Bảo mật cao</h3>
-                    <p className="text-sm text-blue-100">Mã hóa dữ liệu end-to-end</p>
+                    <h3 className="font-semibold mb-1">Đăng nhập qua API</h3>
+                    <p className="text-sm text-blue-100">Tài khoản lấy từ bảng employees trong MySQL</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 bg-white/10 rounded-xl p-4 backdrop-blur-sm">
@@ -136,17 +187,15 @@ export function Login({ onLogin }: LoginProps) {
                     <Sparkles className="size-6" />
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">AI Chatbot</h3>
-                    <p className="text-sm text-blue-100">Hỗ trợ nhân viên 24/7</p>
+                    <h3 className="font-semibold mb-1">AI Assistant</h3>
+                    <p className="text-sm text-blue-100">Hỗ trợ phân tích và đánh giá năng lực</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Side - Login Form */}
           <div className="p-8 md:p-12 flex flex-col justify-center">
-            {/* Mobile Logo */}
             <div className="md:hidden flex flex-col items-center mb-8">
               <div className="size-20 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-4">
                 <Sparkles className="size-10" />
@@ -158,111 +207,101 @@ export function Login({ onLogin }: LoginProps) {
 
             <div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">Đăng nhập</h2>
-              <p className="text-gray-600 mb-8">Chọn vai trò để tiếp tục</p>
+              <p className="text-gray-600 mb-8">Nhập tài khoản đã có trong cơ sở dữ liệu</p>
 
-              {/* Role Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
                 <button
+                  type="button"
                   onClick={() => handleQuickLogin('admin')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'admin'
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
+                    selectedRole === 'admin'
                       ? 'border-blue-600 bg-blue-50 scale-95'
                       : 'border-gray-200 hover:border-blue-300 hover:shadow-lg'
-                    } ${isLoading && selectedRole !== 'admin' ? 'opacity-50' : ''}`}
+                  } ${isLoading && selectedRole !== 'admin' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
                     <div
-                      className={`size-16 rounded-2xl flex items-center justify-center text-2xl transition-all duration-300 ${selectedRole === 'admin'
-                          ? 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg'
-                          : 'bg-gradient-to-br from-blue-400 to-indigo-500 group-hover:scale-110 group-hover:shadow-md'
-                        }`}
+                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                        selectedRole === 'admin'
+                          ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg'
+                          : 'bg-gradient-to-br from-blue-400 to-indigo-500 text-white group-hover:scale-110 group-hover:shadow-md'
+                      }`}
                     >
-                      👨‍💼
+                      <Shield className="size-8" />
                     </div>
                     <div className="text-center">
                       <p className="font-semibold text-gray-900 mb-1">Admin</p>
-                      <p className="text-xs text-gray-500">HR Manager</p>
+                      <p className="text-xs text-gray-500">Quản trị hệ thống</p>
                     </div>
                   </div>
-                  {isLoading && selectedRole === 'admin' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-2xl backdrop-blur-sm">
-                      <div className="animate-spin rounded-full size-8 border-3 border-blue-600 border-t-transparent"></div>
-                    </div>
-                  )}
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => handleQuickLogin('manager')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'manager'
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
+                    selectedRole === 'manager'
                       ? 'border-indigo-600 bg-indigo-50 scale-95'
                       : 'border-gray-200 hover:border-indigo-300 hover:shadow-lg'
-                    } ${isLoading && selectedRole !== 'manager' ? 'opacity-50' : ''}`}
+                  } ${isLoading && selectedRole !== 'manager' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
                     <div
-                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedRole === 'manager'
+                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                        selectedRole === 'manager'
                           ? 'bg-gradient-to-br from-indigo-500 to-sky-600 text-white shadow-lg'
                           : 'bg-gradient-to-br from-indigo-400 to-sky-500 text-white group-hover:scale-110 group-hover:shadow-md'
-                        }`}
+                      }`}
                     >
                       <BriefcaseBusiness className="size-8" />
                     </div>
                     <div className="text-center">
                       <p className="font-semibold text-gray-900 mb-1">Manager</p>
-                      <p className="text-xs text-gray-500">Department Lead</p>
+                      <p className="text-xs text-gray-500">Trưởng bộ phận</p>
                     </div>
                   </div>
-                  {isLoading && selectedRole === 'manager' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-2xl backdrop-blur-sm">
-                      <div className="animate-spin rounded-full size-8 border-3 border-indigo-600 border-t-transparent"></div>
-                    </div>
-                  )}
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => handleQuickLogin('employee')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'employee'
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
+                    selectedRole === 'employee'
                       ? 'border-green-600 bg-green-50 scale-95'
                       : 'border-gray-200 hover:border-green-300 hover:shadow-lg'
-                    } ${isLoading && selectedRole !== 'employee' ? 'opacity-50' : ''}`}
+                  } ${isLoading && selectedRole !== 'employee' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
                     <div
-                      className={`size-16 rounded-2xl flex items-center justify-center text-2xl transition-all duration-300 ${selectedRole === 'employee'
-                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg'
-                          : 'bg-gradient-to-br from-green-400 to-emerald-500 group-hover:scale-110 group-hover:shadow-md'
-                        }`}
+                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                        selectedRole === 'employee'
+                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg'
+                          : 'bg-gradient-to-br from-green-400 to-emerald-500 text-white group-hover:scale-110 group-hover:shadow-md'
+                      }`}
                     >
-                      👤
+                      <UserRound className="size-8" />
                     </div>
                     <div className="text-center">
                       <p className="font-semibold text-gray-900 mb-1">Nhân viên</p>
                       <p className="text-xs text-gray-500">Employee</p>
                     </div>
                   </div>
-                  {isLoading && selectedRole === 'employee' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-2xl backdrop-blur-sm">
-                      <div className="animate-spin rounded-full size-8 border-3 border-green-600 border-t-transparent"></div>
-                    </div>
-                  )}
                 </button>
               </div>
 
-              {/* Divider */}
               <div className="relative my-8">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white text-gray-500">Hoặc đăng nhập với email</span>
+                  <span className="px-4 bg-white text-gray-500">Hoặc đăng nhập bằng email</span>
                 </div>
               </div>
 
-              {/* Login Form */}
               <form onSubmit={handleLogin} className="space-y-5">
-                {/* Email */}
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-gray-700">
                     Email
@@ -281,7 +320,6 @@ export function Login({ onLogin }: LoginProps) {
                   </div>
                 </div>
 
-                {/* Password */}
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-gray-700">
                     Mật khẩu
@@ -291,7 +329,7 @@ export function Login({ onLogin }: LoginProps) {
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
+                      placeholder="Nhập mật khẩu"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10 pr-12 h-12 border-2 focus:border-blue-600 transition-all"
@@ -308,24 +346,26 @@ export function Login({ onLogin }: LoginProps) {
                   </div>
                 </div>
 
-                {/* Remember & Forgot */}
                 <div className="flex items-center justify-between text-sm">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-600"
-                    />
+                    <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-600" />
                     <span className="text-gray-600 group-hover:text-gray-900">Ghi nhớ</span>
                   </label>
-                  <a
-                    href="#"
+                  <button
+                    type="button"
+                    onClick={resetPasswordByEmail}
                     className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
                   >
                     Quên mật khẩu?
-                  </a>
+                  </button>
                 </div>
 
-                {/* Submit Button */}
+                {message && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {message}
+                  </div>
+                )}
+
                 <Button
                   type="submit"
                   className="w-full h-12 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 shadow-xl shadow-blue-200 text-base font-semibold transition-all hover:scale-[1.02]"
@@ -345,30 +385,26 @@ export function Login({ onLogin }: LoginProps) {
                 </Button>
               </form>
 
-              {/* Demo Info */}
               <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-100">
                 <p className="text-xs font-semibold text-blue-900 mb-2 flex items-center gap-1">
                   <Shield className="size-3" />
-                  Thông tin đăng nhập Demo
+                  Tài khoản test từ MySQL
                 </p>
                 <div className="text-xs text-blue-700 space-y-1">
                   <p>
-                    <strong>Admin:</strong> admin@company.com / admin123
+                    <strong>Admin:</strong> tạo 1 tài khoản role ADMIN trong MySQL
                   </p>
                   <p>
-                    <strong>Manager:</strong> manager@company.com / manager123
+                    <strong>Manager:</strong> Kienquan@gmail.com / 123456
                   </p>
                   <p>
-                    <strong>Nhân viên:</strong> employee@company.com / emp123
+                    <strong>Nhân viên:</strong> thanhsang3213121@gmail.com / 123456
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="mt-8 text-center text-xs text-gray-500">
-              © 2026 HRM System. All rights reserved.
-            </div>
+            <div className="mt-8 text-center text-xs text-gray-500">© 2026 HRM System. All rights reserved.</div>
           </div>
         </div>
       </Card>
@@ -384,7 +420,7 @@ export function Login({ onLogin }: LoginProps) {
           animation: float 8s ease-in-out infinite;
         }
         .bg-grid-pattern {
-          background-image: 
+          background-image:
             linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
           background-size: 50px 50px;
