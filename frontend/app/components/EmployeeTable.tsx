@@ -78,12 +78,12 @@ const emptyForm: EmployeeFormState = {
   password: '123456',
 };
 
-const fallbackPositionsByDepartment: Record<string, string[]> = {
+const fallbackPositionTitlesByDepartment: Record<string, string[]> = {
   IT: ['Developer', 'Team Lead', 'QA Tester', 'DevOps Engineer'],
   HR: ['HR Manager', 'HR Staff'],
   Marketing: ['Marketing Manager', 'Marketing Executive', 'Content Writer'],
   Sales: ['Sales Manager', 'Sales Executive', 'Sales Representative'],
-  Accounting: ['Chief Accountant', 'Accountant'],
+  'Kế toán': ['Kế toán trưởng', 'Kế toán viên'],
 };
 
 function mapEmployee(item: EmployeeApiItem): EmployeeView {
@@ -170,6 +170,12 @@ const toast = Swal.mixin({
   timerProgressBar: true,
 });
 
+function waitForDialogClose() {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 80);
+  });
+}
+
 function getDepartmentName(departments: DepartmentOption[], departmentId: string) {
   return departments.find((department) => String(department.id) === departmentId)?.name || 'Chưa phân phòng';
 }
@@ -246,31 +252,38 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
     loadData();
   }, []);
 
-  const departmentNameById = useMemo(() => {
-    return new Map(departments.map((department) => [String(department.id), department.name]));
-  }, [departments]);
-
-  const selectedDepartmentName = form.departmentId ? departmentNameById.get(form.departmentId) : '';
+  const selectedDepartmentName = useMemo(() => {
+    return departments.find((department) => String(department.id) === form.departmentId)?.name || '';
+  }, [departments, form.departmentId]);
 
   const availablePositions = useMemo<PositionChoice[]>(() => {
-    if (!selectedDepartmentName) return [];
+    if (!form.departmentId) return [];
 
-    const titles = fallbackPositionsByDepartment[selectedDepartmentName] || [];
-    const choices = titles.map((title) => {
-      const existing = positions.find((position) => position.title.toLowerCase() === title.toLowerCase());
-      return {
-        id: existing ? String(existing.id) : title,
-        title,
-      };
-    });
+    const positionsWithDepartment = positions.filter((position) => position.departmentId != null);
+    const source = positionsWithDepartment.length > 0
+      ? positionsWithDepartment.filter((position) => String(position.departmentId) === form.departmentId)
+      : positions.filter((position) => {
+          const allowedTitles = fallbackPositionTitlesByDepartment[selectedDepartmentName] || [];
+          return allowedTitles.some((title) => title.toLowerCase() === position.title.toLowerCase());
+        });
 
-    if (choices.length > 0) return choices;
-
-    return positions.map((position) => ({
+    const choices = source.map((position) => ({
       id: String(position.id),
       title: position.title,
     }));
-  }, [positions, selectedDepartmentName]);
+
+    if (form.positionId && !choices.some((position) => position.id === form.positionId)) {
+      const currentPosition = positions.find((position) => String(position.id) === form.positionId);
+      if (currentPosition) {
+        choices.unshift({
+          id: String(currentPosition.id),
+          title: `${currentPosition.title} (chức vụ cũ)`,
+        });
+      }
+    }
+
+    return choices;
+  }, [form.departmentId, form.positionId, positions, selectedDepartmentName]);
 
   const isManagerView = userRole === 'manager';
   const canManageEmployees = userRole === 'admin' && !readOnly;
@@ -346,7 +359,6 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
     if (!form.email.trim()) return 'Vui lòng nhập email nhân viên.';
     if (!form.cccd.trim()) return 'Vui lòng nhập CCCD.';
     if (!form.departmentId) return 'Vui lòng chọn phòng ban.';
-    if (!form.positionId) return 'Vui lòng chọn chức vụ.';
     if (form.cccd.replace(/\D/g, '').length !== 12) return 'CCCD cần đủ 12 chữ số.';
     const currentId = selectedEmployee?.id;
     const normalizedEmail = form.email.trim().toLowerCase();
@@ -367,12 +379,7 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
   const handleCreate = async () => {
     const message = validateForm();
     if (message) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Thiếu thông tin',
-        text: message,
-        confirmButtonText: 'Đã hiỒu',
-      });
+      toast.fire({ icon: 'warning', title: message });
       return;
     }
 
@@ -388,12 +395,7 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       toast.fire({ icon: 'success', title: 'Đã thêm nhân viên' });
     } catch (err) {
       console.error('Create employee failed:', err);
-      Swal.fire({
-        icon: 'error',
-        title: 'Thêm thất bại',
-        text: 'Không thêm được nhân viên. Kiểm tra backend hoặc dữ liệu nhập.',
-        confirmButtonText: 'Đóng',
-      });
+      toast.fire({ icon: 'error', title: 'Không thêm được nhân viên. Kiểm tra backend hoặc dữ liệu nhập.' });
     } finally {
       setSaving(false);
     }
@@ -404,12 +406,7 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
 
     const message = validateForm();
     if (message) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Thiếu thông tin',
-        text: message,
-        confirmButtonText: 'Đã hiỒu',
-      });
+      toast.fire({ icon: 'warning', title: message });
       return;
     }
 
@@ -424,12 +421,7 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       toast.fire({ icon: 'success', title: 'Đã cập nhật nhân viên' });
     } catch (err) {
       console.error('Update employee failed:', err);
-      Swal.fire({
-        icon: 'error',
-        title: 'Cập nhật thất bại',
-        text: 'Không cập nhật được nhân viên. Kiểm tra backend hoặc dữ liệu nhập.',
-        confirmButtonText: 'Đóng',
-      });
+      toast.fire({ icon: 'error', title: 'Không cập nhật được nhân viên. Kiểm tra backend hoặc dữ liệu nhập.' });
     } finally {
       setSaving(false);
     }
@@ -438,10 +430,10 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
   const handleDelete = async (employee: EmployeeView) => {
     const result = await Swal.fire({
       icon: 'question',
-      title: 'Chuyển vào danh sách đã nghỉ việc?',
-      text: employee.fullName,
+      title: 'Cho nhân viên nghỉ việc?',
+      text: `${employee.fullName} sẽ được chuyển sang hồ sơ đã nghỉ việc và không còn tính trong nhân sự đang làm việc.`,
       showCancelButton: true,
-      confirmButtonText: 'ChuyỒn',
+      confirmButtonText: 'Cho nghỉ việc',
       cancelButtonText: 'Hủy',
       confirmButtonColor: '#dc2626',
     });
@@ -455,13 +447,59 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
           item.id === employee.id ? { ...item, status: INACTIVE_STATUS } : item
         )
       );
-      toast.fire({ icon: 'success', title: 'Đã chuyển vào danh sách nghỉ việc' });
+      toast.fire({ icon: 'success', title: 'Đã lưu hồ sơ nghỉ việc' });
     } catch (err) {
       console.error('Delete employee failed:', err);
       Swal.fire({
         icon: 'error',
         title: 'Thao tác thất bại',
         text: 'Không cập nhật được trạng thái nhân viên.',
+        confirmButtonText: 'Đóng',
+      });
+    }
+  };
+
+  const handleRestoreEmployee = async (employee: EmployeeView) => {
+    setShowInactiveDialog(false);
+    await waitForDialogClose();
+
+    const result = await Swal.fire({
+      icon: 'question',
+      title: 'Khôi phục nhân viên?',
+      text: `${employee.fullName} sẽ quay lại danh sách nhân sự đang làm việc.`,
+      showCancelButton: true,
+      confirmButtonText: 'Khôi phục',
+      cancelButtonText: 'Hủy',
+      confirmButtonColor: '#2563eb',
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await updateEmployee(employee.id, {
+        fullName: employee.fullName,
+        email: employee.email,
+        phone: employee.phone || null,
+        cccd: employee.cccd || null,
+        role: normalizeRole(employee.role),
+        status: ACTIVE_STATUS,
+        departmentId: employee.departmentId,
+        positionId: employee.positionId,
+        salaryBase: employee.salaryBase,
+      });
+
+      setEmployees((prev) =>
+        prev.map((item) =>
+          item.id === employee.id ? { ...item, status: ACTIVE_STATUS } : item
+        )
+      );
+      toast.fire({ icon: 'success', title: 'Đã khôi phục nhân viên' });
+    } catch (err) {
+      console.error('Restore employee failed:', err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Khôi phục thất bại',
+        text: 'Không thể đưa nhân viên trở lại trạng thái đang làm việc.',
         confirmButtonText: 'Đóng',
       });
     }
@@ -745,7 +783,13 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
                           <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">Chỉ xem</Badge>
                         )}
                         {canManageEmployees && employee.status === ACTIVE_STATUS && (
-                          <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => handleDelete(employee)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                            title="Cho nhân viên nghỉ việc"
+                            onClick={() => handleDelete(employee)}
+                          >
                             <Trash2 className="size-4" />
                           </Button>
                         )}
@@ -788,22 +832,34 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       <Dialog open={showInactiveDialog} onOpenChange={setShowInactiveDialog}>
         <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle>Nhân viên đã nghỉ việc</DialogTitle>
-            <DialogDescription>Danh sách này được tách riêng để màn hình chính tập trung vào nhân sự đang làm việc.</DialogDescription>
+            <DialogTitle>Hồ sơ nhân viên đã nghỉ việc</DialogTitle>
+            <DialogDescription>Danh sách lưu trữ hồ sơ để tra cứu lịch sử lương, chấm công, nghỉ phép và đánh giá năng lực.</DialogDescription>
           </DialogHeader>
           <div className="hide-scrollbar max-h-[420px] overflow-y-auto rounded-lg border border-gray-100">
             {inactiveEmployees.length === 0 ? (
-              <div className="p-6 text-center text-sm text-gray-500">Chưa có nhân viên đã nghỉ việc.</div>
+              <div className="p-8 text-center">
+                <p className="font-medium text-gray-900">Chưa có hồ sơ nghỉ việc</p>
+                <p className="mt-1 text-sm text-gray-500">Khi nhân viên nghỉ việc, hồ sơ sẽ xuất hiện ở đây thay vì bị xóa khỏi hệ thống.</p>
+              </div>
             ) : (
               inactiveEmployees.map((employee) => (
-                <div key={employee.id} className="flex items-center justify-between border-b border-gray-100 p-4 last:border-b-0">
+                <div key={employee.id} className="flex flex-col gap-3 border-b border-gray-100 p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="font-medium text-gray-900">{employee.fullName}</p>
-                    <p className="text-sm text-gray-500">{employee.departmentName} · {employee.positionTitle}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-gray-900">{employee.fullName}</p>
+                      <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">Đã nghỉ việc</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-500">{employee.departmentName} · {employee.positionTitle}</p>
+                    <p className="mt-1 text-xs text-gray-400">{employee.email} · {employee.phone || 'Chưa có SĐT'}</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => handleOpenEdit(employee)}>
-                    Xem/Sửa
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleOpenEdit(employee)}>
+                      Xem/Sửa
+                    </Button>
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleRestoreEmployee(employee)}>
+                      Khôi phục
+                    </Button>
+                  </div>
                 </div>
               ))
             )}

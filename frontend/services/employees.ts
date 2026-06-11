@@ -23,6 +23,7 @@ export interface DepartmentOption {
 export interface PositionOption {
   id: number;
   title: string;
+  departmentId?: number | null;
 }
 
 export interface EmployeePayload {

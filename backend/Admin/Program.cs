@@ -35,6 +35,8 @@ builder.Services.AddScoped<SalaryService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<LeaveRequestService>();
 builder.Services.AddScoped<CompetencyService>();
+builder.Services.AddScoped<TaskService>();
+builder.Services.AddScoped<AgenticCompetencyService>();
 
 // =========================
 // CORS

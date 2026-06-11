@@ -33,9 +33,9 @@ Nếu thiếu một trong ba lớp thì phải ghi rõ là **chưa hoàn chỉnh
 | Nhân viên | Đã gọi API thật | Có CRUD API | Có `employees` | Gần đúng |
 | Phòng ban | Có select | Có API list | Có `departments` | Thiếu CRUD |
 | Chức vụ | Có select | Có API list | Có `positions` | Thiếu liên kết phòng ban |
-| Manager | Chưa có role UI riêng | Chưa có API riêng | Có thể dùng `employees.role` | Thiếu nhiều |
-| Task | Chưa có UI chính thức | Chưa có API | Chưa có bảng | Chưa làm |
-| Đánh giá năng lực | Có UI gọi API | Có API demo/rule-based | Chưa có bảng review | Chưa đúng hướng Agentic AI |
+| Manager | Chưa có role UI riêng | Đã có API nền cho task/competency, còn thiếu Auth/JWT scope | Có thể dùng `employees.role` | Đang làm |
+| Task | Chưa có UI chính thức | Đã có API Manager/Employee Task | Có SQL migration tạo bảng | Đang làm |
+| Đánh giá năng lực | Có UI gọi API admin demo | Đã có API TV3 generate/approve theo task, API cũ vẫn rule-based | Có SQL migration tạo bảng review | Đang làm |
 | Chấm công | Có UI nhưng dùng mẫu | Có API cơ bản | Có `attendance` nhưng mapping cần chuẩn lại | Chưa đồng bộ |
 | Nghỉ phép | Có UI nhưng dùng mẫu | Có API cơ bản | Có `leave_requests`, `leave_types` | Chưa đồng bộ |
 | Lương | Có UI nhưng dùng mẫu phức tạp | Có API payroll đơn giản | Có `payroll` | Chưa đồng bộ |
@@ -912,6 +912,12 @@ Phần chính của đề tài vẫn là:
 
 ```text
 Manager Task -> Employee Progress -> Manager Review -> Agentic AI Evaluation
+```
+
+API nền cho luồng này đã được mô tả tại:
+
+```text
+TAI_LIEU_API_TV3_AGENTIC_AI.md
 ```
 
 ---

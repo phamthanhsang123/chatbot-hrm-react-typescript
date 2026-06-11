@@ -29,6 +29,7 @@ Tat ca thanh vien phai doc va lam theo cac file sau:
 | `DO_AN_HRM_AGENTIC_AI_DOCUMENT.md` | Tai lieu tong hop do an |
 | `QUY_UOC_DONG_BO_FE_BE_DATABASE_HRM.md` | Contract chung de FE, BE va Database khong bi lech |
 | `TONG_HOP_DONG_BO_CHUC_NANG_HRM.md` | Bang doi chieu FE, BE, Database dang co va con thieu theo tung module |
+| `TAI_LIEU_API_TV3_AGENTIC_AI.md` | API Manager Task, Employee Task va Agentic AI do TV3 phu trach |
 
 Neu muon doi logic nghiep vu, phai cap nhat tai lieu truoc roi moi sua code.
 

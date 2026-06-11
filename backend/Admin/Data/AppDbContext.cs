@@ -21,6 +21,11 @@ namespace Admin.Data
 
         public DbSet<LeaveRequest> LeaveRequests { get; set; }
         public DbSet<LeaveType> LeaveTypes { get; set; }
+        public DbSet<EmployeeTask> Tasks { get; set; }
+        public DbSet<TaskProgressLog> TaskProgressLogs { get; set; }
+        public DbSet<TaskReview> TaskReviews { get; set; }
+        public DbSet<CompetencyReview> CompetencyReviews { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -73,7 +78,12 @@ namespace Admin.Data
 
                 entity.Property(p => p.Id).HasColumnName("position_id");
                 entity.Property(p => p.Title).HasColumnName("position_name");
+                entity.Property(p => p.DepartmentId).HasColumnName("department_id");
                 entity.Ignore(p => p.BaseSalaryRange);
+
+                entity.HasOne(p => p.Department)
+                    .WithMany()
+                    .HasForeignKey(p => p.DepartmentId);
             });
 
             // =========================
@@ -111,6 +121,76 @@ namespace Admin.Data
                 entity.Ignore(x => x.Status);
                 entity.Ignore(x => x.CreatedAt);
                 entity.Ignore(x => x.UpdatedAt);
+            });
+
+            // =========================
+            // TASKS
+            // =========================
+            modelBuilder.Entity<EmployeeTask>(entity =>
+            {
+                entity.ToTable("tasks");
+                entity.HasKey(t => t.Id);
+
+                entity.HasOne(t => t.Employee)
+                    .WithMany()
+                    .HasForeignKey(t => t.EmployeeId);
+
+                entity.HasOne(t => t.Manager)
+                    .WithMany()
+                    .HasForeignKey(t => t.ManagerId);
+
+                entity.HasOne(t => t.Department)
+                    .WithMany()
+                    .HasForeignKey(t => t.DepartmentId);
+            });
+
+            modelBuilder.Entity<TaskProgressLog>(entity =>
+            {
+                entity.ToTable("task_progress_logs");
+                entity.HasKey(x => x.Id);
+
+                entity.HasOne(x => x.Task)
+                    .WithMany(t => t.ProgressLogs)
+                    .HasForeignKey(x => x.TaskId);
+
+                entity.HasOne(x => x.Employee)
+                    .WithMany()
+                    .HasForeignKey(x => x.EmployeeId);
+            });
+
+            modelBuilder.Entity<TaskReview>(entity =>
+            {
+                entity.ToTable("task_reviews");
+                entity.HasKey(x => x.Id);
+
+                entity.HasOne(x => x.Task)
+                    .WithMany(t => t.Reviews)
+                    .HasForeignKey(x => x.TaskId);
+
+                entity.HasOne(x => x.Manager)
+                    .WithMany()
+                    .HasForeignKey(x => x.ManagerId);
+            });
+
+            modelBuilder.Entity<CompetencyReview>(entity =>
+            {
+                entity.ToTable("competency_reviews");
+                entity.HasKey(x => x.Id);
+
+                entity.HasIndex(x => new { x.EmployeeId, x.ReviewMonth, x.ReviewYear })
+                    .IsUnique();
+
+                entity.HasOne(x => x.Employee)
+                    .WithMany()
+                    .HasForeignKey(x => x.EmployeeId);
+
+                entity.HasOne(x => x.Manager)
+                    .WithMany()
+                    .HasForeignKey(x => x.ManagerId);
+
+                entity.HasOne(x => x.Department)
+                    .WithMany()
+                    .HasForeignKey(x => x.DepartmentId);
             });
         }
     }

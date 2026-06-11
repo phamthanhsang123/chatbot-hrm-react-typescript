@@ -28,20 +28,20 @@ namespace Admin.Services
 
         private static readonly List<object> DemoPositions = new()
         {
-            new { Id = 1, Title = "Developer" },
-            new { Id = 2, Title = "HR Manager" },
-            new { Id = 3, Title = "Team Lead" },
-            new { Id = 4, Title = "Marketing Executive" },
-            new { Id = 5, Title = "HR Staff" },
-            new { Id = 6, Title = "QA Tester" },
-            new { Id = 7, Title = "DevOps Engineer" },
-            new { Id = 8, Title = "Marketing Manager" },
-            new { Id = 9, Title = "Content Writer" },
-            new { Id = 10, Title = "Sales Manager" },
-            new { Id = 11, Title = "Sales Executive" },
-            new { Id = 12, Title = "Sales Representative" },
-            new { Id = 13, Title = "Chief Accountant" },
-            new { Id = 14, Title = "Accountant" }
+            new { Id = 1, Title = "Developer", DepartmentId = 1 },
+            new { Id = 2, Title = "Team Lead", DepartmentId = 1 },
+            new { Id = 3, Title = "QA Tester", DepartmentId = 1 },
+            new { Id = 4, Title = "DevOps Engineer", DepartmentId = 1 },
+            new { Id = 5, Title = "HR Manager", DepartmentId = 2 },
+            new { Id = 6, Title = "HR Staff", DepartmentId = 2 },
+            new { Id = 7, Title = "Marketing Manager", DepartmentId = 3 },
+            new { Id = 8, Title = "Marketing Executive", DepartmentId = 3 },
+            new { Id = 9, Title = "Content Writer", DepartmentId = 3 },
+            new { Id = 10, Title = "Sales Manager", DepartmentId = 4 },
+            new { Id = 11, Title = "Sales Executive", DepartmentId = 4 },
+            new { Id = 12, Title = "Sales Representative", DepartmentId = 4 },
+            new { Id = 13, Title = "Chief Accountant", DepartmentId = 5 },
+            new { Id = 14, Title = "Accountant", DepartmentId = 5 }
         };
 
         public EmployeeService(AppDbContext db)
@@ -156,6 +156,8 @@ namespace Admin.Services
                     employee.Cccd = normalizedCccd;
                 }
 
+                await EnsureValidWorkAssignment(employee.DepartmentId, employee.PositionId);
+
                 _db.Employees.Add(employee);
                 await _db.SaveChangesAsync();
 
@@ -226,6 +228,8 @@ namespace Admin.Services
                 existing.Status = string.IsNullOrWhiteSpace(dto.Status)
                     ? existing.Status
                     : ToDbStatus(dto.Status);
+
+                await EnsureValidWorkAssignment(dto.DepartmentId, dto.PositionId);
 
                 existing.DepartmentId = dto.DepartmentId;
                 existing.PositionId = dto.PositionId;
@@ -318,7 +322,7 @@ namespace Admin.Services
             {
                 return await _db.Positions
                     .AsNoTracking()
-                    .Select(p => new { p.Id, p.Title })
+                    .Select(p => new { p.Id, p.Title, p.DepartmentId })
                     .Cast<object>()
                     .ToListAsync();
             }
@@ -397,6 +401,33 @@ namespace Admin.Services
                 14 => "Accountant",
                 _ => null
             };
+        }
+
+        private async Task EnsureValidWorkAssignment(int? departmentId, int? positionId)
+        {
+            if (departmentId.HasValue)
+            {
+                var departmentExists = await _db.Departments.AnyAsync(d => d.Id == departmentId.Value);
+                if (!departmentExists)
+                    throw new InvalidOperationException("Phòng ban không tồn tại trong hệ thống.");
+            }
+
+            if (!positionId.HasValue)
+                return;
+
+            var position = await _db.Positions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == positionId.Value);
+
+            if (position == null)
+                throw new InvalidOperationException("Chức vụ không tồn tại trong hệ thống.");
+
+            if (position.DepartmentId.HasValue &&
+                departmentId.HasValue &&
+                position.DepartmentId.Value != departmentId.Value)
+            {
+                throw new InvalidOperationException("Chức vụ không thuộc phòng ban đã chọn.");
+            }
         }
 
         private static string ToApiStatus(string? status)
