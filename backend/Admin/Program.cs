@@ -59,6 +59,14 @@ builder.Services.AddCors(options =>
 // =========================
 // JWT AUTHENTICATION
 // =========================
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "HRM.Admin.API";
+var jwtKey = builder.Configuration["Jwt:Key"];
+
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    jwtKey = "LOCAL_DEV_SECRET_KEY_FOR_HRM_ADMIN_API_32_CHARS";
+}
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -68,9 +76,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidIssuer = jwtIssuer,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
+                Encoding.UTF8.GetBytes(jwtKey)
             ),
             ClockSkew = TimeSpan.Zero
         };
