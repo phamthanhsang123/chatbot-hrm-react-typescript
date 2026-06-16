@@ -1,5 +1,5 @@
 'use client';
-import { Calendar, Clock, CheckCircle, XCircle, Plus, Eye, CalendarDays } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, XCircle, Plus, Eye, CalendarDays, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -41,12 +41,20 @@ export function Leave() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [rejectNote, setRejectNote] = useState('');
 
   // Form state for create dialog
   const [newLeave, setNewLeave] = useState({
     employeeName: '',
+    type: 'annual' as LeaveType,
+    from: '',
+    to: '',
+    reason: '',
+  });
+
+  const [editLeave, setEditLeave] = useState({
     type: 'annual' as LeaveType,
     from: '',
     to: '',
@@ -204,6 +212,56 @@ export function Leave() {
     setSelectedRequest(request);
     setRejectNote('');
     setShowRejectDialog(true);
+  };
+
+  const calculateLeaveDays = (fromDate: string, toDate: string) => {
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    return Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  };
+
+  const handleEditLeave = (request: LeaveRequest) => {
+    setSelectedRequest(request);
+    setEditLeave({
+      type: request.type,
+      from: request.from,
+      to: request.to,
+      reason: request.reason,
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleSaveEditLeave = () => {
+    if (!selectedRequest) return;
+
+    if (!editLeave.from || !editLeave.to || !editLeave.reason.trim()) {
+      alert('Vui lòng điền đầy đủ thông tin nghỉ phép.');
+      return;
+    }
+
+    const days = calculateLeaveDays(editLeave.from, editLeave.to);
+    if (days <= 0) {
+      alert('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.');
+      return;
+    }
+
+    setLeaveRequests((prev) =>
+      prev.map((request) =>
+        request.id === selectedRequest.id
+          ? {
+            ...request,
+            type: editLeave.type,
+            from: editLeave.from,
+            to: editLeave.to,
+            days,
+            reason: editLeave.reason,
+          }
+          : request
+      )
+    );
+
+    alert(`Đã cập nhật đơn nghỉ phép của ${selectedRequest.name}.`);
+    setShowEditDialog(false);
   };
 
   const handleConfirmApprove = () => {
@@ -491,6 +549,11 @@ export function Leave() {
                   <td className="px-4 py-2">{getStatusBadge(request.status)}</td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleEditLeave(request)}>
+                        <Pencil className="size-3 mr-1" />
+                        Chỉnh sửa
+                      </Button>
+
                       {request.status === 'pending' ? (
                         <>
                           <Button
@@ -606,6 +669,90 @@ export function Leave() {
               onClick={handleCreateLeave}
             >
               Tạo đơn
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa đơn nghỉ phép</DialogTitle>
+            <DialogDescription>Cập nhật loại nghỉ, thời gian và lý do nghỉ</DialogDescription>
+          </DialogHeader>
+
+          {selectedRequest && (
+            <div className="space-y-4">
+              <div className="rounded-lg border p-4 text-sm">
+                <div className="font-semibold text-gray-900">{selectedRequest.name}</div>
+                <div className="text-xs text-gray-500">
+                  {selectedRequest.employeeId} • {selectedRequest.department}
+                </div>
+              </div>
+
+              <div>
+                <Label>Loại nghỉ</Label>
+                <select
+                  className="w-full h-10 rounded-md border border-gray-200 px-3 text-sm"
+                  value={editLeave.type}
+                  onChange={(e) => setEditLeave({ ...editLeave, type: e.target.value as LeaveType })}
+                >
+                  <option value="annual">Nghỉ phép năm</option>
+                  <option value="sick">Nghỉ ốm</option>
+                  <option value="unpaid">Nghỉ không lương</option>
+                  <option value="maternity">Nghỉ thai sản</option>
+                  <option value="marriage">Nghỉ cưới</option>
+                  <option value="funeral">Nghỉ tang</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Từ ngày</Label>
+                  <Input
+                    type="date"
+                    value={editLeave.from}
+                    onChange={(e) => setEditLeave({ ...editLeave, from: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Đến ngày</Label>
+                  <Input
+                    type="date"
+                    value={editLeave.to}
+                    onChange={(e) => setEditLeave({ ...editLeave, to: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Lý do</Label>
+                <Textarea
+                  value={editLeave.reason}
+                  onChange={(e) => setEditLeave({ ...editLeave, reason: e.target.value })}
+                  placeholder="Nhập lý do xin nghỉ phép"
+                  rows={3}
+                />
+              </div>
+
+              {editLeave.from && editLeave.to && calculateLeaveDays(editLeave.from, editLeave.to) > 0 && (
+                <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
+                  Số ngày nghỉ sau khi sửa: <b>{calculateLeaveDays(editLeave.from, editLeave.to)} ngày</b>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Hủy bỏ
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              onClick={handleSaveEditLeave}
+            >
+              Lưu thay đổi
             </Button>
           </div>
         </DialogContent>

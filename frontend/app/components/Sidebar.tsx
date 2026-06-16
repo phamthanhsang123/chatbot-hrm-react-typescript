@@ -15,7 +15,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import type { ManagementRole } from '../types';
 
@@ -26,6 +26,7 @@ interface SidebarProps {
   onNavigate: (page: string) => void;
   onOpenSettings?: () => void;
   userRole?: ManagementRole;
+  defaultCollapsed?: boolean;
 }
 
 interface MenuItem {
@@ -59,10 +60,22 @@ const managerMenuItems: MenuItem[] = [
   { id: 'chatbot', label: 'AI Assistant', icon: <MessageSquare className="size-5" /> },
 ];
 
-export function Sidebar({ isOpen, onClose, currentPage, onNavigate, onOpenSettings, userRole = 'admin' }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+export function Sidebar({
+  isOpen,
+  onClose,
+  currentPage,
+  onNavigate,
+  onOpenSettings,
+  userRole = 'admin',
+  defaultCollapsed = false,
+}: SidebarProps) {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [showSettings, setShowSettings] = useState(false);
   const menuItems = userRole === 'manager' ? managerMenuItems : adminMenuItems;
+
+  useEffect(() => {
+    setIsCollapsed(defaultCollapsed);
+  }, [defaultCollapsed]);
 
   const handleNavigate = (pageId: string) => {
     onNavigate(pageId);

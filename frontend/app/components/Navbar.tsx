@@ -1,6 +1,7 @@
 'use client';
-import { Bell, LogOut, Menu, Search, Settings, User, Check } from 'lucide-react';
-import { useState } from 'react';
+
+import { Bell, Check, LogOut, Menu, Search, Settings, User } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -17,13 +18,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
-import { Label } from './ui/label';
 import { Input } from './ui/input';
+import { Label } from './ui/label';
 import { Switch } from './ui/switch';
+
+export interface ManagementSettings {
+  fullName: string;
+  email: string;
+  phone: string;
+  emailNotifications: boolean;
+  leaveNotifications: boolean;
+  salaryNotifications: boolean;
+  darkMode: boolean;
+  sidebarCollapsed: boolean;
+}
 
 interface NavbarProps {
   onToggleSidebar: () => void;
   onLogout?: () => void;
+  settings: ManagementSettings;
+  onSettingsSave: (settings: ManagementSettings) => void;
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
 }
 
 interface Notification {
@@ -32,88 +48,183 @@ interface Notification {
   message: string;
   read: boolean;
   time: string;
+  category: 'leave' | 'salary' | 'system' | 'employee';
 }
 
-export function Navbar({ onToggleSidebar, onLogout }: NavbarProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    { id: 1, title: 'Yêu cầu nghỉ phép mới', message: 'Nguyễn Văn B đã gửi yêu cầu nghỉ phép', read: false, time: '5 phút trước' },
-    { id: 2, title: 'Cập nhật hệ thống', message: 'Hệ thống sẽ bảo trì vào 20:00 hôm nay', read: false, time: '1 giờ trước' },
-    { id: 3, title: 'Nhân viên mới', message: 'Chào mừng Trần Thị C gia nhập công ty', read: false, time: '2 giờ trước' },
-  ]);
-  
-  const [showSettings, setShowSettings] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+export const defaultManagementSettings: ManagementSettings = {
+  fullName: 'Nguyễn Văn A',
+  email: 'nguyenvana@company.com',
+  phone: '0123456789',
+  emailNotifications: true,
+  leaveNotifications: true,
+  salaryNotifications: true,
+  darkMode: false,
+  sidebarCollapsed: false,
+};
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+export function Navbar({
+  onToggleSidebar,
+  onLogout,
+  settings,
+  onSettingsSave,
+  settingsOpen,
+  onSettingsOpenChange,
+}: NavbarProps) {
+  const [notifications, setNotifications] = useState<Notification[]>([
+    {
+      id: 1,
+      title: 'Yêu cầu nghỉ phép mới',
+      message: 'Nguyễn Văn B đã gửi yêu cầu nghỉ phép',
+      read: false,
+      time: '5 phút trước',
+      category: 'leave',
+    },
+    {
+      id: 2,
+      title: 'Cập nhật hệ thống',
+      message: 'Hệ thống sẽ bảo trì vào 20:00 hôm nay',
+      read: false,
+      time: '1 giờ trước',
+      category: 'system',
+    },
+    {
+      id: 3,
+      title: 'Nhân viên mới',
+      message: 'Chào mừng Trần Thị C gia nhập công ty',
+      read: false,
+      time: '2 giờ trước',
+      category: 'employee',
+    },
+  ]);
+
+  const [internalShowSettings, setInternalShowSettings] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [draftSettings, setDraftSettings] = useState<ManagementSettings>(settings);
+  const showSettings = settingsOpen ?? internalShowSettings;
+  const setShowSettings = onSettingsOpenChange ?? setInternalShowSettings;
+
+  useEffect(() => {
+    if (showSettings) {
+      setDraftSettings(settings);
+    }
+  }, [settings, showSettings]);
+
+  const visibleNotifications = notifications.filter((notification) => {
+    if (notification.category === 'leave') return settings.leaveNotifications;
+    if (notification.category === 'salary') return settings.salaryNotifications;
+    return true;
+  });
+
+  const unreadCount = visibleNotifications.filter((notification) => !notification.read).length;
+  const initials = settings.fullName
+    .split(' ')
+    .filter(Boolean)
+    .slice(-1)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'U';
 
   const markAsRead = (id: number) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.id === id ? { ...notification, read: true } : notification
+      )
+    );
   };
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    const visibleIds = new Set(visibleNotifications.map((notification) => notification.id));
+    setNotifications((current) =>
+      current.map((notification) =>
+        visibleIds.has(notification.id) ? { ...notification, read: true } : notification
+      )
+    );
   };
 
   const handleLogout = () => {
     if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
       alert('Đã đăng xuất thành công!');
-      // Thực hiện logout logic ở đây
-      window.location.reload();
-      if (onLogout) {
-        onLogout();
-      }
+      onLogout?.();
     }
   };
 
+  const handleSaveSettings = () => {
+    const fullName = draftSettings.fullName.trim();
+    const email = draftSettings.email.trim();
+    const phone = draftSettings.phone.trim();
+
+    if (!fullName || !email || !phone) {
+      alert('Vui lòng nhập đầy đủ họ tên, email và số điện thoại.');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert('Email không hợp lệ.');
+      return;
+    }
+
+    onSettingsSave({
+      ...draftSettings,
+      fullName,
+      email,
+      phone,
+    });
+    setShowSettings(false);
+    alert('Đã lưu cài đặt thành công!');
+  };
+
   return (
-    <nav className="h-16 bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-      <div className="h-full px-4 flex items-center justify-between">
-        {/* Left Section */}
+    <nav
+      className={`sticky top-0 z-50 h-16 border-b shadow-sm transition-colors ${
+        settings.darkMode ? 'border-slate-800 bg-slate-950 text-slate-100' : 'border-gray-200 bg-white text-gray-900'
+      }`}
+    >
+      <div className="flex h-full items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={onToggleSidebar}
-            className="lg:hidden hover:bg-gray-100"
+            className={settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}
           >
             <Menu className="size-5" />
           </Button>
-          
-          <div className="flex items-center gap-3">
-            <div className="hidden lg:flex items-center gap-2 text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              <div className="size-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white text-lg shadow-lg shadow-blue-200">
-                HR
-              </div>
-              HRM SYSTEM
+
+          <div className="hidden items-center gap-2 text-2xl font-bold text-blue-600 lg:flex">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-lg text-white shadow-lg shadow-blue-200">
+              HR
             </div>
+            HRM SYSTEM
           </div>
         </div>
 
-        {/* Center Section - Search */}
-        <div className="hidden md:flex flex-1 max-w-md mx-8">
+        <div className="hidden max-w-md flex-1 md:mx-8 md:flex">
           <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               placeholder="Tìm kiếm nhân viên, phòng ban..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              className={`w-full rounded-lg border py-2 pl-10 pr-4 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                settings.darkMode
+                  ? 'border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500'
+                  : 'border-gray-200 bg-white text-gray-900'
+              }`}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
         </div>
 
-        {/* Right Section */}
         <div className="flex items-center gap-2">
-          {/* Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative hover:bg-gray-100">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`relative ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}`}
+              >
                 <Bell className="size-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 size-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center animate-pulse">
+                  <span className="absolute -right-1 -top-1 flex size-5 animate-pulse items-center justify-center rounded-full bg-red-500 text-xs text-white">
                     {unreadCount}
                   </span>
                 )}
@@ -123,70 +234,60 @@ export function Navbar({ onToggleSidebar, onLogout }: NavbarProps) {
               <div className="flex items-center justify-between px-2 py-2">
                 <DropdownMenuLabel>Thông báo</DropdownMenuLabel>
                 {unreadCount > 0 && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-auto py-1 px-2 text-xs"
-                    onClick={markAllAsRead}
-                  >
+                  <Button variant="ghost" size="sm" className="h-auto px-2 py-1 text-xs" onClick={markAllAsRead}>
                     Đánh dấu tất cả đã đọc
                   </Button>
                 )}
               </div>
               <DropdownMenuSeparator />
-              <div className="py-2 max-h-[400px] overflow-y-auto">
-                {notifications.map((notification) => (
+              <div className="max-h-[400px] overflow-y-auto py-2">
+                {visibleNotifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className={`px-2 py-3 hover:bg-gray-50 cursor-pointer rounded-md relative ${
+                    className={`relative cursor-pointer rounded-md px-2 py-3 hover:bg-gray-50 ${
                       notification.read ? 'opacity-60' : ''
                     }`}
                     onClick={() => markAsRead(notification.id)}
                   >
                     <div className="flex items-start gap-2">
-                      {!notification.read && (
-                        <div className="size-2 bg-blue-500 rounded-full mt-1.5 flex-shrink-0" />
-                      )}
+                      {!notification.read && <div className="mt-1.5 size-2 shrink-0 rounded-full bg-blue-500" />}
                       <div className="flex-1">
                         <p className="text-sm font-medium">{notification.title}</p>
-                        <p className="text-xs text-gray-500 mt-1">{notification.message}</p>
-                        <p className="text-xs text-gray-400 mt-1">{notification.time}</p>
+                        <p className="mt-1 text-xs text-gray-500">{notification.message}</p>
+                        <p className="mt-1 text-xs text-gray-400">{notification.time}</p>
                       </div>
-                      {notification.read && (
-                        <Check className="size-4 text-green-600 flex-shrink-0 mt-1" />
-                      )}
+                      {notification.read && <Check className="mt-1 size-4 shrink-0 text-green-600" />}
                     </div>
                   </div>
                 ))}
               </div>
-              {notifications.length === 0 && (
-                <div className="py-8 text-center text-sm text-gray-500">
-                  Không có thông báo mới
-                </div>
+              {visibleNotifications.length === 0 && (
+                <div className="py-8 text-center text-sm text-gray-500">Không có thông báo mới</div>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Settings */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="hidden md:flex hover:bg-gray-100"
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`hidden md:flex ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}`}
             onClick={() => setShowSettings(true)}
           >
             <Settings className="size-5" />
           </Button>
 
-          {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 hover:bg-gray-100">
-                <div className="size-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white shadow-md">
-                  <User className="size-4" />
+              <Button
+                variant="ghost"
+                className={`flex items-center gap-2 ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}`}
+              >
+                <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white shadow-md">
+                  {initials}
                 </div>
-                <div className="hidden lg:block text-left">
-                  <p className="text-sm font-medium">Nguyễn Văn A</p>
-                  <p className="text-xs text-gray-500">HR Manager</p>
+                <div className="hidden text-left lg:block">
+                  <p className="text-sm font-medium">{settings.fullName}</p>
+                  <p className={`text-xs ${settings.darkMode ? 'text-slate-400' : 'text-gray-500'}`}>HR Manager</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -207,101 +308,129 @@ export function Navbar({ onToggleSidebar, onLogout }: NavbarProps) {
         </div>
       </div>
 
-      {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="sm:max-w-[480px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Cài đặt</DialogTitle>
-            <DialogDescription>
-              Tùy chỉnh thiết lập của bạn
-            </DialogDescription>
+            <DialogDescription>Tùy chỉnh thiết lập của bạn</DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4 py-2">
-            {/* Account Settings */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-900">Tài khoản</h3>
               <div className="space-y-3">
                 <div>
-                  <Label htmlFor="fullname" className="text-xs">Họ và tên</Label>
-                  <Input id="fullname" defaultValue="Nguyễn Văn A" className="h-9 text-sm" />
+                  <Label htmlFor="fullname" className="text-xs">
+                    Họ và tên
+                  </Label>
+                  <Input
+                    id="fullname"
+                    value={draftSettings.fullName}
+                    onChange={(event) => setDraftSettings({ ...draftSettings, fullName: event.target.value })}
+                    className="h-9 text-sm"
+                  />
                 </div>
                 <div>
-                  <Label htmlFor="email-settings" className="text-xs">Email</Label>
-                  <Input id="email-settings" type="email" defaultValue="nguyenvana@company.com" className="h-9 text-sm" />
+                  <Label htmlFor="email-settings" className="text-xs">
+                    Email
+                  </Label>
+                  <Input
+                    id="email-settings"
+                    type="email"
+                    value={draftSettings.email}
+                    onChange={(event) => setDraftSettings({ ...draftSettings, email: event.target.value })}
+                    className="h-9 text-sm"
+                  />
                 </div>
                 <div>
-                  <Label htmlFor="phone" className="text-xs">Số điện thoại</Label>
-                  <Input id="phone" defaultValue="0123456789" className="h-9 text-sm" />
+                  <Label htmlFor="phone" className="text-xs">
+                    Số điện thoại
+                  </Label>
+                  <Input
+                    id="phone"
+                    value={draftSettings.phone}
+                    onChange={(event) => setDraftSettings({ ...draftSettings, phone: event.target.value })}
+                    className="h-9 text-sm"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Notification Settings */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-900">Thông báo</h3>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium">Email thông báo</p>
-                    <p className="text-[10px] text-gray-500">Nhận thông báo qua email</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium">Thông báo đơn nghỉ phép</p>
-                    <p className="text-[10px] text-gray-500">Khi có đơn mới</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium">Thông báo lương</p>
-                    <p className="text-[10px] text-gray-500">Khi tính lương</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
+                <SettingSwitch
+                  title="Email thông báo"
+                  description="Nhận thông báo qua email"
+                  checked={draftSettings.emailNotifications}
+                  onCheckedChange={(checked) => setDraftSettings({ ...draftSettings, emailNotifications: checked })}
+                />
+                <SettingSwitch
+                  title="Thông báo đơn nghỉ phép"
+                  description="Khi có đơn mới"
+                  checked={draftSettings.leaveNotifications}
+                  onCheckedChange={(checked) => setDraftSettings({ ...draftSettings, leaveNotifications: checked })}
+                />
+                <SettingSwitch
+                  title="Thông báo lương"
+                  description="Khi tính lương"
+                  checked={draftSettings.salaryNotifications}
+                  onCheckedChange={(checked) => setDraftSettings({ ...draftSettings, salaryNotifications: checked })}
+                />
               </div>
             </div>
 
-            {/* Appearance Settings */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-900">Giao diện</h3>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium">Chế độ tối</p>
-                    <p className="text-[10px] text-gray-500">Giao diện tối</p>
-                  </div>
-                  <Switch />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium">Sidebar thu gọn</p>
-                    <p className="text-[10px] text-gray-500">Thu gọn mặc định</p>
-                  </div>
-                  <Switch />
-                </div>
+                <SettingSwitch
+                  title="Chế độ tối"
+                  description="Đổi thanh điều hướng sang giao diện tối"
+                  checked={draftSettings.darkMode}
+                  onCheckedChange={(checked) => setDraftSettings({ ...draftSettings, darkMode: checked })}
+                />
+                <SettingSwitch
+                  title="Sidebar thu gọn"
+                  description="Thu gọn mặc định sau khi lưu"
+                  checked={draftSettings.sidebarCollapsed}
+                  onCheckedChange={(checked) => setDraftSettings({ ...draftSettings, sidebarCollapsed: checked })}
+                />
               </div>
             </div>
           </div>
+
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowSettings(false)}>
               Hủy
             </Button>
-            <Button 
-              size="sm"
-              className="bg-gradient-to-r from-blue-600 to-indigo-600"
-              onClick={() => {
-                alert('✅ Đã lưu cài đặt thành công!');
-                setShowSettings(false);
-              }}
-            >
+            <Button size="sm" className="bg-gradient-to-r from-blue-600 to-indigo-600" onClick={handleSaveSettings}>
               Lưu
             </Button>
           </div>
         </DialogContent>
       </Dialog>
     </nav>
+  );
+}
+
+function SettingSwitch({
+  title,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-xs font-medium">{title}</p>
+        <p className="text-[10px] text-gray-500">{description}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
   );
 }
