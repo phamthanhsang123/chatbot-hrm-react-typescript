@@ -84,6 +84,10 @@ export function Login({ onLogin }: LoginProps) {
         localStorage.setItem('hrm_token', data.token);
       }
       localStorage.setItem('hrm_role', data.role || '');
+      const employeeId = data.employeeId || data.user?.employeeId || data.id;
+      if (employeeId) {
+        localStorage.setItem('hrm_employee_id', String(employeeId));
+      }
 
       onLogin(mapApiRole(data.role));
     } catch (error) {
@@ -121,6 +125,12 @@ export function Login({ onLogin }: LoginProps) {
     setMessage('Đăng nhập nhanh chỉ để xem giao diện demo. Muốn dùng dữ liệu thật hãy nhập email/mật khẩu từ MySQL.');
     setSelectedRole(role);
     setIsLoading(true);
+
+    if (role === 'employee') {
+      localStorage.setItem('hrm_employee_id', '1');
+    } else if (role === 'manager') {
+      localStorage.setItem('hrm_employee_id', '2');
+    }
 
     setTimeout(() => {
       onLogin(role);
