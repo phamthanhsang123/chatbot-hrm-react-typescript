@@ -16,11 +16,11 @@ namespace Admin.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetMine([FromQuery] int employeeId)
+        public async Task<IActionResult> GetMine([FromQuery] int employeeId, [FromQuery] int? month, [FromQuery] int? year)
         {
             try
             {
-                return Ok(await _service.GetEmployeeTasks(employeeId));
+                return Ok(await _service.GetEmployeeTasks(employeeId, month, year));
             }
             catch (InvalidOperationException ex)
             {

@@ -31,7 +31,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { id: 'dashboard', label: 'Tổng quan', icon: <LayoutDashboard className="size-5" /> },
-  { id: 'tasks', label: 'Task của tôi', icon: <BriefcaseBusiness className="size-5" />, badge: 3 },
+  { id: 'tasks', label: 'Task của tôi', icon: <BriefcaseBusiness className="size-5" />, badge: 'New' },
   { id: 'attendance', label: 'Chấm công', icon: <Clock className="size-5" /> },
   { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 2 },
   { id: 'salary', label: 'Lương của tôi', icon: <Wallet className="size-5" /> },
@@ -50,12 +50,7 @@ export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate }: Em
 
   return (
     <>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity lg:hidden"
-          onClick={onClose}
-        />
-      )}
+      {isOpen && <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity lg:hidden" onClick={onClose} />}
 
       <aside
         className={`

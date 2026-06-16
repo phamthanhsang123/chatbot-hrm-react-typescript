@@ -1,8 +1,9 @@
 import { API_BASE } from './chatbot';
 
-export type TaskStatus = 'NEW' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED';
+export type TaskStatus = 'NEW' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED' | 'OVERDUE';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type ReviewDecision = 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED';
+export type TaskReviewDecision = 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED';
+export type ReviewDecision = TaskReviewDecision;
 
 export interface TaskReviewApiItem {
   id: number;
@@ -11,12 +12,12 @@ export interface TaskReviewApiItem {
   managerName: string;
   qualityScore: number;
   deadlineScore: number;
-  decision: ReviewDecision;
+  decision: TaskReviewDecision;
   comment?: string | null;
   createdAt: string;
 }
 
-export interface EmployeeTaskApiItem {
+export interface TaskApiItem {
   id: number;
   employeeId: number;
   employeeName: string;
@@ -37,9 +38,39 @@ export interface EmployeeTaskApiItem {
   latestReview?: TaskReviewApiItem | null;
 }
 
+export type EmployeeTaskApiItem = TaskApiItem;
+
+export interface TaskPeriodQuery {
+  month?: number;
+  year?: number;
+}
+
+export interface CreateTaskPayload {
+  employeeId: number;
+  title: string;
+  description?: string | null;
+  deadline: string;
+  priority: TaskPriority;
+  expectedScore: number;
+}
+
+export type UpdateTaskPayload = Omit<CreateTaskPayload, 'employeeId'>;
+
 export interface UpdateTaskProgressPayload {
   progressPercent: number;
-  note?: string;
+  note?: string | null;
+}
+
+export interface ReviewTaskPayload {
+  qualityScore: number;
+  deadlineScore: number;
+  decision: TaskReviewDecision;
+  comment?: string | null;
+}
+
+function periodQuery(period?: TaskPeriodQuery) {
+  if (!period?.month || !period?.year) return '';
+  return `&month=${period.month}&year=${period.year}`;
 }
 
 async function request<T>(path: string, init?: RequestInit) {
@@ -74,8 +105,37 @@ export function getCurrentEmployeeId() {
   return Number.isFinite(configuredId) && configuredId > 0 ? configuredId : 1;
 }
 
-export function fetchEmployeeTasks(employeeId = getCurrentEmployeeId()) {
-  return request<EmployeeTaskApiItem[]>(`/api/employee/tasks?employeeId=${employeeId}`);
+export function fetchManagerTasks(managerId: number, period?: TaskPeriodQuery) {
+  return request<TaskApiItem[]>(`/api/manager/tasks?managerId=${managerId}${periodQuery(period)}`);
+}
+
+export function fetchTaskById(taskId: number) {
+  return request<TaskApiItem>(`/api/manager/tasks/${taskId}`);
+}
+
+export function createManagerTask(managerId: number, payload: CreateTaskPayload) {
+  return request<TaskApiItem>(`/api/manager/tasks?managerId=${managerId}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateManagerTask(managerId: number, taskId: number, payload: UpdateTaskPayload) {
+  return request<TaskApiItem>(`/api/manager/tasks/${taskId}?managerId=${managerId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reviewManagerTask(managerId: number, taskId: number, payload: ReviewTaskPayload) {
+  return request<TaskApiItem>(`/api/manager/tasks/${taskId}/review?managerId=${managerId}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchEmployeeTasks(employeeId = getCurrentEmployeeId(), period?: TaskPeriodQuery) {
+  return request<EmployeeTaskApiItem[]>(`/api/employee/tasks?employeeId=${employeeId}${periodQuery(period)}`);
 }
 
 export function updateEmployeeTaskProgress(

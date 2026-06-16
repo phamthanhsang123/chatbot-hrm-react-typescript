@@ -92,6 +92,8 @@ export default function App() {
           return <EmployeeLeave />;
         case 'salary':
           return <EmployeeSalary />;
+        case 'tasks':
+          return <EmployeeTasks />;
         case 'chatbot':
           return <Chatbot />;
         case 'profile':
