@@ -23,6 +23,7 @@ import { Attendance } from './employees/Attendance';
 import { EmployeeLeave } from './employees/EmployeeLeave'; 
 import { EmployeeSalary } from './employees/EmployeeSalary'; 
 import { EmployeeProfile } from './employees/EmployeeProfile';
+import { EmployeeTasks } from './employees/EmployeeTasks';
 import type { UserRole } from './types';
 import { MANAGER_DEPARTMENT } from './types';
 
@@ -55,7 +56,9 @@ export default function App() {
     const renderEmployeePage = () => {
       switch (currentPage) {
         case 'dashboard':
-          return <EmployeeDashboard />;
+          return <EmployeeDashboard onNavigate={setCurrentPage} />;
+        case 'tasks':
+          return <EmployeeTasks />;
         case 'attendance':
           return <Attendance />;
         case 'leave':
