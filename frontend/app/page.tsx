@@ -1,7 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Login } from './components/Login';
-import { Navbar } from './components/Navbar';
+import { defaultManagementSettings, Navbar, type ManagementSettings } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { ManagerDashboard } from './components/ManagerDashboard';
@@ -27,11 +27,38 @@ import { EmployeeTasks } from './employees/EmployeeTasks';
 import type { UserRole } from './types';
 import { MANAGER_DEPARTMENT } from './types';
 
+const MANAGEMENT_SETTINGS_KEY = 'hrm-management-settings';
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [managementSettings, setManagementSettings] = useState<ManagementSettings>(defaultManagementSettings);
+  const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    const savedSettings = window.localStorage.getItem(MANAGEMENT_SETTINGS_KEY);
+    if (!savedSettings) return;
+
+    try {
+      setManagementSettings({
+        ...defaultManagementSettings,
+        ...JSON.parse(savedSettings),
+      });
+    } catch {
+      window.localStorage.removeItem(MANAGEMENT_SETTINGS_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', managementSettings.darkMode);
+  }, [managementSettings.darkMode]);
+
+  const handleManagementSettingsSave = (nextSettings: ManagementSettings) => {
+    setManagementSettings(nextSettings);
+    window.localStorage.setItem(MANAGEMENT_SETTINGS_KEY, JSON.stringify(nextSettings));
+  };
 
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
@@ -154,14 +181,20 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen flex overflow-hidden bg-gray-50">
+    <div
+      className={`h-screen flex overflow-hidden transition-colors ${
+        managementSettings.darkMode ? 'bg-slate-950 text-slate-100' : 'bg-gray-50'
+      }`}
+    >
       {/* Admin / Manager Sidebar */}
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
         currentPage={currentPage}
         onNavigate={setCurrentPage}
+        onOpenSettings={() => setManagementSettingsOpen(true)}
         userRole={userRole === 'manager' ? 'manager' : 'admin'}
+        defaultCollapsed={managementSettings.sidebarCollapsed}
       />
 
       {/* Main Content */}
@@ -170,6 +203,10 @@ export default function App() {
         <Navbar 
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
           onLogout={handleLogout}
+          settings={managementSettings}
+          onSettingsSave={handleManagementSettingsSave}
+          settingsOpen={managementSettingsOpen}
+          onSettingsOpenChange={setManagementSettingsOpen}
         />
 
         {/* Page Content */}

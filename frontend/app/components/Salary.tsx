@@ -1,5 +1,5 @@
 'use client';
-import { DollarSign, TrendingUp, Users, Download, Calculator } from "lucide-react";
+import { Calculator, ChevronDown, ChevronRight, DollarSign, Download, Pencil, TrendingUp, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
@@ -122,8 +122,25 @@ export function Salary() {
     const [showCalculateDialog, setShowCalculateDialog] = useState(false);
     const [showDetailDialog, setShowDetailDialog] = useState(false);
     const [showApproveDialog, setShowApproveDialog] = useState(false);
+    const [showEditDialog, setShowEditDialog] = useState(false);
+    const [showIncomeDetail, setShowIncomeDetail] = useState(false);
+    const [showDeductionDetail, setShowDeductionDetail] = useState(false);
 
     const [selectedEmployee, setSelectedEmployee] = useState<SalaryItem | null>(null);
+    const [editSalaryForm, setEditSalaryForm] = useState({
+        baseSalary: 0,
+        mealAllowance: 0,
+        transportAllowance: 0,
+        phoneAllowance: 0,
+        housingAllowance: 0,
+        overtimeHours: 0,
+        overtimeRate: 1.5,
+        kpiBonus: 0,
+        projectBonus: 0,
+        holidayBonus: 0,
+        advancePayment: 0,
+        penalties: 0,
+    });
 
     const [salaryData, setSalaryData] = useState<SalaryItem[]>([
         {
@@ -328,6 +345,8 @@ export function Salary() {
 
     const handleViewDetail = (employee: SalaryItem) => {
         setSelectedEmployee(employee);
+        setShowIncomeDetail(false);
+        setShowDeductionDetail(false);
         setShowDetailDialog(true);
     };
 
@@ -344,6 +363,43 @@ export function Salary() {
     };
 
     const handleCalculateSalary = () => setShowCalculateDialog(true);
+
+    const handleEditSalary = (employee: SalaryItem) => {
+        setSelectedEmployee(employee);
+        setEditSalaryForm({
+            baseSalary: employee.baseSalary,
+            mealAllowance: employee.mealAllowance,
+            transportAllowance: employee.transportAllowance,
+            phoneAllowance: employee.phoneAllowance,
+            housingAllowance: employee.housingAllowance,
+            overtimeHours: employee.overtimeHours,
+            overtimeRate: employee.overtimeRate,
+            kpiBonus: employee.kpiBonus,
+            projectBonus: employee.projectBonus,
+            holidayBonus: employee.holidayBonus,
+            advancePayment: employee.advancePayment,
+            penalties: employee.penalties,
+        });
+        setShowEditDialog(true);
+    };
+
+    const handleSaveSalaryEdit = () => {
+        if (!selectedEmployee) return;
+
+        setSalaryData((prev) =>
+            prev.map((item) =>
+                item.id === selectedEmployee.id
+                    ? {
+                        ...item,
+                        ...editSalaryForm,
+                    }
+                    : item
+            )
+        );
+
+        alert(`Đã cập nhật lương cho ${selectedEmployee.name}.`);
+        setShowEditDialog(false);
+    };
 
     const handleConfirmCalculate = () => {
         // Chỉ chuyển những nhân viên status pending của tháng đang chọn sang calculated
@@ -629,6 +685,11 @@ export function Salary() {
                                                     Chi tiết
                                                 </Button>
 
+                                                <Button size="sm" variant="outline" onClick={() => handleEditSalary(item)}>
+                                                    <Pencil className="size-3 mr-1" />
+                                                    Chỉnh sửa
+                                                </Button>
+
                                                 {item.status === "calculated" && (
                                                     <Button
                                                         size="sm"
@@ -746,81 +807,119 @@ export function Salary() {
                             </div>
 
                             {/* Income */}
-                            <div className="rounded-xl border bg-gray-50 p-5">
-                                <div className="text-sm font-semibold text-gray-900 mb-3">✅ Thu nhập</div>
-                                <div className="space-y-2 text-sm">
-                                    <Row label="Lương cơ bản" value={formatCurrency(selectedEmployee.baseSalary)} />
-                                    {(selectedEmployee.salaryDeduction ?? 0) > 0 && (
-                                        <Row
-                                            label="Trừ lương (nghỉ/vi phạm)"
-                                            value={`-${formatCurrency(selectedEmployee.salaryDeduction ?? 0)}`}
-                                            valueClass="text-red-600 font-medium"
-                                        />
-                                    )}
-                                    <Row
-                                        label="Phụ cấp (ăn + xăng + phone + nhà)"
-                                        value={formatCurrency(calcAllowances(selectedEmployee))}
-                                    />
-                                    <Row
-                                        label="Lương làm thêm (OT)"
-                                        value={formatCurrency(calcOvertimePay(selectedEmployee))}
-                                    />
-                                    <Row
-                                        label="Thưởng (KPI + dự án + lễ tết)"
-                                        value={formatCurrency(calcBonuses(selectedEmployee))}
-                                    />
-                                    <div className="pt-2 border-t">
-                                        <Row
-                                            label="TỔNG THU NHẬP"
-                                            value={formatCurrency(calcTotalIncome(selectedEmployee))}
-                                            valueClass="font-bold"
-                                        />
+                            <div className="overflow-hidden rounded-xl border bg-gray-50">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowIncomeDetail((current) => !current)}
+                                    className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-emerald-50"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        {showIncomeDetail ? (
+                                            <ChevronDown className="size-4 text-emerald-600" />
+                                        ) : (
+                                            <ChevronRight className="size-4 text-emerald-600" />
+                                        )}
+                                        <span className="text-sm font-semibold text-gray-900">✅ Thu nhập</span>
                                     </div>
-                                </div>
+                                    <span className="text-sm font-bold text-emerald-700">
+                                        {formatCurrency(calcTotalIncome(selectedEmployee))}
+                                    </span>
+                                </button>
+
+                                {showIncomeDetail && (
+                                    <div className="space-y-2 border-t bg-white p-4 text-sm">
+                                        <Row label="Lương cơ bản" value={formatCurrency(selectedEmployee.baseSalary)} />
+                                        {(selectedEmployee.salaryDeduction ?? 0) > 0 && (
+                                            <Row
+                                                label="Trừ lương (nghỉ/vi phạm)"
+                                                value={`-${formatCurrency(selectedEmployee.salaryDeduction ?? 0)}`}
+                                                valueClass="text-red-600 font-medium"
+                                            />
+                                        )}
+                                        <Row
+                                            label="Phụ cấp (ăn + xăng + phone + nhà)"
+                                            value={formatCurrency(calcAllowances(selectedEmployee))}
+                                        />
+                                        <Row
+                                            label="Lương làm thêm (OT)"
+                                            value={formatCurrency(calcOvertimePay(selectedEmployee))}
+                                        />
+                                        <Row
+                                            label="Thưởng (KPI + dự án + lễ tết)"
+                                            value={formatCurrency(calcBonuses(selectedEmployee))}
+                                        />
+                                        <div className="border-t pt-2">
+                                            <Row
+                                                label="TỔNG THU NHẬP"
+                                                value={formatCurrency(calcTotalIncome(selectedEmployee))}
+                                                valueClass="font-bold"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Deduction */}
-                            <div className="rounded-lg border p-4">
-                                <div className="text-sm font-semibold text-gray-900 mb-3">❌ Khấu trừ</div>
-                                <div className="space-y-2 text-sm">
-                                    <Row
-                                        label="BHXH"
-                                        value={`-${formatCurrency(selectedEmployee.socialInsurance)}`}
-                                        valueClass="text-red-600 font-medium"
-                                    />
-                                    <Row
-                                        label="BHYT"
-                                        value={`-${formatCurrency(selectedEmployee.healthInsurance)}`}
-                                        valueClass="text-red-600 font-medium"
-                                    />
-                                    <Row
-                                        label="BHTN"
-                                        value={`-${formatCurrency(selectedEmployee.unemploymentInsurance)}`}
-                                        valueClass="text-red-600 font-medium"
-                                    />
-                                    <Row
-                                        label="Thuế TNCN"
-                                        value={`-${formatCurrency(selectedEmployee.personalIncomeTax)}`}
-                                        valueClass="text-red-600 font-medium"
-                                    />
-                                    <Row
-                                        label="Tạm ứng"
-                                        value={`-${formatCurrency(selectedEmployee.advancePayment)}`}
-                                        valueClass="text-red-600 font-medium"
-                                    />
-                                    <Row
-                                        label="Phạt"
-                                        value={`-${formatCurrency(selectedEmployee.penalties)}`}
-                                        valueClass="text-red-600 font-medium"
-                                    />
-                                    <div className="pt-2 border-t">
-                                        <Row
-                                            label="TỔNG KHẤU TRỪ"
-                                            value={`-${formatCurrency(calcTotalDeduction(selectedEmployee))}`}
-                                            valueClass="font-bold text-red-700"
-                                        />
+                            <div className="overflow-hidden rounded-xl border bg-gray-50">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeductionDetail((current) => !current)}
+                                    className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-red-50"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        {showDeductionDetail ? (
+                                            <ChevronDown className="size-4 text-red-600" />
+                                        ) : (
+                                            <ChevronRight className="size-4 text-red-600" />
+                                        )}
+                                        <span className="text-sm font-semibold text-gray-900">❌ Khấu trừ</span>
                                     </div>
-                                </div>
+                                    <span className="text-sm font-bold text-red-700">
+                                        -{formatCurrency(calcTotalDeduction(selectedEmployee))}
+                                    </span>
+                                </button>
+
+                                {showDeductionDetail && (
+                                    <div className="space-y-2 border-t bg-white p-4 text-sm">
+                                        <Row
+                                            label="BHXH"
+                                            value={`-${formatCurrency(selectedEmployee.socialInsurance)}`}
+                                            valueClass="text-red-600 font-medium"
+                                        />
+                                        <Row
+                                            label="BHYT"
+                                            value={`-${formatCurrency(selectedEmployee.healthInsurance)}`}
+                                            valueClass="text-red-600 font-medium"
+                                        />
+                                        <Row
+                                            label="BHTN"
+                                            value={`-${formatCurrency(selectedEmployee.unemploymentInsurance)}`}
+                                            valueClass="text-red-600 font-medium"
+                                        />
+                                        <Row
+                                            label="Thuế TNCN"
+                                            value={`-${formatCurrency(selectedEmployee.personalIncomeTax)}`}
+                                            valueClass="text-red-600 font-medium"
+                                        />
+                                        <Row
+                                            label="Tạm ứng"
+                                            value={`-${formatCurrency(selectedEmployee.advancePayment)}`}
+                                            valueClass="text-red-600 font-medium"
+                                        />
+                                        <Row
+                                            label="Phạt"
+                                            value={`-${formatCurrency(selectedEmployee.penalties)}`}
+                                            valueClass="text-red-600 font-medium"
+                                        />
+                                        <div className="border-t pt-2">
+                                            <Row
+                                                label="TỔNG KHẤU TRỪ"
+                                                value={`-${formatCurrency(calcTotalDeduction(selectedEmployee))}`}
+                                                valueClass="font-bold text-red-700"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Dates */}
@@ -847,6 +946,120 @@ export function Salary() {
                     <div className="flex justify-end gap-3">
                         <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
                             Đóng
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Salary Dialog */}
+            <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                <DialogContent className="sm:max-w-[720px] max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Chỉnh sửa lương</DialogTitle>
+                        <DialogDescription>Cập nhật nhanh các khoản thu nhập và khấu trừ</DialogDescription>
+                    </DialogHeader>
+
+                    {selectedEmployee && (
+                        <div className="space-y-5">
+                            <div className="rounded-lg border p-4 text-sm">
+                                <div className="font-semibold text-gray-900">
+                                    {selectedEmployee.name} ({selectedEmployee.employeeId})
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                    {selectedEmployee.department} • {selectedEmployee.position} • Tháng {selectedEmployee.month}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <MoneyInput
+                                    label="Lương cơ bản"
+                                    value={editSalaryForm.baseSalary}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, baseSalary: value })}
+                                />
+                                <MoneyInput
+                                    label="Phụ cấp ăn"
+                                    value={editSalaryForm.mealAllowance}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, mealAllowance: value })}
+                                />
+                                <MoneyInput
+                                    label="Phụ cấp xăng xe"
+                                    value={editSalaryForm.transportAllowance}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, transportAllowance: value })}
+                                />
+                                <MoneyInput
+                                    label="Phụ cấp điện thoại"
+                                    value={editSalaryForm.phoneAllowance}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, phoneAllowance: value })}
+                                />
+                                <MoneyInput
+                                    label="Phụ cấp nhà ở"
+                                    value={editSalaryForm.housingAllowance}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, housingAllowance: value })}
+                                />
+                                <NumberInputWithSuffix
+                                    label="Số giờ OT"
+                                    suffix="giờ"
+                                    value={editSalaryForm.overtimeHours}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, overtimeHours: value })}
+                                />
+                                <NumberInputWithSuffix
+                                    label="Hệ số OT"
+                                    suffix="x"
+                                    step="0.5"
+                                    value={editSalaryForm.overtimeRate}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, overtimeRate: value })}
+                                />
+                                <MoneyInput
+                                    label="Thưởng KPI"
+                                    value={editSalaryForm.kpiBonus}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, kpiBonus: value })}
+                                />
+                                <MoneyInput
+                                    label="Thưởng dự án"
+                                    value={editSalaryForm.projectBonus}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, projectBonus: value })}
+                                />
+                                <MoneyInput
+                                    label="Thưởng lễ tết"
+                                    value={editSalaryForm.holidayBonus}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, holidayBonus: value })}
+                                />
+                                <MoneyInput
+                                    label="Tạm ứng"
+                                    value={editSalaryForm.advancePayment}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, advancePayment: value })}
+                                />
+                                <MoneyInput
+                                    label="Phạt"
+                                    value={editSalaryForm.penalties}
+                                    onChange={(value) => setEditSalaryForm({ ...editSalaryForm, penalties: value })}
+                                />
+                            </div>
+
+                            <div className="rounded-lg bg-emerald-50 p-4 text-sm">
+                                <Row
+                                    label="Thực nhận dự kiến"
+                                    value={formatCurrency(
+                                        calcNet({
+                                            ...selectedEmployee,
+                                            ...editSalaryForm,
+                                        })
+                                    )}
+                                    valueClass="font-bold text-emerald-700"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-3">
+                        <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                            Hủy bỏ
+                        </Button>
+                        <Button
+                            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                            onClick={handleSaveSalaryEdit}
+                        >
+                            Lưu thay đổi
                         </Button>
                     </div>
                 </DialogContent>
@@ -903,6 +1116,74 @@ function Row({
         <div className="flex items-center justify-between gap-3">
             <div className="text-gray-600">{label}</div>
             <div className={valueClass ?? "font-medium text-gray-900"}>{value}</div>
+        </div>
+    );
+}
+
+function formatMoneyInput(value: number) {
+    return new Intl.NumberFormat("vi-VN").format(Math.max(0, Number.isFinite(value) ? value : 0));
+}
+
+function parseMoneyInput(value: string) {
+    return Number(value.replace(/\D/g, "")) || 0;
+}
+
+function MoneyInput({
+    label,
+    value,
+    onChange,
+}: {
+    label: string;
+    value: number;
+    onChange: (value: number) => void;
+}) {
+    return (
+        <div>
+            <Label className="text-xs font-semibold text-gray-700">{label}</Label>
+            <div className="relative mt-1">
+                <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatMoneyInput(value)}
+                    onChange={(event) => onChange(parseMoneyInput(event.target.value))}
+                    className="h-11 rounded-lg bg-white pr-10 text-right font-semibold tabular-nums text-gray-900 shadow-sm focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-gray-500">
+                    đ
+                </span>
+            </div>
+        </div>
+    );
+}
+
+function NumberInputWithSuffix({
+    label,
+    value,
+    onChange,
+    suffix,
+    step,
+}: {
+    label: string;
+    value: number;
+    onChange: (value: number) => void;
+    suffix: string;
+    step?: string;
+}) {
+    return (
+        <div>
+            <Label className="text-xs font-semibold text-gray-700">{label}</Label>
+            <div className="relative mt-1">
+                <Input
+                    type="number"
+                    step={step}
+                    value={value}
+                    onChange={(event) => onChange(Number(event.target.value) || 0)}
+                    className="h-11 rounded-lg bg-white pr-12 text-right font-semibold tabular-nums text-gray-900 shadow-sm focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-gray-500">
+                    {suffix}
+                </span>
+            </div>
         </div>
     );
 }
