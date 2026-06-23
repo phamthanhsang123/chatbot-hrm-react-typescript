@@ -1,7 +1,9 @@
 'use client';
-import { Calendar, Clock, CheckCircle, XCircle, Plus, Eye, CalendarDays, Pencil } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { BarChart3, Calendar, Clock, CheckCircle, XCircle, Plus, Eye, Pencil } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import Swal from 'sweetalert2';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import {
@@ -17,6 +19,9 @@ import { Textarea } from './ui/textarea';
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected';
 type LeaveType = 'annual' | 'sick' | 'unpaid' | 'maternity' | 'marriage' | 'funeral';
+type LeaveFilterStatus = 'all' | LeaveStatus;
+
+const LEAVE_PAGE_SIZE = 10;
 
 interface LeaveRequest {
   id: number;
@@ -36,7 +41,8 @@ interface LeaveRequest {
 }
 
 export function Leave() {
-  const [filterStatus, setFilterStatus] = useState<'all' | LeaveStatus>('all');
+  const [filterStatus, setFilterStatus] = useState<LeaveFilterStatus>('pending');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
@@ -154,7 +160,16 @@ export function Leave() {
     return leaveRequests.filter((x) => x.status === filterStatus);
   }, [leaveRequests, filterStatus]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / LEAVE_PAGE_SIZE));
+  const startIndex = (currentPage - 1) * LEAVE_PAGE_SIZE;
+  const endIndex = startIndex + LEAVE_PAGE_SIZE;
+  const paginatedData = useMemo(
+    () => filteredData.slice(startIndex, endIndex),
+    [filteredData, startIndex, endIndex]
+  );
+
   const stats = useMemo(() => {
+    const total = leaveRequests.length;
     const pending = leaveRequests.filter((x) => x.status === 'pending').length;
     const approved = leaveRequests.filter((x) => x.status === 'approved').length;
     const rejected = leaveRequests.filter((x) => x.status === 'rejected').length;
@@ -165,8 +180,12 @@ export function Leave() {
       return x.status === 'approved' && x.from <= today && x.to >= today;
     }).length;
 
-    return { pending, approved, rejected, onLeaveToday };
+    return { total, pending, approved, rejected, onLeaveToday };
   }, [leaveRequests]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const getLeaveTypeLabel = (type: LeaveType) => {
     const types = {
@@ -196,6 +215,11 @@ export function Leave() {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('vi-VN');
+  };
+
+  const handleFilterStatusChange = (status: LeaveFilterStatus) => {
+    setFilterStatus(status);
+    setCurrentPage(1);
   };
 
   const handleViewDetail = (request: LeaveRequest) => {
@@ -363,17 +387,33 @@ export function Leave() {
     });
   };
 
-  const handleViewCalendar = () => {
-    alert(
-      `📅 Lịch nghỉ phép tháng này\n\n` +
-      `Tổng: ${stats.approved} đơn đã duyệt\n` +
-      `Đang nghỉ hôm nay: ${stats.onLeaveToday} người\n` +
-      `Chờ duyệt: ${stats.pending} đơn`
-    );
+  const handleViewStats = () => {
+    Swal.fire({
+      title: 'Thống kê nghỉ phép tháng này',
+      icon: 'info',
+      html: `
+        <div style="display:grid;gap:10px;text-align:left">
+          <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px">
+            <span style="color:#475569">Đơn đã duyệt</span>
+            <b style="color:#16a34a">${stats.approved} đơn</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px">
+            <span style="color:#475569">Đang nghỉ hôm nay</span>
+            <b style="color:#ea580c">${stats.onLeaveToday} người</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px">
+            <span style="color:#475569">Chờ duyệt</span>
+            <b style="color:#2563eb">${stats.pending} đơn</b>
+          </div>
+        </div>
+      `,
+      confirmButtonText: 'Đóng',
+      confirmButtonColor: '#2563eb',
+    });
   };
 
   return (
-    <div className="space-y-5 text-[13px]">
+    <div className="space-y-5 pb-24 text-[13px]">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
@@ -381,9 +421,9 @@ export function Leave() {
           <p className="text-gray-500 mt-1">Theo dõi và duyệt đơn xin nghỉ phép</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleViewCalendar}>
-            <CalendarDays className="size-4 mr-2" />
-            Lịch nghỉ phép
+          <Button variant="outline" onClick={handleViewStats}>
+            <BarChart3 className="size-4 mr-2" />
+            Thống kê
           </Button>
           <Button
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
@@ -396,7 +436,14 @@ export function Leave() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard title="Chờ duyệt" value={stats.pending} description="Đơn xin nghỉ" icon={<Clock className="size-5" />} tone="blue" />
+        <MetricCard title="Đã duyệt" value={stats.approved} description="Tổng cộng" icon={<CheckCircle className="size-5" />} tone="emerald" />
+        <MetricCard title="Đang nghỉ hôm nay" value={stats.onLeaveToday} description="Nhân viên" icon={<Calendar className="size-5" />} tone="orange" />
+        <MetricCard title="Từ chối" value={stats.rejected} description="Tổng cộng" icon={<XCircle className="size-5" />} tone="red" />
+      </div>
+
+      <div className="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
           <div className="flex items-start justify-between">
             <div>
@@ -453,33 +500,41 @@ export function Leave() {
       {/* Filters */}
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant={filterStatus === 'all' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('all')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('all')}
             >
+              <span>({stats.total})</span>
               Tất cả
             </Button>
             <Button
               variant={filterStatus === 'pending' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('pending')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('pending')}
             >
+              <span>({stats.pending})</span>
               Chờ duyệt
             </Button>
             <Button
               variant={filterStatus === 'approved' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('approved')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('approved')}
             >
+              <span>({stats.approved})</span>
               Đã duyệt
             </Button>
             <Button
               variant={filterStatus === 'rejected' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('rejected')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('rejected')}
             >
+              <span>({stats.rejected})</span>
               Từ chối
             </Button>
           </div>
@@ -523,7 +578,7 @@ export function Leave() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredData.map((request) => (
+              {paginatedData.map((request) => (
                 <tr key={request.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-2 text-sm font-medium text-gray-900">{request.id}</td>
                   <td className="px-4 py-2">
@@ -595,6 +650,37 @@ export function Leave() {
           </table>
         </div>
       </Card>
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col gap-3 border border-gray-200 bg-white/95 px-5 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:flex-row md:items-center md:justify-between lg:left-64">
+        <p className="text-sm text-gray-600">
+          Hiển thị{' '}
+          <span className="font-medium">
+            {filteredData.length === 0 ? 0 : startIndex + 1}-{Math.min(endIndex, filteredData.length)}
+          </span>{' '}
+          trong tổng số <span className="font-medium">{filteredData.length}</span> đơn
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+          >
+            Trước
+          </Button>
+          <Button variant="outline" size="sm" disabled>
+            {currentPage}/{totalPages}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+          >
+            Sau
+          </Button>
+        </div>
+      </div>
 
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

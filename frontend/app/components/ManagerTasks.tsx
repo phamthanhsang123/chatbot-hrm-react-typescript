@@ -302,14 +302,14 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Task đang theo dõi" value={activeCount} icon={<ClipboardList className="size-7 text-blue-600" />} />
-        <MetricCard label="Chờ Manager duyệt" value={pendingReviewCount} icon={<FileCheck2 className="size-7 text-amber-600" />} />
-        <MetricCard label="Đã duyệt hoàn thành" value={approvedCount} icon={<CheckCircle2 className="size-7 text-emerald-600" />} />
-        <MetricCard label="Tiến độ trung bình" value={`${averageProgress}%`} icon={<Star className="size-7 text-indigo-600" />} />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Task đang theo dõi" value={activeCount} icon={<ClipboardList className="size-5 text-blue-600" />} />
+        <MetricCard label="Chờ Manager duyệt" value={pendingReviewCount} icon={<FileCheck2 className="size-5 text-amber-600" />} />
+        <MetricCard label="Đã duyệt hoàn thành" value={approvedCount} icon={<CheckCircle2 className="size-5 text-emerald-600" />} />
+        <MetricCard label="Tiến độ trung bình" value={`${averageProgress}%`} icon={<Star className="size-5 text-indigo-600" />} />
       </div>
 
-      <Card className="p-4">
+      <Card className="border-gray-200 !p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative max-w-xl flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
@@ -340,7 +340,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
 
       <div className="space-y-4">
         {visibleTasks.map((task) => (
-          <Card key={task.id} className="p-5">
+          <Card key={task.id} className="border-gray-200 !p-4 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0 flex-1 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -396,21 +396,19 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
 
 function MetricCard({ label, value, icon }: { label: string; value: number | string; icon: ReactNode }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="mt-1 text-3xl font-bold text-gray-900">{value}</p>
-        </div>
-        {icon}
+    <Card className="!gap-2 border-gray-200 !p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-gray-500">{label}</p>
+        <div>{icon}</div>
       </div>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
     </Card>
   );
 }
 
 function InfoLine({ icon, label, subLabel }: { icon: ReactNode; label: string; subLabel: string }) {
   return (
-    <div className="flex min-w-0 items-start gap-2 rounded-md bg-gray-50 p-3">
+    <div className="flex min-w-0 items-start gap-2 rounded-md border border-gray-100 bg-white p-3">
       <div className="mt-0.5 text-gray-400">{icon}</div>
       <div className="min-w-0">
         <p className="truncate font-medium text-gray-900">{label}</p>

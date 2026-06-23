@@ -14,6 +14,7 @@ import {
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 import { Input } from './ui/input';
 import {
   CompetencyDashboard,
@@ -246,8 +247,15 @@ export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: Co
         </Badge>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="p-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard title="Nhân viên đánh giá" value={visibleDashboard.totalEmployees} description="Trong kỳ đánh giá hiện tại" icon={<Users className="size-5" />} tone="blue" />
+        <MetricCard title="Điểm trung bình" value={visibleDashboard.averageScore} description="Tổng hợp 4 tiêu chí" icon={<TrendingUp className="size-5" />} tone="emerald" />
+        <MetricCard title="Xuất sắc / Tốt" value={visibleDashboard.excellent + visibleDashboard.good} description="Nhân viên đạt mức tốt trở lên" icon={<Award className="size-5" />} tone="violet" />
+        <MetricCard title="Cần theo dõi" value={visibleDashboard.average + visibleDashboard.needsImprovement} description="Cần hỗ trợ hoặc cải thiện" icon={<AlertTriangle className="size-5" />} tone="orange" />
+      </div>
+
+      <div className="hidden gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="border-gray-200 !p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Nhân viên đánh giá</p>
@@ -257,7 +265,7 @@ export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: Co
           </div>
         </Card>
 
-        <Card className="p-4">
+        <Card className="border-gray-200 !p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Điểm trung bình</p>
@@ -267,7 +275,7 @@ export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: Co
           </div>
         </Card>
 
-        <Card className="p-4">
+        <Card className="border-gray-200 !p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Xuất sắc / Tốt</p>
@@ -277,7 +285,7 @@ export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: Co
           </div>
         </Card>
 
-        <Card className="p-4">
+        <Card className="border-gray-200 !p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Cần theo dõi</p>
@@ -288,8 +296,8 @@ export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: Co
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
-        <Card className="overflow-hidden">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
+        <Card className="overflow-hidden border-gray-200 shadow-sm">
           <div className="border-b border-gray-100 p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -368,7 +376,7 @@ export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: Co
         </Card>
 
         <div className="space-y-4">
-          <Card className="p-5">
+          <Card className="border-gray-200 !p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <Sparkles className="size-5 text-indigo-600" />
               <h2 className="text-lg font-semibold text-gray-900">Nhận xét AI</h2>
@@ -453,7 +461,7 @@ export function CompetencyEvaluation({ userRole = 'admin', departmentScope }: Co
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="border-gray-200 !p-4 shadow-sm">
             <h2 className="mb-3 text-lg font-semibold text-gray-900">Top năng lực</h2>
             <div className="space-y-3">
               {visibleDashboard.topEmployees.map((item, index) => (

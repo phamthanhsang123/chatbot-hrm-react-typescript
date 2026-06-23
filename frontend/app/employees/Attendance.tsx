@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import Swal from 'sweetalert2';
 import { Clock, Calendar, Download, MapPin, CheckCircle, XCircle, AlertTriangle, FileText, Send, Eye, Target, ListChecks, MessageSquareText, Plus, Trash2, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -117,6 +118,27 @@ interface AttendanceRecord {
   workReport?: WorkReport;
 }
 
+interface LiveAttendanceStatus {
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  date: string;
+  checkIn: string;
+  checkOut?: string;
+  checkOutDate?: string;
+  status: 'online' | 'offline';
+  lastUpdated: string;
+}
+
+const LIVE_ATTENDANCE_STORAGE_KEY = 'hrm-live-attendance';
+
+const formatLiveDate = (date: Date): string => {
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 export function Attendance() {
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [showWorkReportDialog, setShowWorkReportDialog] = useState(false);
@@ -142,14 +164,15 @@ export function Attendance() {
   const [reportAchievements, setReportAchievements] = useState<string[]>(['']);
   const [reportNote, setReportNote] = useState('');
 
-  const todayStatus = {
-    date: '18/01/2026',
-    checkIn: '08:30',
-    checkOut: '17:30',
-    status: 'completed',
+  const [todayStatus, setTodayStatus] = useState({
+    date: formatLiveDate(new Date()),
+    checkIn: '',
+    checkOut: '',
+    checkOutDate: '',
+    status: 'not-started',
     location: 'Văn phòng',
     hasReport: false,
-  };
+  });
 
   const thisMonth = {
     workingDays: 22,
@@ -159,6 +182,48 @@ export function Attendance() {
     absentDays: 0,
     totalHours: 112,
   };
+
+  const publishLiveAttendance = (nextRecord: LiveAttendanceStatus) => {
+    const saved = window.localStorage.getItem(LIVE_ATTENDANCE_STORAGE_KEY);
+    let currentRecords: LiveAttendanceStatus[] = [];
+
+    try {
+      currentRecords = saved ? (JSON.parse(saved) as LiveAttendanceStatus[]) : [];
+    } catch {
+      currentRecords = [];
+    }
+
+    const nextRecords = [
+      nextRecord,
+      ...currentRecords.filter(
+        (record) => !(record.employeeId === nextRecord.employeeId && record.date === nextRecord.date)
+      ),
+    ];
+
+    window.localStorage.setItem(LIVE_ATTENDANCE_STORAGE_KEY, JSON.stringify(nextRecords));
+  };
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(LIVE_ATTENDANCE_STORAGE_KEY);
+    if (!saved) return;
+
+    try {
+      const records = JSON.parse(saved) as LiveAttendanceStatus[];
+      const activeRecord = records.find((record) => record.employeeId === 'NV001' && record.status === 'online');
+      if (!activeRecord) return;
+
+      setTodayStatus((current) => ({
+        ...current,
+        date: activeRecord.date,
+        checkIn: activeRecord.checkIn,
+        checkOut: '',
+        checkOutDate: '',
+        status: 'working',
+      }));
+    } catch {
+      window.localStorage.removeItem(LIVE_ATTENDANCE_STORAGE_KEY);
+    }
+  }, []);
 
   const [attendanceRequests, setAttendanceRequests] = useState<AttendanceRequest[]>([
     {
@@ -389,10 +454,31 @@ export function Attendance() {
   const handleCheckIn = () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = formatLiveDate(now);
+    const nextStatus = {
+      ...todayStatus,
+      date: dateStr,
+      checkIn: timeStr,
+      checkOut: '',
+      checkOutDate: '',
+      status: 'working',
+    };
+
+    setTodayStatus(nextStatus);
+    publishLiveAttendance({
+      employeeId: 'NV001',
+      employeeName: 'Nguyễn Văn A',
+      department: 'IT',
+      date: dateStr,
+      checkIn: timeStr,
+      status: 'online',
+      lastUpdated: timeStr,
+    });
+
     alert(
       `✅ Chấm công vào thành công!\n\n` +
       `Thời gian: ${timeStr}\n` +
-      `Ngày: ${now.toLocaleDateString('vi-VN')}\n` +
+      `Ngày: ${dateStr}\n` +
       `Địa điểm: Văn phòng`
     );
   };
@@ -400,19 +486,54 @@ export function Attendance() {
   const handleCheckOut = () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const checkOutDate = formatLiveDate(now);
+    const dateStr = todayStatus.date || formatLiveDate(now);
+    const checkInTime = todayStatus.checkIn || timeStr;
+    const nextStatus = {
+      ...todayStatus,
+      date: dateStr,
+      checkIn: checkInTime,
+      checkOut: timeStr,
+      checkOutDate,
+      status: 'completed',
+    };
+
+    setTodayStatus(nextStatus);
+    publishLiveAttendance({
+      employeeId: 'NV001',
+      employeeName: 'Nguyễn Văn A',
+      department: 'IT',
+      date: dateStr,
+      checkIn: checkInTime,
+      checkOut: timeStr,
+      checkOutDate,
+      status: 'offline',
+      lastUpdated: timeStr,
+    });
+
     alert(
       `✅ Chấm công ra thành công!\n\n` +
       `Thời gian: ${timeStr}\n` +
-      `Ngày: ${now.toLocaleDateString('vi-VN')}\n` +
-      `Tổng giờ làm: 8h 30m`
+      `Ngày bắt đầu ca: ${dateStr}\n` +
+      `Ngày kết thúc ca: ${checkOutDate}\n` +
+      `Trạng thái: Offline`
     );
     
     // Prompt to create work report
     setTimeout(() => {
-      const shouldCreate = confirm('💼 Bạn có muốn tạo báo cáo công việc cho ngày hôm nay không?');
-      if (shouldCreate) {
-        setShowCreateReportDialog(true);
-      }
+      void Swal.fire({
+        title: 'Tạo báo cáo công việc?',
+        text: 'Bạn có muốn tạo báo cáo công việc cho ngày hôm nay không?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Tạo báo cáo',
+        cancelButtonText: 'Để sau',
+        confirmButtonColor: '#2563eb',
+      }).then((result) => {
+        if (result.isConfirmed) {
+          setShowCreateReportDialog(true);
+        }
+      });
     }, 500);
   };
 

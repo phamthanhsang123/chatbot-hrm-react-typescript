@@ -12,6 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
@@ -57,7 +58,14 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
         <Badge className="w-fit bg-blue-100 text-blue-700 hover:bg-blue-100">Phạm vi: {departmentName}</Badge>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard title="Nhân viên trong team" value={teamMembers.length} description={`Phạm vi ${departmentName}`} icon={<Users className="size-5" />} tone="blue" />
+        <MetricCard title="Điểm năng lực TB" value={averageScore} description="Trung bình theo phòng ban" icon={<TrendingUp className="size-5" />} tone="emerald" />
+        <MetricCard title="Cần theo dõi" value={watchCount} description="Nhân viên dưới ngưỡng 80" icon={<AlertTriangle className="size-5" />} tone="orange" />
+        <MetricCard title="Việc chờ xử lý" value="7" description="Task, phép và chấm công" icon={<ClipboardCheck className="size-5" />} tone="violet" />
+      </div>
+
+      <div className="hidden gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -96,15 +104,15 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="overflow-hidden">
-          <div className="border-b border-gray-100 p-5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="overflow-hidden border-gray-200 shadow-sm">
+          <div className="border-b border-gray-100 p-4">
             <h2 className="text-lg font-semibold text-gray-900">Nhân viên phòng ban</h2>
             <p className="text-sm text-gray-500">Manager chỉ theo dõi nhân viên thuộc phạm vi quản lý</p>
           </div>
           <div className="divide-y divide-gray-100">
             {teamMembers.map((member) => (
-              <div key={member.name} className="flex items-center justify-between gap-4 p-5">
+              <div key={member.name} className="flex items-center justify-between gap-4 p-4">
                 <div className="min-w-0">
                   <p className="font-medium text-gray-900">{member.name}</p>
                   <p className="text-sm text-gray-500">{member.role}</p>
@@ -129,7 +137,7 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
         </Card>
 
         <div className="space-y-4">
-          <Card className="p-5">
+          <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">Việc cần xử lý</h2>
             <div className="space-y-3">
               {actionItems.map((item) => {
@@ -138,7 +146,7 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
                   <button
                     key={item.title}
                     onClick={() => onNavigate(item.page)}
-                    className="flex w-full items-center gap-3 rounded-md border border-gray-100 p-3 text-left hover:bg-gray-50"
+                    className="flex w-full items-center gap-3 rounded-md border border-gray-200 bg-white p-3 text-left transition hover:bg-gray-50"
                   >
                     <div className={`flex size-10 items-center justify-center rounded-md ${item.tone}`}>
                       <Icon className="size-5" />
@@ -150,7 +158,7 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <CheckCircle2 className="size-5 text-emerald-600" />
               <h2 className="text-lg font-semibold text-gray-900">Mục tiêu hôm nay</h2>
