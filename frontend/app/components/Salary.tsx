@@ -62,6 +62,18 @@ interface SalaryItem {
     paidDate?: string;
 }
 
+const formatMonthKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${year}-${month}`;
+};
+
+const getRelativeMonthKey = (offset: number) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + offset);
+    return formatMonthKey(date);
+};
+
 export function Salary() {
     const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -116,7 +128,10 @@ export function Salary() {
         }
     };
 
-    const [selectedMonth, setSelectedMonth] = useState("2026-01");
+    const currentMonthKey = getRelativeMonthKey(0);
+    const previousMonthKey = getRelativeMonthKey(-1);
+
+    const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
     const [filterStatus, setFilterStatus] = useState<"all" | SalaryStatus>("all");
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -144,6 +159,181 @@ export function Salary() {
     });
 
     const [salaryData, setSalaryData] = useState<SalaryItem[]>([
+        {
+            id: 101,
+            employeeId: "NV001",
+            name: "Nguyễn Văn An",
+            department: "IT",
+            position: "Senior Developer",
+            month: currentMonthKey,
+            baseSalary: 20000000,
+            mealAllowance: 1000000,
+            transportAllowance: 500000,
+            phoneAllowance: 300000,
+            housingAllowance: 2000000,
+            standardDays: 22,
+            workDays: 21,
+            overtimeHours: 18,
+            overtimeRate: 1.5,
+            kpiBonus: 2800000,
+            projectBonus: 2000000,
+            holidayBonus: 0,
+            socialInsurance: 1600000,
+            healthInsurance: 300000,
+            unemploymentInsurance: 200000,
+            personalIncomeTax: 2400000,
+            advancePayment: 3000000,
+            penalties: 0,
+            status: "calculated",
+            calculatedDate: todayISO(),
+        },
+        {
+            id: 102,
+            employeeId: "NV002",
+            name: "Trần Thị Bình",
+            department: "HR",
+            position: "HR Manager",
+            month: currentMonthKey,
+            baseSalary: 25000000,
+            mealAllowance: 1000000,
+            transportAllowance: 500000,
+            phoneAllowance: 500000,
+            housingAllowance: 3000000,
+            standardDays: 22,
+            workDays: 22,
+            overtimeHours: 8,
+            overtimeRate: 1.5,
+            kpiBonus: 3500000,
+            projectBonus: 0,
+            holidayBonus: 0,
+            socialInsurance: 2000000,
+            healthInsurance: 375000,
+            unemploymentInsurance: 250000,
+            personalIncomeTax: 3600000,
+            advancePayment: 5000000,
+            penalties: 0,
+            status: "approved",
+            calculatedDate: todayISO(),
+            approvedDate: todayISO(),
+        },
+        {
+            id: 103,
+            employeeId: "NV003",
+            name: "Lê Hoàng Cường",
+            department: "Marketing",
+            position: "Marketing Executive",
+            month: currentMonthKey,
+            baseSalary: 16000000,
+            mealAllowance: 900000,
+            transportAllowance: 500000,
+            phoneAllowance: 300000,
+            housingAllowance: 1000000,
+            standardDays: 22,
+            workDays: 22,
+            overtimeHours: 6,
+            overtimeRate: 1.5,
+            kpiBonus: 2200000,
+            projectBonus: 1000000,
+            holidayBonus: 0,
+            socialInsurance: 1280000,
+            healthInsurance: 240000,
+            unemploymentInsurance: 160000,
+            personalIncomeTax: 1400000,
+            advancePayment: 0,
+            penalties: 0,
+            status: "pending",
+        },
+        {
+            id: 201,
+            employeeId: "NV001",
+            name: "Nguyễn Văn An",
+            department: "IT",
+            position: "Senior Developer",
+            month: previousMonthKey,
+            baseSalary: 20000000,
+            mealAllowance: 1000000,
+            transportAllowance: 500000,
+            phoneAllowance: 300000,
+            housingAllowance: 2000000,
+            standardDays: 22,
+            workDays: 22,
+            overtimeHours: 16,
+            overtimeRate: 1.5,
+            kpiBonus: 3000000,
+            projectBonus: 1500000,
+            holidayBonus: 0,
+            socialInsurance: 1600000,
+            healthInsurance: 300000,
+            unemploymentInsurance: 200000,
+            personalIncomeTax: 2350000,
+            advancePayment: 2000000,
+            penalties: 0,
+            status: "paid",
+            calculatedDate: previousMonthKey + "-25",
+            approvedDate: previousMonthKey + "-26",
+            paidDate: previousMonthKey + "-28",
+        },
+        {
+            id: 202,
+            employeeId: "NV002",
+            name: "Trần Thị Bình",
+            department: "HR",
+            position: "HR Manager",
+            month: previousMonthKey,
+            baseSalary: 25000000,
+            mealAllowance: 1000000,
+            transportAllowance: 500000,
+            phoneAllowance: 500000,
+            housingAllowance: 3000000,
+            standardDays: 22,
+            workDays: 22,
+            overtimeHours: 10,
+            overtimeRate: 1.5,
+            kpiBonus: 4000000,
+            projectBonus: 0,
+            holidayBonus: 0,
+            socialInsurance: 2000000,
+            healthInsurance: 375000,
+            unemploymentInsurance: 250000,
+            personalIncomeTax: 3800000,
+            advancePayment: 4000000,
+            penalties: 0,
+            status: "paid",
+            calculatedDate: previousMonthKey + "-25",
+            approvedDate: previousMonthKey + "-26",
+            paidDate: previousMonthKey + "-28",
+        },
+        {
+            id: 203,
+            employeeId: "NV004",
+            name: "Phạm Minh Đức",
+            department: "Sales",
+            position: "Sales Executive",
+            month: previousMonthKey,
+            baseSalary: 15000000,
+            mealAllowance: 900000,
+            transportAllowance: 700000,
+            phoneAllowance: 300000,
+            housingAllowance: 1000000,
+            standardDays: 22,
+            workDays: 20,
+            overtimeHours: 5,
+            overtimeRate: 1.5,
+            kpiBonus: 2500000,
+            projectBonus: 0,
+            holidayBonus: 0,
+            socialInsurance: 1200000,
+            healthInsurance: 225000,
+            unemploymentInsurance: 150000,
+            personalIncomeTax: 1200000,
+            advancePayment: 1000000,
+            penalties: 300000,
+            salaryDeduction: 600000,
+            status: "paid",
+            calculatedDate: previousMonthKey + "-25",
+            approvedDate: previousMonthKey + "-26",
+            paidDate: previousMonthKey + "-28",
+        },
         {
             id: 1,
             employeeId: "NV001",

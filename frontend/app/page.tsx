@@ -149,7 +149,7 @@ export default function App() {
     };
 
     return (
-      <div className="h-screen flex overflow-hidden bg-gray-50">
+      <div className="h-screen w-full min-w-0 flex overflow-hidden bg-gray-50 overscroll-none">
         {/* Employee Sidebar */}
         <EmployeeSidebar 
           isOpen={sidebarOpen} 
@@ -159,7 +159,7 @@ export default function App() {
         />
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
           {/* Employee Navbar */}
           <EmployeeNavbar 
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -167,8 +167,8 @@ export default function App() {
           />
 
           {/* Page Content */}
-          <main className="hide-scrollbar flex-1 overflow-y-auto">
-            <div className="container mx-auto px-4 py-8">
+          <main className="hide-scrollbar flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+            <div className="container mx-auto min-w-0 px-4 py-8">
               {renderEmployeePage()}
             </div>
           </main>
@@ -229,7 +229,7 @@ export default function App() {
 
   return (
     <div
-      className={`h-screen flex overflow-hidden transition-colors ${
+      className={`h-screen w-full min-w-0 flex overflow-hidden overscroll-none transition-colors ${
         managementSettings.darkMode ? 'bg-slate-950 text-slate-100' : 'bg-gray-50'
       }`}
     >
@@ -245,7 +245,7 @@ export default function App() {
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
         {/* Admin Navbar */}
         <Navbar 
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
@@ -257,8 +257,8 @@ export default function App() {
         />
 
         {/* Page Content */}
-        <main className="hide-scrollbar flex-1 overflow-y-auto">
-          <div className="container mx-auto px-4 py-8">
+        <main className="hide-scrollbar flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+          <div className="container mx-auto min-w-0 px-4 py-8">
             {renderManagementPage()}
           </div>
         </main>

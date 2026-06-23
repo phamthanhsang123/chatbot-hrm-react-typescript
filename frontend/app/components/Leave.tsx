@@ -1,5 +1,5 @@
 'use client';
-import { BarChart3, Calendar, Clock, CheckCircle, XCircle, Plus, Eye, Pencil } from 'lucide-react';
+import { BarChart3, Calendar, Clock, CheckCircle, XCircle, Plus, Eye } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { Card } from './ui/card';
@@ -23,6 +23,19 @@ type LeaveFilterStatus = 'all' | LeaveStatus;
 
 const LEAVE_PAGE_SIZE = 10;
 
+const formatDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getRelativeDateKey = (daysAgo: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return formatDateKey(date);
+};
+
 interface LeaveRequest {
   id: number;
   employeeId: string;
@@ -43,24 +56,17 @@ interface LeaveRequest {
 export function Leave() {
   const [filterStatus, setFilterStatus] = useState<LeaveFilterStatus>('pending');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedLeaveDate, setSelectedLeaveDate] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [rejectNote, setRejectNote] = useState('');
 
   // Form state for create dialog
   const [newLeave, setNewLeave] = useState({
     employeeName: '',
-    type: 'annual' as LeaveType,
-    from: '',
-    to: '',
-    reason: '',
-  });
-
-  const [editLeave, setEditLeave] = useState({
     type: 'annual' as LeaveType,
     from: '',
     to: '',
@@ -153,12 +159,88 @@ export function Leave() {
       reason: 'Đám cưới',
       appliedDate: '2026-01-10',
     },
+    {
+      id: 7,
+      employeeId: 'NV011',
+      name: 'Nguyễn Minh Anh',
+      department: 'HR',
+      type: 'annual',
+      from: getRelativeDateKey(0),
+      to: getRelativeDateKey(0),
+      days: 1,
+      status: 'approved',
+      reason: 'Nghỉ phép hôm nay đã được duyệt',
+      appliedDate: getRelativeDateKey(2),
+      reviewedDate: getRelativeDateKey(1),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 8,
+      employeeId: 'NV007',
+      name: 'Nguyễn Thu Hà',
+      department: 'Marketing',
+      type: 'annual',
+      from: getRelativeDateKey(1),
+      to: getRelativeDateKey(1),
+      days: 1,
+      status: 'approved',
+      reason: 'Nghỉ phép cá nhân đã được duyệt',
+      appliedDate: getRelativeDateKey(4),
+      reviewedDate: getRelativeDateKey(3),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 9,
+      employeeId: 'NV008',
+      name: 'Trần Văn Bình',
+      department: 'Sales',
+      type: 'sick',
+      from: getRelativeDateKey(2),
+      to: getRelativeDateKey(2),
+      days: 1,
+      status: 'approved',
+      reason: 'Nghỉ ốm có xác nhận',
+      appliedDate: getRelativeDateKey(3),
+      reviewedDate: getRelativeDateKey(2),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 10,
+      employeeId: 'NV009',
+      name: 'Đỗ Minh Quân',
+      department: 'IT',
+      type: 'annual',
+      from: getRelativeDateKey(3),
+      to: getRelativeDateKey(1),
+      days: 3,
+      status: 'approved',
+      reason: 'Nghỉ phép theo kế hoạch gia đình',
+      appliedDate: getRelativeDateKey(7),
+      reviewedDate: getRelativeDateKey(6),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 11,
+      employeeId: 'NV010',
+      name: 'Lê Mỹ Linh',
+      department: 'Finance',
+      type: 'unpaid',
+      from: getRelativeDateKey(2),
+      to: getRelativeDateKey(1),
+      days: 2,
+      status: 'pending',
+      reason: 'Xin nghỉ giải quyết việc cá nhân',
+      appliedDate: getRelativeDateKey(2),
+    },
   ]);
 
   const filteredData = useMemo(() => {
-    if (filterStatus === 'all') return leaveRequests;
-    return leaveRequests.filter((x) => x.status === filterStatus);
-  }, [leaveRequests, filterStatus]);
+    return leaveRequests.filter((request) => {
+      const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
+      const matchesDate = !selectedLeaveDate || (request.from <= selectedLeaveDate && request.to >= selectedLeaveDate);
+      return matchesStatus && matchesDate;
+    });
+  }, [leaveRequests, filterStatus, selectedLeaveDate]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / LEAVE_PAGE_SIZE));
   const startIndex = (currentPage - 1) * LEAVE_PAGE_SIZE;
@@ -242,50 +324,6 @@ export function Leave() {
     const from = new Date(fromDate);
     const to = new Date(toDate);
     return Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  };
-
-  const handleEditLeave = (request: LeaveRequest) => {
-    setSelectedRequest(request);
-    setEditLeave({
-      type: request.type,
-      from: request.from,
-      to: request.to,
-      reason: request.reason,
-    });
-    setShowEditDialog(true);
-  };
-
-  const handleSaveEditLeave = () => {
-    if (!selectedRequest) return;
-
-    if (!editLeave.from || !editLeave.to || !editLeave.reason.trim()) {
-      alert('Vui lòng điền đầy đủ thông tin nghỉ phép.');
-      return;
-    }
-
-    const days = calculateLeaveDays(editLeave.from, editLeave.to);
-    if (days <= 0) {
-      alert('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.');
-      return;
-    }
-
-    setLeaveRequests((prev) =>
-      prev.map((request) =>
-        request.id === selectedRequest.id
-          ? {
-            ...request,
-            type: editLeave.type,
-            from: editLeave.from,
-            to: editLeave.to,
-            days,
-            reason: editLeave.reason,
-          }
-          : request
-      )
-    );
-
-    alert(`Đã cập nhật đơn nghỉ phép của ${selectedRequest.name}.`);
-    setShowEditDialog(false);
   };
 
   const handleConfirmApprove = () => {
@@ -539,9 +577,47 @@ export function Leave() {
             </Button>
           </div>
 
-          <div className="text-sm text-gray-600">
-            Hiển thị: <span className="font-semibold text-gray-900">{filteredData.length}</span> /{' '}
-            {leaveRequests.length} đơn
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3">
+              <Calendar className="size-4 text-blue-600" />
+              <Input
+                type="date"
+                value={selectedLeaveDate}
+                onChange={(event) => {
+                  setSelectedLeaveDate(event.target.value);
+                  setFilterStatus('all');
+                  setCurrentPage(1);
+                }}
+                className="h-7 w-[145px] border-0 p-0 text-sm shadow-none focus-visible:ring-0"
+              />
+            </div>
+            {selectedLeaveDate && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSelectedLeaveDate('');
+                  setCurrentPage(1);
+                }}
+              >
+                Bỏ ngày
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSelectedLeaveDate(formatDateKey(new Date()));
+                setFilterStatus('all');
+                setCurrentPage(1);
+              }}
+            >
+              Hôm nay
+            </Button>
+            <div className="text-sm text-gray-600">
+              Hiển thị: <span className="font-semibold text-gray-900">{filteredData.length}</span> /{' '}
+              {leaveRequests.length} đơn
+            </div>
           </div>
         </div>
       </Card>
@@ -604,11 +680,6 @@ export function Leave() {
                   <td className="px-4 py-2">{getStatusBadge(request.status)}</td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleEditLeave(request)}>
-                        <Pencil className="size-3 mr-1" />
-                        Chỉnh sửa
-                      </Button>
-
                       {request.status === 'pending' ? (
                         <>
                           <Button
@@ -755,90 +826,6 @@ export function Leave() {
               onClick={handleCreateLeave}
             >
               Tạo đơn
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Chỉnh sửa đơn nghỉ phép</DialogTitle>
-            <DialogDescription>Cập nhật loại nghỉ, thời gian và lý do nghỉ</DialogDescription>
-          </DialogHeader>
-
-          {selectedRequest && (
-            <div className="space-y-4">
-              <div className="rounded-lg border p-4 text-sm">
-                <div className="font-semibold text-gray-900">{selectedRequest.name}</div>
-                <div className="text-xs text-gray-500">
-                  {selectedRequest.employeeId} • {selectedRequest.department}
-                </div>
-              </div>
-
-              <div>
-                <Label>Loại nghỉ</Label>
-                <select
-                  className="w-full h-10 rounded-md border border-gray-200 px-3 text-sm"
-                  value={editLeave.type}
-                  onChange={(e) => setEditLeave({ ...editLeave, type: e.target.value as LeaveType })}
-                >
-                  <option value="annual">Nghỉ phép năm</option>
-                  <option value="sick">Nghỉ ốm</option>
-                  <option value="unpaid">Nghỉ không lương</option>
-                  <option value="maternity">Nghỉ thai sản</option>
-                  <option value="marriage">Nghỉ cưới</option>
-                  <option value="funeral">Nghỉ tang</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Từ ngày</Label>
-                  <Input
-                    type="date"
-                    value={editLeave.from}
-                    onChange={(e) => setEditLeave({ ...editLeave, from: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>Đến ngày</Label>
-                  <Input
-                    type="date"
-                    value={editLeave.to}
-                    onChange={(e) => setEditLeave({ ...editLeave, to: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label>Lý do</Label>
-                <Textarea
-                  value={editLeave.reason}
-                  onChange={(e) => setEditLeave({ ...editLeave, reason: e.target.value })}
-                  placeholder="Nhập lý do xin nghỉ phép"
-                  rows={3}
-                />
-              </div>
-
-              {editLeave.from && editLeave.to && calculateLeaveDays(editLeave.from, editLeave.to) > 0 && (
-                <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
-                  Số ngày nghỉ sau khi sửa: <b>{calculateLeaveDays(editLeave.from, editLeave.to)} ngày</b>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-              Hủy bỏ
-            </Button>
-            <Button
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-              onClick={handleSaveEditLeave}
-            >
-              Lưu thay đổi
             </Button>
           </div>
         </DialogContent>

@@ -39,6 +39,12 @@ const formatDate = (date: Date): string => {
   return `${day}/${month}/${year}`;
 };
 
+const getRelativeDateLabel = (daysAgo: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return formatDate(date);
+};
+
 // Helper to parse DD/MM/YYYY to Date
 const parseDate = (dateStr: string): Date | null => {
   const parts = dateStr.split('/');
@@ -159,6 +165,7 @@ export function AttendanceApproval() {
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [showWorkReportDialog, setShowWorkReportDialog] = useState(false);
   const [activeAttendancePopup, setActiveAttendancePopup] = useState<AttendancePopup | null>(null);
+  const [returnPopupAfterDetail, setReturnPopupAfterDetail] = useState<AttendancePopup | null>(null);
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarAttendanceEvent | null>(null);
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [reviewNote, setReviewNote] = useState('');
@@ -425,6 +432,37 @@ export function AttendanceApproval() {
 
   // Sample attendance data for all employees
   const [allAttendance, setAllAttendance] = useState<EmployeeAttendance[]>([
+    // Recent demo data - yesterday / previous days
+    { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: getRelativeDateLabel(1), checkIn: '08:24', checkOut: '17:32', hours: '8h 8m', status: 'ontime', note: '',
+      workReport: {
+        title: 'Hoàn thiện dashboard quản trị',
+        description: 'Cập nhật giao diện Admin/Manager và rà soát các luồng nghiệp vụ chính',
+        tasks: [
+          { name: 'Rà soát UI module nhân viên', status: 'completed', duration: '2h 0m' },
+          { name: 'Tối ưu bộ lọc nghỉ phép', status: 'completed', duration: '2h 30m' },
+          { name: 'Kiểm tra build frontend', status: 'completed', duration: '1h 0m' },
+        ],
+        achievements: ['Dashboard ổn định hơn', 'Bộ lọc ngày có dữ liệu demo'],
+      }
+    },
+    { employeeId: 'NV002', employeeName: 'Trần Thị Bình', department: 'HR', date: getRelativeDateLabel(1), checkIn: '08:35', checkOut: '17:25', hours: '7h 50m', status: 'late', note: 'Đi muộn 5 phút' },
+    { employeeId: 'NV004', employeeName: 'Phạm Minh Đức', department: 'Sales', date: getRelativeDateLabel(1), checkIn: '08:20', checkOut: '17:40', hours: '8h 20m', status: 'ontime', note: '' },
+    { employeeId: 'NV003', employeeName: 'Lê Hoàng Cường', department: 'Marketing', date: getRelativeDateLabel(2), checkIn: '08:28', checkOut: '17:35', hours: '8h 7m', status: 'ontime', note: '',
+      workReport: {
+        title: 'Tổng hợp chiến dịch truyền thông',
+        description: 'Theo dõi hiệu quả nội dung và tổng hợp số liệu báo cáo ngày',
+        tasks: [
+          { name: 'Kiểm tra hiệu quả bài đăng', status: 'completed', duration: '2h 0m' },
+          { name: 'Tổng hợp số liệu ads', status: 'completed', duration: '2h 30m' },
+          { name: 'Đề xuất nội dung mới', status: 'completed', duration: '1h 30m' },
+        ],
+        achievements: ['CTR tăng 8%', 'Hoàn tất báo cáo daily'],
+      }
+    },
+    { employeeId: 'NV005', employeeName: 'Võ Thị Như', department: 'Finance', date: getRelativeDateLabel(2), checkIn: '09:05', checkOut: '17:30', hours: '7h 25m', status: 'late', note: 'Đi muộn 35 phút' },
+    { employeeId: 'NV006', employeeName: 'Hoàng Minh Tuấn', department: 'IT', date: getRelativeDateLabel(3), checkIn: '08:25', checkOut: '17:45', hours: '8h 20m', status: 'ontime', note: '' },
+    { employeeId: 'NV007', employeeName: 'Nguyễn Thu Hà', department: 'Marketing', date: getRelativeDateLabel(3), checkIn: '-', checkOut: '-', hours: '0h', status: 'missing', note: 'Chưa chấm công' },
+
     // 17/01/2026 - Friday
     { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: '17/01/2026', checkIn: '08:25', checkOut: '17:30', hours: '8h 5m', status: 'ontime', note: '',
       workReport: {
@@ -545,6 +583,14 @@ export function AttendanceApproval() {
     const depts = new Set(requests.map(r => r.department));
     return Array.from(depts);
   }, [requests]);
+
+  const attendanceDepartments = useMemo(() => {
+    const depts = new Set<string>();
+    allAttendance.forEach((record) => depts.add(record.department));
+    liveAttendance.forEach((record) => depts.add(record.department));
+    requests.forEach((record) => depts.add(record.department));
+    return Array.from(depts).sort((a, b) => a.localeCompare(b));
+  }, [allAttendance, liveAttendance, requests]);
 
   // Filtered requests
   const filteredRequests = useMemo(() => {
@@ -798,9 +844,18 @@ export function AttendanceApproval() {
   };
 
   const handleViewDetail = (request: AttendanceRequest) => {
+    setReturnPopupAfterDetail(activeAttendancePopup);
     setActiveAttendancePopup(null);
     setSelectedRequest(request);
     setShowDetailDialog(true);
+  };
+
+  const closeDetailDialog = (restorePopup = true) => {
+    setShowDetailDialog(false);
+    if (restorePopup && returnPopupAfterDetail) {
+      setActiveAttendancePopup(returnPopupAfterDetail);
+    }
+    setReturnPopupAfterDetail(null);
   };
 
   const handleViewWorkReport = (request: AttendanceRequest | null, attendance: EmployeeAttendance | null = null) => {
@@ -870,6 +925,136 @@ export function AttendanceApproval() {
     }
 
     return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Chờ duyệt</Badge>;
+  };
+
+  const renderCompactRequestList = (requestList: AttendanceRequest[], title: string, description: string) => {
+    const orderedRequests = [...requestList].sort((first, second) => {
+      if (first.status === second.status) return first.id - second.id;
+      return first.status === 'pending' ? -1 : 1;
+    });
+
+    return (
+      <Card className="overflow-hidden border-gray-200 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+            <p className="text-sm text-gray-500">{description}</p>
+          </div>
+          <Badge variant="outline" className="w-fit bg-gray-50 text-gray-700">
+            {orderedRequests.length} đơn
+          </Badge>
+        </div>
+
+        <div className="space-y-3 bg-gray-50/60 p-4">
+          {orderedRequests.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+              Không có đơn phù hợp với bộ lọc hiện tại.
+            </div>
+          ) : (
+            orderedRequests.map((request) => (
+              <article
+                key={request.id}
+                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
+              >
+                <div className="grid gap-4 xl:grid-cols-[minmax(220px,1fr)_minmax(260px,1.25fr)_minmax(170px,0.75fr)_auto] xl:items-center">
+                  <div className="min-w-0">
+                    <div className="flex items-start gap-3">
+                      <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-base font-semibold text-white">
+                        {request.employeeName.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">{request.employeeName}</p>
+                        <p className="text-xs text-gray-500">{request.employeeId} • {request.department}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {getRequestTypeBadge(request.type)}
+                          {getRequestStatusBadge(request.status)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 rounded-md bg-gray-50 px-3 py-2">
+                    <div className="grid gap-3 sm:grid-cols-[110px_minmax(0,1fr)]">
+                      <div>
+                        <p className="text-xs font-medium uppercase text-gray-400">Ngày</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-900">{request.date}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase text-gray-400">
+                          {request.type === 'adjustment' ? 'Giờ điều chỉnh' : 'Giờ đề xuất'}
+                        </p>
+                        {request.type === 'adjustment' && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Gốc: {request.originalCheckIn ?? '-'} - {request.originalCheckOut ?? '-'}
+                          </p>
+                        )}
+                        <p className="mt-1 text-sm text-gray-700">
+                          Mới: <span className="font-semibold text-gray-900">{request.checkIn}</span> -{' '}
+                          <span className="font-semibold text-gray-900">{request.checkOut}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 line-clamp-2 break-words text-sm text-gray-600" title={request.reason}>
+                      {request.reason}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">Gửi lúc {request.submittedAt}</p>
+                  </div>
+
+                  <div className="min-w-0 space-y-2">
+                    {request.workReport ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewWorkReport(request)}
+                        className="w-full justify-center gap-2 border-blue-200 text-blue-600 hover:bg-blue-50"
+                      >
+                        <FileText className="size-4" />
+                        {request.workReport.tasks.length} việc
+                      </Button>
+                    ) : (
+                      <div className="rounded-md border border-dashed border-gray-200 px-3 py-2 text-center text-sm text-gray-400">
+                        Chưa có báo cáo
+                      </div>
+                    )}
+                    {request.status !== 'pending' && (
+                      <p className="text-xs text-gray-500">
+                        {request.reviewedBy} • {request.reviewedAt}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 xl:justify-end">
+                    <Button size="sm" variant="outline" onClick={() => handleViewDetail(request)} className="gap-2">
+                      <Eye className="size-4" />
+                      Chi tiết
+                    </Button>
+                    {request.status === 'pending' && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => handleOpenActionDialog(request, 'reject')}
+                        >
+                          Từ chối
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => handleOpenActionDialog(request, 'approve')}
+                        >
+                          Duyệt
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </Card>
+    );
   };
 
   const renderOptimizedRequestTable = (requestList: AttendanceRequest[], title: string, description: string) => {
@@ -1237,6 +1422,371 @@ export function AttendanceApproval() {
             </div>
           </Card>
         )}
+      </div>
+    );
+  };
+
+  const renderAttendanceHistoryPanel = () => {
+    const selectedDateLabel = formatDate(selectedDate);
+    const ontimePercent = dateStats.total > 0 ? Math.round((dateStats.ontime / dateStats.total) * 100) : 0;
+    const latePercent = dateStats.total > 0 ? Math.round((dateStats.late / dateStats.total) * 100) : 0;
+    const missingPercent = dateStats.total > 0 ? Math.round((dateStats.missing / dateStats.total) * 100) : 0;
+    const reportPercent = dateStats.total > 0 ? Math.round((dateStats.withReport / dateStats.total) * 100) : 0;
+
+    const getHistoryStatusBadge = (status: EmployeeAttendance['status']) => {
+      if (status === 'ontime') {
+        return <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Đúng giờ</Badge>;
+      }
+      if (status === 'late') {
+        return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Đi muộn</Badge>;
+      }
+      if (status === 'early-leave') {
+        return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100">Về sớm</Badge>;
+      }
+      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Thiếu công</Badge>;
+    };
+
+    return (
+      <div className="space-y-4 p-5">
+        <Card className="border-gray-200 !p-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Lịch sử theo ngày</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Chọn ngày để xem các lượt chấm công đã ghi nhận, báo cáo công việc và trạng thái xử lý.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={handlePreviousDay} className="bg-white">
+                <ChevronLeft className="size-4" />
+              </Button>
+              <div className="flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3">
+                <Calendar className="size-4 text-blue-600" />
+                <input
+                  type="date"
+                  value={formatDateInputValue(selectedDate)}
+                  onChange={(event) => {
+                    const [year, month, day] = event.target.value.split('-').map(Number);
+                    setSelectedDate(new Date(year, month - 1, day));
+                  }}
+                  className="h-7 w-[145px] bg-transparent text-sm font-semibold text-gray-900 outline-none"
+                />
+              </div>
+              <Button size="sm" variant="outline" onClick={handleNextDay} className="bg-white">
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button size="sm" onClick={handleToday} className="bg-blue-600 hover:bg-blue-700">
+                Hôm nay
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Tìm theo tên hoặc mã nhân viên..."
+                className="pl-9"
+              />
+            </div>
+            <select
+              value={departmentFilter}
+              onChange={(event) => setDepartmentFilter(event.target.value)}
+              className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
+            >
+              <option value="all">Tất cả phòng ban</option>
+              {attendanceDepartments.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </div>
+        </Card>
+
+        <Card className="border-gray-200 !p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">
+                {getDayOfWeek(selectedDateLabel)}, {selectedDateLabel}
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {attendanceForDate.length} bản ghi
+                {departmentFilter !== 'all' ? ` • Phòng ${departmentFilter}` : ''}
+                {searchQuery ? ` • Từ khóa "${searchQuery}"` : ''}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-fit gap-2 bg-white text-blue-600 hover:bg-blue-50"
+              onClick={() => alert(`Xuất báo cáo chấm công ngày ${selectedDateLabel}`)}
+            >
+              <Download className="size-4" />
+              Xuất báo cáo
+            </Button>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs text-gray-500">Tổng bản ghi</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{dateStats.total}</p>
+            </div>
+            <div className="rounded-lg border border-green-100 bg-green-50 p-3">
+              <p className="text-xs text-green-700">Đúng giờ</p>
+              <p className="mt-1 text-2xl font-bold text-green-700">{dateStats.ontime}</p>
+              <p className="text-xs text-green-700">{ontimePercent}%</p>
+            </div>
+            <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
+              <p className="text-xs text-orange-700">Đi muộn</p>
+              <p className="mt-1 text-2xl font-bold text-orange-700">{dateStats.late}</p>
+              <p className="text-xs text-orange-700">{latePercent}%</p>
+            </div>
+            <div className="rounded-lg border border-red-100 bg-red-50 p-3">
+              <p className="text-xs text-red-700">Thiếu công</p>
+              <p className="mt-1 text-2xl font-bold text-red-700">{dateStats.missing}</p>
+              <p className="text-xs text-red-700">{missingPercent}%</p>
+            </div>
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <p className="text-xs text-blue-700">Có báo cáo</p>
+              <p className="mt-1 text-2xl font-bold text-blue-700">{dateStats.withReport}</p>
+              <p className="text-xs text-blue-700">{reportPercent}%</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="overflow-hidden border-gray-200 shadow-sm">
+          <div className="border-b border-gray-200 p-4">
+            <h2 className="text-base font-semibold text-gray-900">Danh sách chấm công</h2>
+            <p className="mt-1 text-sm text-gray-500">Hiển thị theo ngày đã chọn, không cần kéo ngang để xem đủ thông tin.</p>
+          </div>
+
+          <div className="space-y-3 bg-gray-50/60 p-4">
+            {attendanceForDate.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center">
+                <p className="text-sm font-medium text-gray-700">Không có dữ liệu chấm công cho ngày này.</p>
+                <p className="mt-1 text-xs text-gray-500">Hãy chọn ngày khác hoặc đổi bộ lọc phòng ban/tìm kiếm.</p>
+              </div>
+            ) : (
+              attendanceForDate.map((record) => (
+                <article key={`${record.employeeId}-${record.date}`} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(240px,1fr)_minmax(190px,0.8fr)] lg:items-center">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 font-semibold text-white">
+                        {record.employeeName.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">{record.employeeName}</p>
+                        <p className="text-xs text-gray-500">{record.employeeId} • {record.department}</p>
+                        <div className="mt-2">{getHistoryStatusBadge(record.status)}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-500">Giờ vào</p>
+                        <p className="font-semibold text-gray-900">{record.checkIn}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Giờ ra</p>
+                        <p className="font-semibold text-gray-900">{record.checkOut}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Tổng giờ</p>
+                        <p className="font-semibold text-blue-700">{record.hours}</p>
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 space-y-2">
+                      {record.workReport ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewWorkReport(null, record)}
+                          className="w-full justify-center gap-2 border-blue-200 text-blue-600 hover:bg-blue-50"
+                        >
+                          <FileText className="size-4" />
+                          Xem báo cáo ({record.workReport.tasks.length} việc)
+                        </Button>
+                      ) : (
+                        <div className="rounded-md border border-dashed border-gray-200 px-3 py-2 text-center text-sm text-gray-400">
+                          Chưa có báo cáo
+                        </div>
+                      )}
+                      <p className="line-clamp-2 text-xs text-gray-500">{record.note || 'Không có ghi chú'}</p>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
+  const renderSimpleAttendanceHistoryPanel = () => {
+    const selectedDateLabel = formatDate(selectedDate);
+
+    const getHistoryStatusBadge = (status: EmployeeAttendance['status']) => {
+      if (status === 'ontime') return <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Đúng giờ</Badge>;
+      if (status === 'late') return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Đi muộn</Badge>;
+      if (status === 'early-leave') return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100">Về sớm</Badge>;
+      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Thiếu công</Badge>;
+    };
+
+    return (
+      <div className="space-y-3 p-4">
+        <Card className="border-gray-200 !p-4 shadow-sm">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-gray-900">Lịch sử chấm công</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {getDayOfWeek(selectedDateLabel)}, {selectedDateLabel}
+                {departmentFilter !== 'all' ? ` • ${departmentFilter}` : ''}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={handlePreviousDay} className="bg-white">
+                <ChevronLeft className="size-4" />
+              </Button>
+              <div className="flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3">
+                <Calendar className="size-4 text-blue-600" />
+                <input
+                  type="date"
+                  value={formatDateInputValue(selectedDate)}
+                  onChange={(event) => {
+                    const [year, month, day] = event.target.value.split('-').map(Number);
+                    setSelectedDate(new Date(year, month - 1, day));
+                  }}
+                  className="h-7 w-[145px] bg-transparent text-sm font-semibold text-gray-900 outline-none"
+                />
+              </div>
+              <Button size="sm" variant="outline" onClick={handleNextDay} className="bg-white">
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button size="sm" onClick={handleToday} className="bg-blue-600 hover:bg-blue-700">
+                Hôm nay
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 bg-white text-blue-600 hover:bg-blue-50"
+                onClick={() => alert(`Xuất báo cáo chấm công ngày ${selectedDateLabel}`)}
+              >
+                <Download className="size-4" />
+                Xuất
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_210px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Tìm nhân viên..."
+                className="h-9 pl-9"
+              />
+            </div>
+            <select
+              value={departmentFilter}
+              onChange={(event) => setDepartmentFilter(event.target.value)}
+              className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
+            >
+              <option value="all">Tất cả phòng ban</option>
+              {attendanceDepartments.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2 text-sm">
+            <div className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">
+              <span className="text-gray-500">Tổng </span>
+              <span className="font-semibold text-gray-900">{dateStats.total}</span>
+            </div>
+            <div className="rounded-full border border-green-100 bg-green-50 px-3 py-1.5">
+              <span className="text-green-700">Đúng giờ </span>
+              <span className="font-semibold text-green-800">{dateStats.ontime}</span>
+            </div>
+            <div className="rounded-full border border-orange-100 bg-orange-50 px-3 py-1.5">
+              <span className="text-orange-700">Đi muộn </span>
+              <span className="font-semibold text-orange-800">{dateStats.late}</span>
+            </div>
+            <div className="rounded-full border border-red-100 bg-red-50 px-3 py-1.5">
+              <span className="text-red-700">Thiếu </span>
+              <span className="font-semibold text-red-800">{dateStats.missing}</span>
+            </div>
+            <div className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5">
+              <span className="text-blue-700">Báo cáo </span>
+              <span className="font-semibold text-blue-800">{dateStats.withReport}</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="overflow-hidden border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+            <h2 className="text-sm font-semibold text-gray-900">Nhân viên</h2>
+            <span className="text-xs text-gray-500">{attendanceForDate.length} bản ghi</span>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {attendanceForDate.length === 0 ? (
+              <div className="px-4 py-10 text-center">
+                <p className="text-sm font-medium text-gray-700">Không có dữ liệu chấm công cho ngày này.</p>
+                <p className="mt-1 text-xs text-gray-500">Chọn ngày khác hoặc đổi bộ lọc.</p>
+              </div>
+            ) : (
+              attendanceForDate.map((record) => (
+                <article key={`${record.employeeId}-${record.date}`} className="px-4 py-3 transition-colors hover:bg-gray-50">
+                  <div className="grid gap-3 lg:grid-cols-[minmax(230px,1fr)_260px_minmax(180px,0.7fr)] lg:items-center">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-semibold text-white">
+                        {record.employeeName.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">{record.employeeName}</p>
+                        <p className="text-xs text-gray-500">{record.employeeId} • {record.department}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="rounded-md bg-gray-50 px-2.5 py-1 font-medium text-gray-900">
+                        {record.checkIn} - {record.checkOut}
+                      </span>
+                      <span className="text-xs text-gray-500">{record.hours}</span>
+                      {getHistoryStatusBadge(record.status)}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      {record.workReport ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewWorkReport(null, record)}
+                          className="gap-2 border-blue-200 text-blue-600 hover:bg-blue-50"
+                        >
+                          <FileText className="size-4" />
+                          Báo cáo
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-gray-400">Chưa có báo cáo</span>
+                      )}
+                      {record.note && <span className="line-clamp-1 max-w-[180px] text-xs text-gray-500">{record.note}</span>}
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </Card>
       </div>
     );
   };
@@ -1762,7 +2312,8 @@ export function AttendanceApproval() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 p-5">
+          {renderSimpleAttendanceHistoryPanel()}
+          <div className="hidden">
           {/* Date Selector Card */}
           <Card className="!gap-2 border-gray-200 !p-4 shadow-sm">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -2015,7 +2566,7 @@ export function AttendanceApproval() {
         open={activeAttendancePopup === 'supplement'}
         onOpenChange={(open) => setActiveAttendancePopup(open ? 'supplement' : null)}
       >
-        <DialogContent className="max-h-[86vh] overflow-y-auto p-0 sm:max-w-[960px]">
+        <DialogContent className="max-h-[86vh] overflow-y-auto overflow-x-hidden p-0 sm:max-w-[900px]">
           <DialogHeader className="border-b border-gray-200 p-5">
             <DialogTitle className="text-xl">Đơn bổ sung chấm công</DialogTitle>
             <DialogDescription>
@@ -2023,7 +2574,7 @@ export function AttendanceApproval() {
             </DialogDescription>
           </DialogHeader>
           <div className="p-5">
-            {renderOptimizedRequestTable(
+            {renderCompactRequestList(
               filteredSupplementRequests,
               'Đơn bổ sung chấm công',
               'Nhân viên gửi đơn khi quên chấm công hoặc thiếu lượt vào/ra.'
@@ -2036,7 +2587,7 @@ export function AttendanceApproval() {
         open={activeAttendancePopup === 'adjustment'}
         onOpenChange={(open) => setActiveAttendancePopup(open ? 'adjustment' : null)}
       >
-        <DialogContent className="max-h-[86vh] overflow-y-auto p-0 sm:max-w-[960px]">
+        <DialogContent className="max-h-[86vh] overflow-y-auto overflow-x-hidden p-0 sm:max-w-[900px]">
           <DialogHeader className="border-b border-gray-200 p-5">
             <DialogTitle className="text-xl">Đơn điều chỉnh giờ chấm công</DialogTitle>
             <DialogDescription>
@@ -2044,7 +2595,7 @@ export function AttendanceApproval() {
             </DialogDescription>
           </DialogHeader>
           <div className="p-5">
-            {renderOptimizedRequestTable(
+            {renderCompactRequestList(
               filteredAdjustmentRequests,
               'Đơn điều chỉnh giờ chấm công',
               'Dùng cho trường hợp nhân viên cần sửa giờ vào/ra đã ghi nhận.'
@@ -2118,7 +2669,7 @@ export function AttendanceApproval() {
       </Dialog>
 
       {/* Detail Dialog */}
-      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+      <Dialog open={showDetailDialog} onOpenChange={(open) => (open ? setShowDetailDialog(true) : closeDetailDialog())}>
         <DialogContent className="sm:max-w-[600px]">
           {selectedRequest && (
             <>
@@ -2210,7 +2761,7 @@ export function AttendanceApproval() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          setShowDetailDialog(false);
+                          closeDetailDialog(false);
                           handleViewWorkReport(selectedRequest);
                         }}
                         className="border-blue-300 text-blue-700 hover:bg-blue-100"
@@ -2248,13 +2799,13 @@ export function AttendanceApproval() {
               <DialogFooter>
                 {selectedRequest.status === 'pending' ? (
                   <div className="flex gap-2 w-full">
-                    <Button variant="outline" onClick={() => setShowDetailDialog(false)} className="flex-1">
+                    <Button variant="outline" onClick={() => closeDetailDialog()} className="flex-1">
                       Đóng
                     </Button>
                     <Button
                       variant="destructive"
                       onClick={() => {
-                        setShowDetailDialog(false);
+                        closeDetailDialog(false);
                         handleOpenActionDialog(selectedRequest, 'reject');
                       }}
                       className="flex-1"
@@ -2265,7 +2816,7 @@ export function AttendanceApproval() {
                     <Button
                       className="bg-green-600 hover:bg-green-700 flex-1"
                       onClick={() => {
-                        setShowDetailDialog(false);
+                        closeDetailDialog(false);
                         handleOpenActionDialog(selectedRequest, 'approve');
                       }}
                     >
@@ -2274,7 +2825,7 @@ export function AttendanceApproval() {
                     </Button>
                   </div>
                 ) : (
-                  <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+                  <Button variant="outline" onClick={() => closeDetailDialog()}>
                     Đóng
                   </Button>
                 )}
