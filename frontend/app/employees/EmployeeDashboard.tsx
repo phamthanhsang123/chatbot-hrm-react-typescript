@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   AlertCircle,
   BriefcaseBusiness,
@@ -14,19 +15,17 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
+import { getCurrentEmployeeId } from '@/services/tasks';
+import { getEmployeePortalIdentity } from './hrmSync';
 
 interface EmployeeDashboardProps {
   onNavigate?: (page: string) => void;
 }
 
-const employeeData = {
-  name: 'Nguyễn Văn A',
-  employeeCode: 'NV001',
-  department: 'IT',
+const employeeMeta = {
   position: 'Developer',
   manager: 'Kiên Quân',
   joinDate: '01/01/2023',
-  avatar: 'NA',
 };
 
 const taskOverview = {
@@ -53,6 +52,14 @@ const activities = [
 ];
 
 export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
+  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
+  const avatar = employeeIdentity.employeeName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -60,15 +67,15 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl font-bold shadow-inner backdrop-blur-sm">
-                {employeeData.avatar}
+                {avatar}
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Xin chào, {employeeData.name}</h1>
+                <h1 className="text-2xl font-bold">Xin chào, {employeeIdentity.employeeName}</h1>
                 <p className="mt-1 text-blue-100">
-                  {employeeData.position} - {employeeData.department} - Mã NV: {employeeData.employeeCode}
+                  {employeeMeta.position} - {employeeIdentity.department} - Mã NV: {employeeIdentity.employeeId}
                 </p>
                 <p className="mt-1 text-sm text-blue-100">
-                  Manager: {employeeData.manager} - Ngày vào làm: {employeeData.joinDate}
+                  Manager: {employeeMeta.manager} - Ngày vào làm: {employeeMeta.joinDate}
                 </p>
               </div>
             </div>

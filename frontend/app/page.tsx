@@ -34,22 +34,23 @@ export default function App() {
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [managementSettings, setManagementSettings] = useState<ManagementSettings>(defaultManagementSettings);
-  const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
+  const [managementSettings, setManagementSettings] = useState<ManagementSettings>(() => {
+    if (typeof window === 'undefined') return defaultManagementSettings;
 
-  useEffect(() => {
     const savedSettings = window.localStorage.getItem(MANAGEMENT_SETTINGS_KEY);
-    if (!savedSettings) return;
+    if (!savedSettings) return defaultManagementSettings;
 
     try {
-      setManagementSettings({
+      return {
         ...defaultManagementSettings,
         ...JSON.parse(savedSettings),
-      });
+      };
     } catch {
       window.localStorage.removeItem(MANAGEMENT_SETTINGS_KEY);
+      return defaultManagementSettings;
     }
-  }, []);
+  });
+  const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', managementSettings.darkMode);
@@ -92,8 +93,6 @@ export default function App() {
           return <EmployeeLeave />;
         case 'salary':
           return <EmployeeSalary />;
-        case 'tasks':
-          return <EmployeeTasks />;
         case 'chatbot':
           return <Chatbot />;
         case 'profile':
@@ -104,7 +103,7 @@ export default function App() {
     };
 
     return (
-      <div className="h-screen flex overflow-hidden bg-gray-50">
+      <div className="flex h-screen w-full min-w-0 overflow-hidden bg-gray-50 overscroll-none">
         {/* Employee Sidebar */}
         <EmployeeSidebar 
           isOpen={sidebarOpen} 
@@ -114,7 +113,7 @@ export default function App() {
         />
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Employee Navbar */}
           <EmployeeNavbar 
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -122,8 +121,8 @@ export default function App() {
           />
 
           {/* Page Content */}
-          <main className="hide-scrollbar flex-1 overflow-y-auto">
-            <div className="container mx-auto px-4 py-8">
+          <main className="hide-scrollbar flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+            <div className="container mx-auto min-w-0 px-4 py-8">
               {renderEmployeePage()}
             </div>
           </main>

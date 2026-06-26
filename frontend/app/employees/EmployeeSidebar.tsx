@@ -12,8 +12,10 @@ import {
   User,
   Wallet,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '../components/ui/button';
+import { getCurrentEmployeeId } from '@/services/tasks';
+import { getEmployeePortalIdentity } from './hrmSync';
 
 interface EmployeeSidebarProps {
   isOpen: boolean;
@@ -40,6 +42,7 @@ const menuItems: MenuItem[] = [
 ];
 
 export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate }: EmployeeSidebarProps) {
+  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -136,8 +139,8 @@ export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate }: Em
                     <User className="size-5" />
                   </div>
                   <div className="flex-1 text-sm">
-                    <p className="font-semibold">Nguyễn Văn A</p>
-                    <p className="text-xs text-white/70">Developer - IT</p>
+                    <p className="font-semibold">{employeeIdentity.employeeName}</p>
+                    <p className="text-xs text-white/70">Developer - {employeeIdentity.department}</p>
                   </div>
                 </div>
               </div>
