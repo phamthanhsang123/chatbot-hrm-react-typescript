@@ -8,20 +8,15 @@ import {
   BrainCircuit,
   CalendarDays,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   Download,
   Edit3,
   FileCheck2,
-  Filter,
-  LayoutList,
   Plus,
   RefreshCcw,
   Search,
-  Send,
   TimerReset,
   UserRound,
-  Users,
   XCircle,
 } from 'lucide-react';
 import { Badge } from './ui/badge';
@@ -54,8 +49,7 @@ interface ManagerTasksProps {
   departmentName: string;
 }
 
-type QuickFilter = 'all' | 'review' | 'overdue' | 'revision' | 'open' | 'completed';
-type DeadlineFilter = 'all' | 'today' | 'week' | 'overdue';
+type QuickFilter = 'all' | 'need-review' | 'active' | 'done' | 'issue';
 
 const emptyForm = {
   employeeId: '',
@@ -66,14 +60,14 @@ const emptyForm = {
   expectedScore: '100',
 };
 
-const statusMeta: Record<TaskStatus, { label: string; className: string; leftBorder: string }> = {
-  NEW: { label: 'Mới giao', className: 'bg-slate-100 text-slate-700 hover:bg-slate-100', leftBorder: 'border-l-slate-300' },
-  IN_PROGRESS: { label: 'Đang làm', className: 'bg-blue-100 text-blue-700 hover:bg-blue-100', leftBorder: 'border-l-blue-400' },
-  SUBMITTED: { label: 'Chờ duyệt', className: 'bg-amber-100 text-amber-700 hover:bg-amber-100', leftBorder: 'border-l-amber-400' },
-  APPROVED: { label: 'Hoàn thành', className: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100', leftBorder: 'border-l-emerald-400' },
-  REJECTED: { label: 'Từ chối', className: 'bg-red-100 text-red-700 hover:bg-red-100', leftBorder: 'border-l-red-400' },
-  REVISION_REQUIRED: { label: 'Cần sửa', className: 'bg-orange-100 text-orange-700 hover:bg-orange-100', leftBorder: 'border-l-orange-400' },
-  OVERDUE: { label: 'Quá hạn', className: 'bg-rose-100 text-rose-700 hover:bg-rose-100', leftBorder: 'border-l-rose-400' },
+const statusMeta: Record<TaskStatus, { label: string; className: string }> = {
+  NEW: { label: 'Mới giao', className: 'bg-slate-100 text-slate-700 hover:bg-slate-100' },
+  IN_PROGRESS: { label: 'Đang làm', className: 'bg-blue-100 text-blue-700 hover:bg-blue-100' },
+  SUBMITTED: { label: 'Chờ duyệt', className: 'bg-amber-100 text-amber-700 hover:bg-amber-100' },
+  APPROVED: { label: 'Hoàn thành', className: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' },
+  REJECTED: { label: 'Từ chối', className: 'bg-red-100 text-red-700 hover:bg-red-100' },
+  REVISION_REQUIRED: { label: 'Cần sửa', className: 'bg-orange-100 text-orange-700 hover:bg-orange-100' },
+  OVERDUE: { label: 'Quá hạn', className: 'bg-rose-100 text-rose-700 hover:bg-rose-100' },
 };
 
 const priorityMeta: Record<TaskPriority, string> = {
@@ -82,15 +76,6 @@ const priorityMeta: Record<TaskPriority, string> = {
   HIGH: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
   CRITICAL: 'bg-red-100 text-red-700 hover:bg-red-100',
 };
-
-const quickFilters: Array<{ id: QuickFilter; label: string }> = [
-  { id: 'all', label: 'Tất cả' },
-  { id: 'review', label: 'Review Queue' },
-  { id: 'overdue', label: 'Quá hạn' },
-  { id: 'revision', label: 'Cần sửa' },
-  { id: 'open', label: 'Đang mở' },
-  { id: 'completed', label: 'Hoàn thành' },
-];
 
 function currentPeriodValue() {
   const now = new Date();
@@ -171,19 +156,39 @@ function canEditTask(task: TaskApiItem) {
   return task.status !== 'APPROVED' && task.status !== 'REJECTED';
 }
 
+function progressColor(value: number) {
+  if (value <= 30) return 'text-red-700';
+  if (value <= 70) return 'text-orange-700';
+  return 'text-emerald-700';
+}
+
+function progressBarColor(task: TaskApiItem) {
+  if (task.status === 'APPROVED') return 'bg-emerald-500';
+  if (task.status === 'SUBMITTED') return 'bg-violet-500';
+  if (task.status === 'REVISION_REQUIRED') return 'bg-amber-500';
+  if (task.status === 'REJECTED' || isTaskOverdue(task)) return 'bg-red-500';
+  if (task.progressPercent <= 30) return 'bg-red-500';
+  if (task.progressPercent <= 70) return 'bg-blue-500';
+  return 'bg-emerald-500';
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const initials = parts.slice(-2).map((part) => part.charAt(0)).join('');
+  return initials.toUpperCase() || 'NV';
+}
+
 export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksProps) {
   const [manager, setManager] = useState<EmployeeApiItem | null>(null);
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
   const [tasks, setTasks] = useState<TaskApiItem[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>(mode === 'review' ? 'review' : 'all');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(mode === 'review' ? 'need-review' : 'all');
   const [search, setSearch] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
-  const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all');
-  const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>('all');
   const [period, setPeriod] = useState(currentPeriodValue());
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskApiItem | null>(null);
@@ -225,11 +230,12 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
       }
 
       const taskList = await fetchManagerTasks(currentManager.id, parsePeriod(period));
+      const visibleTasks = taskList.filter((task) => task.departmentName === departmentName && isTaskInPeriod(task, period));
+
       setManager(currentManager);
       setEmployees(employeeList);
       setTasks(taskList);
 
-      const visibleTasks = taskList.filter((task) => task.departmentName === departmentName && isTaskInPeriod(task, period));
       if (visibleTasks.length > 0 && (!selectedTaskId || !visibleTasks.some((task) => task.id === selectedTaskId))) {
         const firstPending = visibleTasks.find((task) => task.status === 'SUBMITTED');
         setSelectedTaskId((firstPending || visibleTasks[0]).id);
@@ -249,14 +255,14 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   }, [period]);
 
   useEffect(() => {
-    if (selectedTask) {
-      setReviewDraft({
-        qualityScore: selectedTask.latestReview?.qualityScore || 90,
-        deadlineScore: selectedTask.latestReview?.deadlineScore || 90,
-        decision: 'APPROVED',
-        comment: selectedTask.latestReview?.comment || '',
-      });
-    }
+    if (!selectedTask) return;
+
+    setReviewDraft({
+      qualityScore: selectedTask.latestReview?.qualityScore || 90,
+      deadlineScore: selectedTask.latestReview?.deadlineScore || 90,
+      decision: 'APPROVED',
+      comment: selectedTask.latestReview?.comment || '',
+    });
   }, [selectedTask?.id]);
 
   const scopedTasks = useMemo(() => {
@@ -264,59 +270,40 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   }, [departmentName, period, tasks]);
 
   const filteredTasks = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+
     return scopedTasks.filter((task) => {
-      const keyword = search.trim().toLowerCase();
       const matchesSearch = !keyword || `${task.title} ${task.description || ''} ${task.employeeName}`.toLowerCase().includes(keyword);
       const matchesEmployee = employeeFilter === 'all' || String(task.employeeId) === employeeFilter;
       const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
-      const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
-      const remaining = daysUntil(task.deadline);
-      const matchesDeadline =
-        deadlineFilter === 'all' ||
-        (deadlineFilter === 'today' && remaining === 0) ||
-        (deadlineFilter === 'week' && remaining >= 0 && remaining <= 7) ||
-        (deadlineFilter === 'overdue' && isTaskOverdue(task));
       const matchesQuick =
         quickFilter === 'all' ||
-        (quickFilter === 'review' && task.status === 'SUBMITTED') ||
-        (quickFilter === 'overdue' && isTaskOverdue(task)) ||
-        (quickFilter === 'revision' && task.status === 'REVISION_REQUIRED') ||
-        (quickFilter === 'open' && isOpenTask(task)) ||
-        (quickFilter === 'completed' && task.status === 'APPROVED');
+        (quickFilter === 'need-review' && task.status === 'SUBMITTED') ||
+        (quickFilter === 'active' && isOpenTask(task)) ||
+        (quickFilter === 'done' && task.status === 'APPROVED') ||
+        (quickFilter === 'issue' && (isTaskOverdue(task) || task.status === 'REVISION_REQUIRED' || task.status === 'REJECTED'));
 
-      return matchesSearch && matchesEmployee && matchesStatus && matchesPriority && matchesDeadline && matchesQuick;
+      return matchesSearch && matchesEmployee && matchesStatus && matchesQuick;
     });
-  }, [deadlineFilter, employeeFilter, priorityFilter, quickFilter, scopedTasks, search, statusFilter]);
-
-  const groups = useMemo(() => {
-    const map = new Map<number, { employee: EmployeeApiItem | null; employeeId: number; employeeName: string; departmentName?: string | null; tasks: TaskApiItem[] }>();
-
-    filteredTasks.forEach((task) => {
-      const employee = employees.find((item) => item.id === task.employeeId) || null;
-      const group = map.get(task.employeeId) || {
-        employee,
-        employeeId: task.employeeId,
-        employeeName: task.employeeName,
-        departmentName: task.departmentName,
-        tasks: [],
-      };
-
-      group.tasks.push(task);
-      map.set(task.employeeId, group);
-    });
-
-    return Array.from(map.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'vi'));
-  }, [employees, filteredTasks]);
+  }, [employeeFilter, quickFilter, scopedTasks, search, statusFilter]);
 
   const kpis = useMemo(() => {
     const total = scopedTasks.length;
-    const open = scopedTasks.filter(isOpenTask).length;
-    const submitted = scopedTasks.filter((task) => task.status === 'SUBMITTED').length;
-    const approved = scopedTasks.filter((task) => task.status === 'APPROVED').length;
-    const overdue = scopedTasks.filter(isTaskOverdue).length;
+    const needReview = scopedTasks.filter((task) => task.status === 'SUBMITTED').length;
+    const active = scopedTasks.filter(isOpenTask).length;
+    const done = scopedTasks.filter((task) => task.status === 'APPROVED').length;
+    const issue = scopedTasks.filter((task) => isTaskOverdue(task) || task.status === 'REVISION_REQUIRED' || task.status === 'REJECTED').length;
     const avgProgress = total ? Math.round(scopedTasks.reduce((sum, task) => sum + task.progressPercent, 0) / total) : 0;
-    return { total, open, submitted, approved, overdue, avgProgress };
+    return { total, needReview, active, done, issue, avgProgress };
   }, [scopedTasks]);
+
+  const quickFilters: Array<{ id: QuickFilter; label: string; count: number }> = [
+    { id: 'all', label: 'Tất cả', count: kpis.total },
+    { id: 'need-review', label: 'Chờ duyệt', count: kpis.needReview },
+    { id: 'active', label: 'Đang làm', count: kpis.active },
+    { id: 'done', label: 'Hoàn thành', count: kpis.done },
+    { id: 'issue', label: 'Cần sửa', count: kpis.issue },
+  ];
 
   const updateTaskForm = (key: keyof typeof taskForm, value: string) => {
     setTaskForm((current) => ({ ...current, [key]: value }));
@@ -411,10 +398,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     const selectedPeriod = parsePeriod(period);
 
     try {
-      const review = await generateCompetencyReview(manager.id, employeeId, {
-        month: selectedPeriod.month,
-        year: selectedPeriod.year,
-      });
+      const review = await generateCompetencyReview(manager.id, employeeId, selectedPeriod);
       setAiReview(review);
       setAiOpen(true);
     } catch (error) {
@@ -425,18 +409,18 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
 
   const exportReport = () => {
     const rows = [
-      ['Employee', 'Task', 'Status', 'Priority', 'Deadline', 'Progress', 'Expected Score'],
+      ['Nhan vien', 'Task', 'Trang thai', 'Uu tien', 'Deadline', 'Tien do', 'Diem ky vong'],
       ...filteredTasks.map((task) => [
         task.employeeName,
         task.title,
-        task.status,
+        statusMeta[task.status].label,
         task.priority,
         formatDate(task.deadline),
         `${task.progressPercent}%`,
         String(task.expectedScore),
       ]),
     ];
-    const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -447,24 +431,17 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   };
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm">
-            <ClipboardList className="size-6" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-950">Quản lý Task Phòng Ban</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Theo dõi task theo kỳ đánh giá, review queue và AI năng lực không bị lẫn dữ liệu cũ.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-950">Quản lý task</h1>
+          <p className="mt-2 text-sm text-slate-500">Giao việc, theo dõi tiến độ và duyệt kết quả theo kỳ đánh giá.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-[180px] bg-white">
-              <CalendarDays className="mr-2 size-4 text-slate-500" />
+            <SelectTrigger className="h-10 w-[180px] rounded-2xl bg-white shadow-sm">
+              <CalendarDays className="mr-2 size-4 text-blue-600" />
               <SelectValue placeholder="Kỳ đánh giá" />
             </SelectTrigger>
             <SelectContent>
@@ -476,141 +453,133 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
             </SelectContent>
           </Select>
           {mode === 'manage' && (
-            <Button onClick={openCreateDialog} disabled={!manager}>
+            <Button className="h-10 rounded-2xl bg-blue-600 px-5 shadow-sm hover:bg-blue-700" onClick={openCreateDialog} disabled={!manager}>
               <Plus className="mr-2 size-4" />
-              Giao Task
+              Giao task
             </Button>
           )}
-          <Button variant="outline" onClick={loadData} disabled={loading}>
-            <RefreshCcw className="mr-2 size-4" />
-            Refresh
+          <Button variant="outline" size="icon" className="h-10 w-10 rounded-full bg-white shadow-sm" onClick={loadData} disabled={loading} aria-label="Làm mới">
+            <RefreshCcw className="size-4" />
           </Button>
-          <Button variant="outline" onClick={exportReport} disabled={filteredTasks.length === 0}>
-            <Download className="mr-2 size-4" />
-            Export Report
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 rounded-full bg-white shadow-sm"
+            onClick={exportReport}
+            disabled={filteredTasks.length === 0}
+            aria-label="Xuất báo cáo"
+          >
+            <Download className="size-4" />
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <KpiCard icon={<ClipboardList className="size-6" />} label={`Task đang mở ${formatPeriod(period)}`} value={kpis.open} tone="blue" />
-        <KpiCard icon={<FileCheck2 className="size-6" />} label="Chờ duyệt" value={kpis.submitted} tone="amber" />
-        <KpiCard icon={<CheckCircle2 className="size-6" />} label="Đã hoàn thành" value={kpis.approved} tone="emerald" />
-        <KpiCard icon={<AlertTriangle className="size-6" />} label="Quá hạn" value={kpis.overdue} tone="red" />
-        <KpiCard icon={<TimerReset className="size-6" />} label="Tiến độ TB" value={`${kpis.avgProgress}%`} tone="slate" />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <KpiCard icon={<ClipboardList className="size-5" />} label="Tổng task" value={kpis.total} />
+        <KpiCard icon={<FileCheck2 className="size-5" />} label="Cần duyệt" value={kpis.needReview} tone="amber" />
+        <KpiCard icon={<TimerReset className="size-5" />} label="Đang làm" value={kpis.active} tone="blue" />
+        <KpiCard icon={<CheckCircle2 className="size-5" />} label="Hoàn thành" value={kpis.done} tone="emerald" />
+        <KpiCard icon={<AlertTriangle className="size-5" />} label="Có vấn đề" value={kpis.issue} tone="red" />
       </div>
 
-      <Card className="rounded-2xl p-4 shadow-sm">
+      <Card className="rounded-2xl border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
             {quickFilters.map((filter) => (
               <button
                 key={filter.id}
                 onClick={() => setQuickFilter(filter.id)}
-                className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-                  quickFilter === filter.id ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                aria-label={`${filter.label}: ${filter.count} task`}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  quickFilter === filter.id ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 {filter.label}
               </button>
             ))}
-            <Button className="ml-auto" variant="ghost" size="sm" onClick={() => setShowAdvancedFilters((value) => !value)}>
-              <Filter className="mr-2 size-4" />
-              Advanced
-            </Button>
           </div>
 
-          {showAdvancedFilters && (
-            <div className="grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-2 xl:grid-cols-5">
-              <div className="relative xl:col-span-2">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm task, mô tả, nhân viên..." className="pl-9" />
-              </div>
-              <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Nhân viên" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả nhân viên</SelectItem>
-                  {departmentEmployees.map((employee) => (
-                    <SelectItem key={employee.id} value={String(employee.id)}>
-                      {employee.fullName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as TaskStatus | 'all')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Trạng thái" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                  {Object.entries(statusMeta).map(([status, meta]) => (
-                    <SelectItem key={status} value={status}>
-                      {meta.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={priorityFilter} onValueChange={(value) => setPriorityFilter(value as TaskPriority | 'all')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Độ ưu tiên" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả ưu tiên</SelectItem>
-                  <SelectItem value="LOW">LOW</SelectItem>
-                  <SelectItem value="MEDIUM">MEDIUM</SelectItem>
-                  <SelectItem value="HIGH">HIGH</SelectItem>
-                  <SelectItem value="CRITICAL">CRITICAL</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={deadlineFilter} onValueChange={(value) => setDeadlineFilter(value as DeadlineFilter)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Deadline" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả deadline</SelectItem>
-                  <SelectItem value="today">Hạn hôm nay</SelectItem>
-                  <SelectItem value="week">Trong 7 ngày</SelectItem>
-                  <SelectItem value="overdue">Quá hạn</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tìm theo tên task hoặc nhân viên..."
+                className="h-10 rounded-2xl border-slate-200 bg-slate-50 pl-9"
+              />
             </div>
-          )}
+            <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+              <SelectTrigger className="h-10 rounded-2xl bg-white">
+                <SelectValue placeholder="Nhân viên" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả nhân viên</SelectItem>
+                {departmentEmployees.map((employee) => (
+                  <SelectItem key={employee.id} value={String(employee.id)}>
+                    {employee.fullName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as TaskStatus | 'all')}>
+              <SelectTrigger className="h-10 rounded-2xl bg-white">
+                <SelectValue placeholder="Trạng thái" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                {Object.entries(statusMeta).map(([status, meta]) => (
+                  <SelectItem key={status} value={status}>
+                    {meta.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </Card>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-4">
-          {loading ? (
-            <Card className="rounded-2xl p-8 text-center text-slate-500 shadow-sm">Đang tải task từ API...</Card>
-          ) : !manager ? (
-            <Card className="rounded-2xl p-8 text-center text-slate-500 shadow-sm">Không tìm thấy Manager theo tài khoản đăng nhập.</Card>
-          ) : groups.length === 0 ? (
-            <EmptyState onCreate={openCreateDialog} />
-          ) : (
-            groups.map((group) => (
-              <EmployeeGroup
-                key={group.employeeId}
-                group={group}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={setSelectedTaskId}
-                onAi={runAiEvaluation}
-              />
-            ))
-          )}
+      {loading ? (
+        <Card className="rounded-2xl border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Đang tải task từ API...</Card>
+      ) : !manager ? (
+        <Card className="rounded-2xl border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Không tìm thấy Manager theo tài khoản đăng nhập.</Card>
+      ) : filteredTasks.length === 0 ? (
+        <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+          <EmptyState onCreate={openCreateDialog} />
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {filteredTasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              selected={selectedTaskId === task.id}
+              departmentName={departmentName}
+              onSelect={() => {
+                setSelectedTaskId(task.id);
+                setDetailOpen(true);
+              }}
+              onEdit={() => openEditDialog(task)}
+              onAi={() => runAiEvaluation(task.employeeId)}
+            />
+          ))}
         </div>
+      )}
 
-        <TaskDetailPanel
-          mode={mode}
-          task={selectedTask}
-          reviewDraft={reviewDraft}
-          onReviewDraftChange={setReviewDraft}
-          onEdit={openEditDialog}
-          onSubmitReview={submitReview}
-          onAi={runAiEvaluation}
-        />
-      </div>
+      <TaskDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        mode={mode}
+        task={selectedTask}
+        reviewDraft={reviewDraft}
+        onReviewDraftChange={setReviewDraft}
+        onEdit={(task) => {
+          setDetailOpen(false);
+          openEditDialog(task);
+        }}
+        onSubmitReview={submitReview}
+        onAi={runAiEvaluation}
+      />
 
       <TaskFormDialog
         open={taskDialogOpen}
@@ -634,95 +603,139 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   );
 }
 
-function EmployeeGroup({
-  group,
-  selectedTaskId,
-  onSelectTask,
+function deadlineLabel(task: TaskApiItem) {
+  if (task.status === 'APPROVED') return 'Đã hoàn thành';
+  const days = daysUntil(task.deadline);
+  if (days < 0) return `Quá hạn ${Math.abs(days)} ngày`;
+  if (days === 0) return 'Hạn hôm nay';
+  return `Còn ${days} ngày`;
+}
+
+function TaskRow({
+  task,
+  selected,
+  departmentName,
+  onSelect,
+  onEdit,
   onAi,
 }: {
-  group: { employee: EmployeeApiItem | null; employeeId: number; employeeName: string; departmentName?: string | null; tasks: TaskApiItem[] };
-  selectedTaskId: number | null;
-  onSelectTask: (taskId: number) => void;
-  onAi: (employeeId: number) => void;
+  task: TaskApiItem;
+  selected: boolean;
+  departmentName: string;
+  onSelect: () => void;
+  onEdit: () => void;
+  onAi: () => void;
 }) {
-  const completed = group.tasks.filter((task) => task.status === 'APPROVED').length;
-  const active = group.tasks.filter(isOpenTask).length;
-  const overdue = group.tasks.filter(isTaskOverdue).length;
-  const avgProgress = group.tasks.length ? Math.round(group.tasks.reduce((sum, task) => sum + task.progressPercent, 0) / group.tasks.length) : 0;
-  const reviewedTasks = group.tasks.filter((task) => task.latestReview);
-  const averageScore = reviewedTasks.length
-    ? Math.round(reviewedTasks.reduce((sum, task) => sum + (task.latestReview?.qualityScore || 0), 0) / reviewedTasks.length)
-    : 0;
+  const deadlineTone = (() => {
+    if (task.status === 'APPROVED') return 'text-emerald-600';
+    const days = daysUntil(task.deadline);
+    if (days < 0) return 'text-red-600';
+    if (days <= 2) return 'text-orange-600';
+    return 'text-slate-500';
+  })();
 
   return (
-    <Card className="overflow-hidden rounded-2xl shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-blue-600 font-semibold text-white shadow-sm">
-            {group.employeeName.charAt(0).toUpperCase()}
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`cursor-pointer rounded-2xl border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md ${
+        selected ? 'border-blue-200 bg-blue-50/60' : ''
+      }`}
+    >
+      <div className="grid gap-4 lg:grid-cols-[34px_minmax(0,1fr)_160px_88px] lg:items-center">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+          {getInitials(task.employeeName)}
+        </div>
+
+        <div className="min-w-0">
+          <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
+            <p className="min-w-0 truncate text-base font-bold text-slate-950">{task.title}</p>
+            <Badge className={`${priorityMeta[task.priority]} rounded px-2 py-0.5 text-xs font-semibold tracking-normal`}>{task.priority}</Badge>
+            <Badge className={`${statusMeta[task.status].className} gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium`}>
+              <span className="size-1.5 rounded-full bg-current" />
+              {statusMeta[task.status].label}
+            </Badge>
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-950">{group.employeeName}</h2>
-            <p className="text-sm text-slate-500">{group.departmentName || group.employee?.departmentName || 'Chưa có phòng ban'}</p>
+          <p className="line-clamp-2 text-sm leading-5 text-slate-500">{task.description || 'Không có mô tả'}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500">
+            <TaskMeta icon={<UserRound className="size-3.5" />} value={task.employeeName} strong />
+            <TaskMeta icon={<ClipboardList className="size-3.5" />} value={task.departmentName || departmentName} />
+            <TaskMeta icon={<CalendarDays className="size-3.5" />} value={formatDate(task.deadline)} />
+            <TaskMeta icon={<TimerReset className="size-3.5" />} value={deadlineLabel(task)} className={deadlineTone} />
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4 lg:w-[520px]">
-          <MiniMetric label="Tổng task" value={group.tasks.length} />
-          <MiniMetric label="Hoàn thành" value={completed} />
-          <MiniMetric label="Đang làm" value={active} />
-          <MiniMetric label="Điểm TB" value={averageScore || '-'} />
+        <div className="w-full lg:w-40">
+          <div className="mb-2 flex items-center justify-between text-xs">
+            <span className="text-slate-400">Tiến độ</span>
+            <span className={`font-bold ${progressColor(task.progressPercent)}`}>{task.progressPercent}%</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div className={`h-full rounded-full transition-all ${progressBarColor(task)}`} style={{ width: `${task.progressPercent}%` }} />
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {overdue > 0 && <Badge className="bg-red-100 text-red-700 hover:bg-red-100">{overdue} quá hạn</Badge>}
-          <Button variant="outline" onClick={() => onAi(group.employeeId)}>
-            <BrainCircuit className="mr-2 size-4" />
-            AI Đánh Giá
+        <div className="flex items-center gap-2 lg:justify-end">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="rounded-xl bg-white text-slate-500 hover:text-blue-700"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit();
+            }}
+            disabled={!canEditTask(task)}
+            aria-label="Sửa task"
+          >
+            <Edit3 className="size-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="rounded-xl bg-white text-blue-600 hover:text-blue-700"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAi();
+            }}
+            aria-label="AI đánh giá"
+          >
+            <BrainCircuit className="size-4" />
           </Button>
         </div>
-      </div>
-
-      <div className="space-y-2 p-3">
-        {group.tasks.map((task) => (
-          <button
-            key={task.id}
-            onClick={() => onSelectTask(task.id)}
-            className={`w-full rounded-2xl border-l-4 p-4 text-left transition hover:bg-slate-50 ${
-              selectedTaskId === task.id ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-white'
-            } ${statusMeta[task.status].leftBorder}`}
-          >
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-slate-950">{task.title}</h3>
-                  <Badge className={priorityMeta[task.priority]}>{task.priority}</Badge>
-                  <Badge className={statusMeta[task.status].className}>{statusMeta[task.status].label}</Badge>
-                </div>
-                <p className="line-clamp-1 text-sm text-slate-500">{task.description || 'Không có mô tả task.'}</p>
-              </div>
-              <div className="grid shrink-0 grid-cols-3 gap-3 text-sm lg:w-[360px]">
-                <TaskBrief label="Deadline" value={formatDate(task.deadline)} />
-                <TaskBrief label="Progress" value={`${task.progressPercent}%`} />
-                <TaskBrief label="Review" value={task.latestReview?.comment || 'Chưa có'} />
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div className="border-t border-slate-100 px-5 py-4">
-        <div className="mb-2 flex justify-between text-sm">
-          <span className="font-medium text-slate-700">Workload / Team Progress</span>
-          <span className="font-semibold text-slate-950">{avgProgress}%</span>
-        </div>
-        <Progress value={avgProgress} />
       </div>
     </Card>
   );
 }
 
-function TaskDetailPanel({
+function TaskMeta({
+  icon,
+  value,
+  strong = false,
+  className = 'text-slate-500',
+}: {
+  icon: ReactNode;
+  value: string;
+  strong?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={`inline-flex min-w-0 items-center gap-1.5 ${className}`}>
+      {icon}
+      <span className={`truncate ${strong ? 'font-semibold text-slate-800' : ''}`}>{value}</span>
+    </span>
+  );
+}
+
+function TaskDetailDialog({
+  open,
+  onOpenChange,
   mode,
   task,
   reviewDraft,
@@ -731,6 +744,8 @@ function TaskDetailPanel({
   onSubmitReview,
   onAi,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   mode: 'manage' | 'review';
   task: TaskApiItem | null;
   reviewDraft: ReviewTaskPayload;
@@ -741,73 +756,63 @@ function TaskDetailPanel({
 }) {
   if (!task) {
     return (
-      <Card className="sticky top-6 hidden rounded-2xl p-8 text-center text-slate-500 shadow-sm xl:block">
-        Chọn một task để xem chi tiết.
-      </Card>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Chi tiết task</DialogTitle>
+            <DialogDescription>Chọn một task trong danh sách để xem chi tiết.</DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     );
   }
 
-  const remaining = daysUntil(task.deadline);
+  const canReview = task.status === 'SUBMITTED';
 
   return (
-    <Card className="sticky top-6 max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl shadow-md">
-      <div className="border-b border-slate-100 p-5">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto p-0">
+        <DialogHeader className="border-b border-slate-100 p-5 text-left">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Task Detail Drawer</p>
-            <h2 className="mt-1 text-xl font-bold text-slate-950">{task.title}</h2>
+            <p className="text-xs font-semibold uppercase text-blue-600">Chi tiết task</p>
+            <DialogTitle className="mt-1 text-xl font-bold text-slate-950">{task.title}</DialogTitle>
           </div>
-          <ChevronRight className="mt-1 size-5 text-slate-400" />
-        </div>
-        <div className="flex flex-wrap gap-2">
           <Badge className={statusMeta[task.status].className}>{statusMeta[task.status].label}</Badge>
-          <Badge className={priorityMeta[task.priority]}>{task.priority}</Badge>
-          {isTaskOverdue(task) && <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Quá hạn {Math.abs(remaining)} ngày</Badge>}
         </div>
-      </div>
+        <DialogDescription className="text-sm leading-6 text-slate-600">{task.description || 'Task này chưa có mô tả.'}</DialogDescription>
+        </DialogHeader>
 
-      <div className="space-y-5 p-5">
-        <p className="text-sm leading-6 text-slate-600">{task.description || 'Không có mô tả task.'}</p>
-
-        <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-4 p-5">
+        <div className="grid grid-cols-2 gap-3 text-sm">
           <Info icon={<UserRound className="size-4" />} label="Nhân viên" value={task.employeeName} />
           <Info icon={<CalendarDays className="size-4" />} label="Deadline" value={formatDate(task.deadline)} />
-          <Info icon={<TimerReset className="size-4" />} label="Còn lại" value={remaining < 0 ? `Quá hạn ${Math.abs(remaining)} ngày` : `${remaining} ngày`} />
-          <Info icon={<LayoutList className="size-4" />} label="Expected Score" value={String(task.expectedScore)} />
+          <Info icon={<TimerReset className="size-4" />} label="Còn lại" value={deadlineLabel(task)} />
+          <Info icon={<ClipboardList className="size-4" />} label="Điểm kỳ vọng" value={String(task.expectedScore)} />
         </div>
 
         <div>
-          <div className="mb-2 flex justify-between text-sm">
-            <span className="font-medium text-slate-700">Current Progress</span>
-            <span className="font-semibold text-slate-950">{task.progressPercent}%</span>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-900">Tiến độ</p>
+            <p className={`text-sm font-bold ${progressColor(task.progressPercent)}`}>{task.progressPercent}%</p>
           </div>
-          <Progress value={task.progressPercent} />
+          <Progress value={task.progressPercent} className="h-2" />
         </div>
 
-        <ActivityBlock task={task} />
-
-        <div className="grid gap-2">
-          {mode === 'manage' && (
-            <Button variant="outline" onClick={() => onEdit(task)} disabled={!canEditTask(task)}>
-              <Edit3 className="mr-2 size-4" />
-              Chỉnh sửa task
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => onAi(task.employeeId)}>
-            <BrainCircuit className="mr-2 size-4" />
-            AI Đánh Giá Năng Lực
-          </Button>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="mb-1 text-sm font-semibold text-slate-900">Phản hồi gần nhất</p>
+          <p className="text-sm text-slate-600">{task.latestReview?.comment || 'Chưa có phản hồi từ Manager.'}</p>
         </div>
 
-        {task.status === 'SUBMITTED' ? (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
-            <div className="mb-3 flex items-center gap-2 font-semibold text-amber-900">
-              <FileCheck2 className="size-4" />
-              Review Panel
+        {canReview ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <FileCheck2 className="size-5 text-amber-700" />
+              <p className="font-semibold text-amber-900">Task đang chờ duyệt</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Quality Score</Label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Điểm chất lượng</Label>
                 <Input
                   type="number"
                   min={0}
@@ -816,8 +821,8 @@ function TaskDetailPanel({
                   onChange={(event) => onReviewDraftChange({ ...reviewDraft, qualityScore: Number(event.target.value) })}
                 />
               </div>
-              <div className="space-y-1">
-                <Label>Deadline Score</Label>
+              <div>
+                <Label>Điểm deadline</Label>
                 <Input
                   type="number"
                   min={0}
@@ -827,38 +832,52 @@ function TaskDetailPanel({
                 />
               </div>
             </div>
-            <div className="mt-3 space-y-1">
-              <Label>Comment</Label>
+            <div className="mt-3">
+              <Label>Nhận xét</Label>
               <Textarea
                 value={reviewDraft.comment || ''}
                 onChange={(event) => onReviewDraftChange({ ...reviewDraft, comment: event.target.value })}
-                placeholder="Nhận xét nghiệm thu task"
+                placeholder="Nhận xét ngắn gọn cho nhân viên"
               />
             </div>
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
               <Button onClick={() => onSubmitReview('APPROVED')}>
                 <CheckCircle2 className="mr-2 size-4" />
-                Approve
+                Duyệt
               </Button>
               <Button variant="outline" onClick={() => onSubmitReview('REVISION_REQUIRED')}>
-                <RefreshCcw className="mr-2 size-4" />
-                Revision Required
+                <AlertTriangle className="mr-2 size-4" />
+                Sửa lại
               </Button>
               <Button variant="destructive" onClick={() => onSubmitReview('REJECTED')}>
                 <XCircle className="mr-2 size-4" />
-                Reject
+                Từ chối
               </Button>
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-600">
-            {task.latestReview
-              ? `Latest review: Quality ${task.latestReview.qualityScore}/100, Deadline ${task.latestReview.deadlineScore}/100. ${task.latestReview.comment || ''}`
-              : 'Task chưa được gửi hoàn thành nên chưa có review panel.'}
+          <div className="rounded-2xl border border-slate-100 p-4 text-sm text-slate-500">
+            {task.status === 'APPROVED'
+              ? 'Task đã hoàn thành và được nghiệm thu.'
+              : 'Task chưa gửi hoàn thành nên chưa cần review.'}
           </div>
         )}
+
+        <div className="flex flex-wrap gap-2">
+          {mode === 'manage' && (
+            <Button variant="outline" onClick={() => onEdit(task)} disabled={!canEditTask(task)}>
+              <Edit3 className="mr-2 size-4" />
+              Chỉnh sửa
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => onAi(task.employeeId)}>
+            <BrainCircuit className="mr-2 size-4" />
+            AI đánh giá
+          </Button>
+        </div>
       </div>
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -883,16 +902,15 @@ function TaskFormDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-2xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editingTask ? 'Chỉnh sửa task' : 'Giao task mới'}</DialogTitle>
           <DialogDescription>
-            {editingTask ? 'Chỉnh sửa thông tin task khi task chưa đóng.' : 'Giao task cho nhân viên trong phòng ban qua API thật.'}
+            {editingTask ? 'Chỉnh sửa thông tin task khi task chưa đóng.' : 'Giao task cho nhân viên trong phòng ban.'}
           </DialogDescription>
         </DialogHeader>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
+        <div className="grid gap-4">
+          <div>
             <Label>Nhân viên</Label>
             <Select value={form.employeeId} onValueChange={(value) => onUpdateForm('employeeId', value)} disabled={Boolean(editingTask)}>
               <SelectTrigger>
@@ -901,52 +919,52 @@ function TaskFormDialog({
               <SelectContent>
                 {employees.map((employee) => (
                   <SelectItem key={employee.id} value={String(employee.id)}>
-                    {employee.fullName} - {employee.positionTitle || 'Chưa có chức vụ'}
+                    {employee.fullName}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2 md:col-span-2">
+          <div>
             <Label>Tên task</Label>
-            <Input value={form.title} onChange={(event) => onUpdateForm('title', event.target.value)} />
+            <Input value={form.title} onChange={(event) => onUpdateForm('title', event.target.value)} placeholder="Ví dụ: Hoàn thiện báo cáo tuần" />
           </div>
-          <div className="space-y-2 md:col-span-2">
+          <div>
             <Label>Mô tả</Label>
-            <Textarea value={form.description} onChange={(event) => onUpdateForm('description', event.target.value)} />
+            <Textarea value={form.description} onChange={(event) => onUpdateForm('description', event.target.value)} placeholder="Yêu cầu, tiêu chí hoàn thành..." />
           </div>
-          <div className="space-y-2">
-            <Label>Deadline</Label>
-            <Input type="date" value={form.deadline} onChange={(event) => onUpdateForm('deadline', event.target.value)} />
+          <div className="grid gap-3 md:grid-cols-3">
+            <div>
+              <Label>Deadline</Label>
+              <Input type="date" value={form.deadline} onChange={(event) => onUpdateForm('deadline', event.target.value)} />
+            </div>
+            <div>
+              <Label>Ưu tiên</Label>
+              <Select value={form.priority} onValueChange={(value) => onUpdateForm('priority', value as TaskPriority)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LOW">LOW</SelectItem>
+                  <SelectItem value="MEDIUM">MEDIUM</SelectItem>
+                  <SelectItem value="HIGH">HIGH</SelectItem>
+                  <SelectItem value="CRITICAL">CRITICAL</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Điểm kỳ vọng</Label>
+              <Input type="number" min={0} max={100} value={form.expectedScore} onChange={(event) => onUpdateForm('expectedScore', event.target.value)} />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>Độ ưu tiên</Label>
-            <Select value={form.priority} onValueChange={(value) => onUpdateForm('priority', value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="LOW">LOW</SelectItem>
-                <SelectItem value="MEDIUM">MEDIUM</SelectItem>
-                <SelectItem value="HIGH">HIGH</SelectItem>
-                <SelectItem value="CRITICAL">CRITICAL</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Hủy
+            </Button>
+            <Button onClick={onSave} disabled={saving}>
+              {saving ? 'Đang lưu...' : editingTask ? 'Lưu chỉnh sửa' : 'Giao task'}
+            </Button>
           </div>
-          <div className="space-y-2">
-            <Label>Điểm kỳ vọng</Label>
-            <Input type="number" min={0} max={100} value={form.expectedScore} onChange={(event) => onUpdateForm('expectedScore', event.target.value)} />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Hủy
-          </Button>
-          <Button onClick={onSave} disabled={saving}>
-            <Send className="mr-2 size-4" />
-            {saving ? 'Đang lưu...' : editingTask ? 'Lưu chỉnh sửa' : 'Giao task'}
-          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -956,40 +974,29 @@ function TaskFormDialog({
 function AiReviewDialog({ open, review, onOpenChange }: { open: boolean; review: AgenticCompetencyReviewApi | null; onOpenChange: (open: boolean) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl rounded-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>AI Đánh Giá Năng Lực</DialogTitle>
-          <DialogDescription>Kết quả được tạo từ task, review, chấm công và nghỉ phép hiện có.</DialogDescription>
+          <DialogTitle>AI đánh giá năng lực</DialogTitle>
+          <DialogDescription>Kết quả đánh giá theo kỳ đã chọn.</DialogDescription>
         </DialogHeader>
-
         {!review ? (
-          <div className="p-6 text-center text-slate-500">Chưa có dữ liệu đánh giá.</div>
+          <div className="py-8 text-center text-sm text-slate-500">Đang tạo đánh giá...</div>
         ) : (
-          <div className="space-y-5">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Nhân viên</p>
-              <p className="text-xl font-bold text-slate-950">{review.employeeName}</p>
-              <p className="text-sm text-slate-500">{review.departmentName}</p>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-5">
+              <AiScore label="Tổng" value={review.totalScore} />
+              <AiScore label="Task" value={review.taskPerformanceScore} />
+              <AiScore label="Chất lượng" value={review.qualitySkillScore} />
+              <AiScore label="Kỷ luật" value={review.disciplineResponsibilityScore} />
+              <AiScore label="Chuyên cần" value={review.attendanceScore} />
             </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <AiScore label="Điểm năng lực" value={review.totalScore} />
-              <AiScore label="Điểm KPI" value={review.taskPerformanceScore} />
-              <AiScore label="Điểm thái độ" value={review.disciplineResponsibilityScore} />
-              <AiScore label="Điểm deadline" value={review.qualitySkillScore} />
-              <AiScore label="Điểm hợp tác" value={review.attendanceScore} />
-              <AiScore label="Xếp loại" value={review.rating} />
+            <div className="rounded-2xl border border-slate-100 p-4">
+              <p className="mb-2 font-semibold text-slate-900">Nhận xét AI</p>
+              <p className="text-sm leading-6 text-slate-600">{review.aiSummary}</p>
             </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-100 p-4">
-                <p className="mb-2 font-semibold text-slate-900">Nhận xét AI</p>
-                <p className="text-sm leading-6 text-slate-600">{review.aiSummary}</p>
-              </div>
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                <p className="mb-2 font-semibold text-emerald-900">Khuyến nghị AI</p>
-                <p className="text-sm leading-6 text-emerald-900">{review.aiRecommendation}</p>
-              </div>
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+              <p className="mb-2 font-semibold text-emerald-900">Khuyến nghị AI</p>
+              <p className="text-sm leading-6 text-emerald-900">{review.aiRecommendation}</p>
             </div>
           </div>
         )}
@@ -998,88 +1005,51 @@ function AiReviewDialog({ open, review, onOpenChange }: { open: boolean; review:
   );
 }
 
-function ActivityBlock({ task }: { task: TaskApiItem }) {
-  const events = [
-    { title: 'Manager giao task', desc: `Deadline ${formatDate(task.deadline)}` },
-    { title: 'Employee cập nhật', desc: `Tiến độ hiện tại ${task.progressPercent}%` },
-    ...(task.status === 'SUBMITTED' || task.status === 'APPROVED' ? [{ title: 'Submit hoàn thành', desc: 'Đã gửi Manager duyệt' }] : []),
-    ...(task.latestReview ? [{ title: 'Manager phản hồi', desc: task.latestReview.comment || statusMeta[task.status].label }] : []),
-  ];
-
-  return (
-    <div className="rounded-2xl border border-slate-100 p-4">
-      <p className="mb-3 text-sm font-semibold text-slate-900">Activity</p>
-      <div className="space-y-3">
-        {events.map((event, index) => (
-          <div key={`${event.title}-${index}`} className="flex gap-3">
-            <div className="flex flex-col items-center">
-              <div className="size-2.5 rounded-full bg-blue-500" />
-              {index < events.length - 1 && <div className="mt-1 min-h-6 w-px flex-1 bg-slate-200" />}
-            </div>
-            <div className="-mt-1">
-              <p className="text-sm font-medium text-slate-900">{event.title}</p>
-              <p className="text-xs text-slate-500">{event.desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <Card className="rounded-2xl p-10 text-center shadow-sm">
-      <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
-        <ClipboardList className="size-7" />
+    <div className="p-10 text-center">
+      <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+        <ClipboardList className="size-6" />
       </div>
-      <h3 className="mt-4 text-lg font-semibold text-slate-950">Chưa có task nào trong bộ lọc này</h3>
-      <p className="mt-1 text-sm text-slate-500">Thử đổi bộ lọc hoặc giao task mới cho nhân viên.</p>
+      <h3 className="mt-4 text-lg font-semibold text-slate-950">Không có task phù hợp</h3>
+      <p className="mt-1 text-sm text-slate-500">Thử đổi bộ lọc hoặc giao task mới.</p>
       <Button className="mt-5" onClick={onCreate}>
         <Plus className="mr-2 size-4" />
         Giao task mới
       </Button>
-    </Card>
+    </div>
   );
 }
 
-function KpiCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number | string; tone: 'blue' | 'amber' | 'emerald' | 'red' | 'slate' }) {
+function KpiCard({
+  icon,
+  label,
+  value,
+  tone = 'slate',
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number | string;
+  tone?: 'slate' | 'blue' | 'amber' | 'emerald' | 'red';
+}) {
   const toneClass = {
-    blue: 'bg-blue-50 text-blue-700',
-    amber: 'bg-amber-50 text-amber-700',
-    emerald: 'bg-emerald-50 text-emerald-700',
-    red: 'bg-red-50 text-red-700',
-    slate: 'bg-slate-100 text-slate-700',
+    slate: 'bg-slate-100 text-slate-600',
+    blue: 'bg-blue-100 text-blue-700',
+    amber: 'bg-violet-100 text-violet-700',
+    emerald: 'bg-emerald-100 text-emerald-700',
+    red: 'bg-amber-100 text-amber-700',
   }[tone];
 
   return (
-    <Card className="rounded-2xl p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500">{label}</p>
-          <p className="mt-1 text-3xl font-bold text-slate-950">{value}</p>
+    <Card className="rounded-2xl border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className={`flex size-10 shrink-0 items-center justify-center rounded-2xl ${toneClass}`}>{icon}</div>
+        <div className="min-w-0">
+          <p className="truncate text-sm text-slate-500">{label}</p>
+          <p className="mt-1 text-2xl font-bold leading-none text-slate-950">{value}</p>
         </div>
-        <div className={`flex size-11 items-center justify-center rounded-2xl ${toneClass}`}>{icon}</div>
       </div>
     </Card>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-2xl bg-white px-3 py-2 shadow-sm">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-lg font-bold text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function TaskBrief({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="truncate font-medium text-slate-900">{value}</p>
-    </div>
   );
 }
 
