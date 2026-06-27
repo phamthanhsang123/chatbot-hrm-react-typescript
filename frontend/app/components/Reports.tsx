@@ -2,6 +2,7 @@
 import { FileText, Download, Calendar, TrendingUp, Plus, Filter, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import {
@@ -128,63 +129,63 @@ export function Reports() {
       </div>
 
       {/* Report Templates */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
         <Card 
-          className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg hover:scale-105 transition-transform cursor-pointer"
+          className="cursor-pointer !gap-3 border-gray-200 !p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/50"
           onClick={() => handleGenerateReport('HR')}
         >
-          <div className="flex flex-col items-center text-center">
-            <div className="size-16 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm mb-4">
-              <FileText className="size-8" />
+          <div className="flex flex-col items-center text-center text-gray-900">
+            <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <FileText className="size-5" />
             </div>
             <h3 className="font-semibold text-lg">Báo cáo nhân sự</h3>
-            <p className="text-sm text-blue-100 mt-1">Tổng quan nhân sự</p>
+            <p className="mt-1 text-sm text-gray-500">Tổng quan nhân sự</p>
           </div>
         </Card>
 
         <Card 
-          className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-lg hover:scale-105 transition-transform cursor-pointer"
+          className="cursor-pointer !gap-3 border-gray-200 !p-4 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/50"
           onClick={() => handleGenerateReport('Salary')}
         >
-          <div className="flex flex-col items-center text-center">
-            <div className="size-16 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm mb-4">
-              💰
+          <div className="flex flex-col items-center text-center text-gray-900">
+            <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <Download className="size-5" />
             </div>
             <h3 className="font-semibold text-lg">Báo cáo lương</h3>
-            <p className="text-sm text-green-100 mt-1">Chi tiết lương thưởng</p>
+            <p className="mt-1 text-sm text-gray-500">Chi tiết lương thưởng</p>
           </div>
         </Card>
 
         <Card 
-          className="p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:scale-105 transition-transform cursor-pointer"
+          className="cursor-pointer !gap-3 border-gray-200 !p-4 shadow-sm transition hover:border-violet-200 hover:bg-violet-50/50"
           onClick={() => handleGenerateReport('Performance')}
         >
-          <div className="flex flex-col items-center text-center">
-            <div className="size-16 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm mb-4">
-              <TrendingUp className="size-8" />
+          <div className="flex flex-col items-center text-center text-gray-900">
+            <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+              <TrendingUp className="size-5" />
             </div>
             <h3 className="font-semibold text-lg">Báo cáo hiệu suất</h3>
-            <p className="text-sm text-purple-100 mt-1">Đánh giá KPI</p>
+            <p className="mt-1 text-sm text-gray-500">Đánh giá KPI</p>
           </div>
         </Card>
 
         <Card 
-          className="p-6 bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0 shadow-lg hover:scale-105 transition-transform cursor-pointer"
+          className="cursor-pointer !gap-3 border-gray-200 !p-4 shadow-sm transition hover:border-orange-200 hover:bg-orange-50/50"
           onClick={() => handleGenerateReport('Leave')}
         >
-          <div className="flex flex-col items-center text-center">
-            <div className="size-16 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm mb-4">
-              <Calendar className="size-8" />
+          <div className="flex flex-col items-center text-center text-gray-900">
+            <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+              <Calendar className="size-5" />
             </div>
             <h3 className="font-semibold text-lg">Báo cáo nghỉ phép</h3>
-            <p className="text-sm text-orange-100 mt-1">Thống kê nghỉ phép</p>
+            <p className="mt-1 text-sm text-gray-500">Thống kê nghỉ phép</p>
           </div>
         </Card>
       </div>
 
       {/* Recent Reports */}
-      <Card>
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+      <Card className="overflow-hidden border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-200 p-4">
           <h2 className="text-xl font-semibold">Báo cáo gần đây</h2>
           <Badge variant="secondary">{filteredReports.length} báo cáo</Badge>
         </div>
@@ -269,7 +270,13 @@ export function Reports() {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="Tổng báo cáo" value={reports.length} description="Tất cả báo cáo đã tạo" icon={<FileText className="size-5" />} tone="blue" />
+        <MetricCard title="Sẵn sàng tải" value={reports.filter(r => r.status === 'ready').length} description="Có thể tải xuống ngay" icon={<Download className="size-5" />} tone="emerald" />
+        <MetricCard title="Đang xử lý" value={reports.filter(r => r.status === 'processing').length} description="Đang tạo hoặc chờ hoàn tất" icon={<TrendingUp className="size-5" />} tone="orange" />
+      </div>
+
+      <div className="hidden grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="p-6">
           <div className="flex items-center gap-4">
             <div className="size-12 bg-blue-100 rounded-xl flex items-center justify-center">

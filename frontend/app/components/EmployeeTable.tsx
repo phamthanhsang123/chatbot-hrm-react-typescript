@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Archive, Edit, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { Archive, Edit, Loader2, Plus, RefreshCw, Search, Trash2, UserCog, Users, Wallet } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -237,12 +238,20 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
         fetchPositions(),
       ]);
 
-      setEmployees(employeeList.map(mapEmployee));
+      const mappedEmployees = employeeList.map(mapEmployee);
+      setEmployees(mappedEmployees);
       setDepartments(departmentList);
       setPositions(positionList);
     } catch (err) {
       console.error('Load employees failed:', err);
-      setError('Không tải được danh sách nhân viên. Kiểm tra backend hoặc database.');
+      setEmployees([]);
+      setDepartments([]);
+      setPositions([]);
+      setError('Không tải được danh sách nhân viên từ API. Hãy kiểm tra backend http://localhost:5297 và database.');
+      toast.fire({
+        icon: 'error',
+        title: 'Không kết nối được API nhân viên',
+      });
     } finally {
       setLoading(false);
     }
@@ -389,13 +398,15 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       const fallbackId = employees.length === 0 ? 1 : Math.max(...employees.map((employee) => employee.id)) + 1;
       const createdEmployee = buildEmployeeFromForm(created?.id || fallbackId, { ...form, status: ACTIVE_STATUS }, departments, positions);
 
-      setEmployees((prev) => [createdEmployee, ...prev]);
+      setEmployees((prev) => {
+        return [createdEmployee, ...prev];
+      });
       setShowAddDialog(false);
       setCurrentPage(1);
       toast.fire({ icon: 'success', title: 'Đã thêm nhân viên' });
     } catch (err) {
       console.error('Create employee failed:', err);
-      toast.fire({ icon: 'error', title: 'Không thêm được nhân viên. Kiểm tra backend hoặc dữ liệu nhập.' });
+      toast.fire({ icon: 'error', title: 'Không thêm được nhân viên vì API chưa kết nối' });
     } finally {
       setSaving(false);
     }
@@ -414,14 +425,14 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
     try {
       await updateEmployee(selectedEmployee.id, toPayload(form));
       const updatedEmployee = buildEmployeeFromForm(selectedEmployee.id, form, departments, positions);
-      setEmployees((prev) =>
-        prev.map((employee) => (employee.id === selectedEmployee.id ? updatedEmployee : employee))
-      );
+      setEmployees((prev) => {
+        return prev.map((employee) => (employee.id === selectedEmployee.id ? updatedEmployee : employee));
+      });
       setShowEditDialog(false);
       toast.fire({ icon: 'success', title: 'Đã cập nhật nhân viên' });
     } catch (err) {
       console.error('Update employee failed:', err);
-      toast.fire({ icon: 'error', title: 'Không cập nhật được nhân viên. Kiểm tra backend hoặc dữ liệu nhập.' });
+      toast.fire({ icon: 'error', title: 'Không cập nhật được nhân viên vì API chưa kết nối' });
     } finally {
       setSaving(false);
     }
@@ -436,26 +447,22 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       confirmButtonText: 'Cho nghỉ việc',
       cancelButtonText: 'Hủy',
       confirmButtonColor: '#dc2626',
+      reverseButtons: true,
     });
 
     if (!result.isConfirmed) return;
 
     try {
       await deleteEmployee(employee.id);
-      setEmployees((prev) =>
-        prev.map((item) =>
+      setEmployees((prev) => {
+        return prev.map((item) =>
           item.id === employee.id ? { ...item, status: INACTIVE_STATUS } : item
-        )
-      );
+        );
+      });
       toast.fire({ icon: 'success', title: 'Đã lưu hồ sơ nghỉ việc' });
     } catch (err) {
       console.error('Delete employee failed:', err);
-      Swal.fire({
-        icon: 'error',
-        title: 'Thao tác thất bại',
-        text: 'Không cập nhật được trạng thái nhân viên.',
-        confirmButtonText: 'Đóng',
-      });
+      toast.fire({ icon: 'error', title: 'Không chuyển nghỉ việc được vì API chưa kết nối' });
     }
   };
 
@@ -488,20 +495,15 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
         salaryBase: employee.salaryBase,
       });
 
-      setEmployees((prev) =>
-        prev.map((item) =>
+      setEmployees((prev) => {
+        return prev.map((item) =>
           item.id === employee.id ? { ...item, status: ACTIVE_STATUS } : item
-        )
-      );
+        );
+      });
       toast.fire({ icon: 'success', title: 'Đã khôi phục nhân viên' });
     } catch (err) {
       console.error('Restore employee failed:', err);
-      Swal.fire({
-        icon: 'error',
-        title: 'Khôi phục thất bại',
-        text: 'Không thể đưa nhân viên trở lại trạng thái đang làm việc.',
-        confirmButtonText: 'Đóng',
-      });
+      toast.fire({ icon: 'error', title: 'Không khôi phục được nhân viên vì API chưa kết nối' });
     }
   };
 
@@ -666,6 +668,12 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       )}
 
       <div className="grid gap-3 md:grid-cols-3">
+        <MetricCard title={`Tổng nhân viên${selectedScopeLabel ? ` ${selectedScopeLabel}` : ''}`} value={filteredEmployees.length} description="Đang làm việc trong phạm vi lọc" icon={<Users className="size-5" />} tone="blue" />
+        <MetricCard title={`Quản lý${selectedScopeLabel ? ` ${selectedScopeLabel}` : ''}`} value={scopedManagerCount} description="Nhân sự có vai trò quản lý" icon={<UserCog className="size-5" />} tone="emerald" />
+        <MetricCard title={`Tổng lương${selectedScopeLabel ? ` ${selectedScopeLabel}` : ''}`} value={formatCurrency(scopedSalary)} description="Tổng lương cơ bản theo bộ lọc" icon={<Wallet className="size-5" />} tone="violet" />
+      </div>
+
+      <div className="hidden gap-3 md:grid-cols-3">
         <Card className="!gap-2 !px-4 !py-3">
           <p className="text-xs text-gray-500">
             Tổng nhân viên {selectedScopeLabel && <strong className="text-gray-900">{selectedScopeLabel}</strong>}

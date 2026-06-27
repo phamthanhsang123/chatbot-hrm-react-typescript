@@ -1,7 +1,9 @@
 'use client';
-import { Calendar, Clock, CheckCircle, XCircle, Plus, Eye, CalendarDays, Pencil } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { BarChart3, Calendar, Clock, CheckCircle, XCircle, Plus, Eye } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import Swal from 'sweetalert2';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import {
@@ -17,6 +19,22 @@ import { Textarea } from './ui/textarea';
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected';
 type LeaveType = 'annual' | 'sick' | 'unpaid' | 'maternity' | 'marriage' | 'funeral';
+type LeaveFilterStatus = 'all' | LeaveStatus;
+
+const LEAVE_PAGE_SIZE = 10;
+
+const formatDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getRelativeDateKey = (daysAgo: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return formatDateKey(date);
+};
 
 interface LeaveRequest {
   id: number;
@@ -36,25 +54,19 @@ interface LeaveRequest {
 }
 
 export function Leave() {
-  const [filterStatus, setFilterStatus] = useState<'all' | LeaveStatus>('all');
+  const [filterStatus, setFilterStatus] = useState<LeaveFilterStatus>('pending');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedLeaveDate, setSelectedLeaveDate] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [rejectNote, setRejectNote] = useState('');
 
   // Form state for create dialog
   const [newLeave, setNewLeave] = useState({
     employeeName: '',
-    type: 'annual' as LeaveType,
-    from: '',
-    to: '',
-    reason: '',
-  });
-
-  const [editLeave, setEditLeave] = useState({
     type: 'annual' as LeaveType,
     from: '',
     to: '',
@@ -147,14 +159,99 @@ export function Leave() {
       reason: 'Đám cưới',
       appliedDate: '2026-01-10',
     },
+    {
+      id: 7,
+      employeeId: 'NV011',
+      name: 'Nguyễn Minh Anh',
+      department: 'HR',
+      type: 'annual',
+      from: getRelativeDateKey(0),
+      to: getRelativeDateKey(0),
+      days: 1,
+      status: 'approved',
+      reason: 'Nghỉ phép hôm nay đã được duyệt',
+      appliedDate: getRelativeDateKey(2),
+      reviewedDate: getRelativeDateKey(1),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 8,
+      employeeId: 'NV007',
+      name: 'Nguyễn Thu Hà',
+      department: 'Marketing',
+      type: 'annual',
+      from: getRelativeDateKey(1),
+      to: getRelativeDateKey(1),
+      days: 1,
+      status: 'approved',
+      reason: 'Nghỉ phép cá nhân đã được duyệt',
+      appliedDate: getRelativeDateKey(4),
+      reviewedDate: getRelativeDateKey(3),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 9,
+      employeeId: 'NV008',
+      name: 'Trần Văn Bình',
+      department: 'Sales',
+      type: 'sick',
+      from: getRelativeDateKey(2),
+      to: getRelativeDateKey(2),
+      days: 1,
+      status: 'approved',
+      reason: 'Nghỉ ốm có xác nhận',
+      appliedDate: getRelativeDateKey(3),
+      reviewedDate: getRelativeDateKey(2),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 10,
+      employeeId: 'NV009',
+      name: 'Đỗ Minh Quân',
+      department: 'IT',
+      type: 'annual',
+      from: getRelativeDateKey(3),
+      to: getRelativeDateKey(1),
+      days: 3,
+      status: 'approved',
+      reason: 'Nghỉ phép theo kế hoạch gia đình',
+      appliedDate: getRelativeDateKey(7),
+      reviewedDate: getRelativeDateKey(6),
+      reviewedBy: 'HR Manager',
+    },
+    {
+      id: 11,
+      employeeId: 'NV010',
+      name: 'Lê Mỹ Linh',
+      department: 'Finance',
+      type: 'unpaid',
+      from: getRelativeDateKey(2),
+      to: getRelativeDateKey(1),
+      days: 2,
+      status: 'pending',
+      reason: 'Xin nghỉ giải quyết việc cá nhân',
+      appliedDate: getRelativeDateKey(2),
+    },
   ]);
 
   const filteredData = useMemo(() => {
-    if (filterStatus === 'all') return leaveRequests;
-    return leaveRequests.filter((x) => x.status === filterStatus);
-  }, [leaveRequests, filterStatus]);
+    return leaveRequests.filter((request) => {
+      const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
+      const matchesDate = !selectedLeaveDate || (request.from <= selectedLeaveDate && request.to >= selectedLeaveDate);
+      return matchesStatus && matchesDate;
+    });
+  }, [leaveRequests, filterStatus, selectedLeaveDate]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / LEAVE_PAGE_SIZE));
+  const startIndex = (currentPage - 1) * LEAVE_PAGE_SIZE;
+  const endIndex = startIndex + LEAVE_PAGE_SIZE;
+  const paginatedData = useMemo(
+    () => filteredData.slice(startIndex, endIndex),
+    [filteredData, startIndex, endIndex]
+  );
 
   const stats = useMemo(() => {
+    const total = leaveRequests.length;
     const pending = leaveRequests.filter((x) => x.status === 'pending').length;
     const approved = leaveRequests.filter((x) => x.status === 'approved').length;
     const rejected = leaveRequests.filter((x) => x.status === 'rejected').length;
@@ -165,8 +262,12 @@ export function Leave() {
       return x.status === 'approved' && x.from <= today && x.to >= today;
     }).length;
 
-    return { pending, approved, rejected, onLeaveToday };
+    return { total, pending, approved, rejected, onLeaveToday };
   }, [leaveRequests]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const getLeaveTypeLabel = (type: LeaveType) => {
     const types = {
@@ -198,6 +299,11 @@ export function Leave() {
     return date.toLocaleDateString('vi-VN');
   };
 
+  const handleFilterStatusChange = (status: LeaveFilterStatus) => {
+    setFilterStatus(status);
+    setCurrentPage(1);
+  };
+
   const handleViewDetail = (request: LeaveRequest) => {
     setSelectedRequest(request);
     setShowDetailDialog(true);
@@ -218,50 +324,6 @@ export function Leave() {
     const from = new Date(fromDate);
     const to = new Date(toDate);
     return Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  };
-
-  const handleEditLeave = (request: LeaveRequest) => {
-    setSelectedRequest(request);
-    setEditLeave({
-      type: request.type,
-      from: request.from,
-      to: request.to,
-      reason: request.reason,
-    });
-    setShowEditDialog(true);
-  };
-
-  const handleSaveEditLeave = () => {
-    if (!selectedRequest) return;
-
-    if (!editLeave.from || !editLeave.to || !editLeave.reason.trim()) {
-      alert('Vui lòng điền đầy đủ thông tin nghỉ phép.');
-      return;
-    }
-
-    const days = calculateLeaveDays(editLeave.from, editLeave.to);
-    if (days <= 0) {
-      alert('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.');
-      return;
-    }
-
-    setLeaveRequests((prev) =>
-      prev.map((request) =>
-        request.id === selectedRequest.id
-          ? {
-            ...request,
-            type: editLeave.type,
-            from: editLeave.from,
-            to: editLeave.to,
-            days,
-            reason: editLeave.reason,
-          }
-          : request
-      )
-    );
-
-    alert(`Đã cập nhật đơn nghỉ phép của ${selectedRequest.name}.`);
-    setShowEditDialog(false);
   };
 
   const handleConfirmApprove = () => {
@@ -363,17 +425,33 @@ export function Leave() {
     });
   };
 
-  const handleViewCalendar = () => {
-    alert(
-      `📅 Lịch nghỉ phép tháng này\n\n` +
-      `Tổng: ${stats.approved} đơn đã duyệt\n` +
-      `Đang nghỉ hôm nay: ${stats.onLeaveToday} người\n` +
-      `Chờ duyệt: ${stats.pending} đơn`
-    );
+  const handleViewStats = () => {
+    Swal.fire({
+      title: 'Thống kê nghỉ phép tháng này',
+      icon: 'info',
+      html: `
+        <div style="display:grid;gap:10px;text-align:left">
+          <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px">
+            <span style="color:#475569">Đơn đã duyệt</span>
+            <b style="color:#16a34a">${stats.approved} đơn</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px">
+            <span style="color:#475569">Đang nghỉ hôm nay</span>
+            <b style="color:#ea580c">${stats.onLeaveToday} người</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px">
+            <span style="color:#475569">Chờ duyệt</span>
+            <b style="color:#2563eb">${stats.pending} đơn</b>
+          </div>
+        </div>
+      `,
+      confirmButtonText: 'Đóng',
+      confirmButtonColor: '#2563eb',
+    });
   };
 
   return (
-    <div className="space-y-5 text-[13px]">
+    <div className="space-y-5 pb-24 text-[13px]">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
@@ -381,9 +459,9 @@ export function Leave() {
           <p className="text-gray-500 mt-1">Theo dõi và duyệt đơn xin nghỉ phép</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleViewCalendar}>
-            <CalendarDays className="size-4 mr-2" />
-            Lịch nghỉ phép
+          <Button variant="outline" onClick={handleViewStats}>
+            <BarChart3 className="size-4 mr-2" />
+            Thống kê
           </Button>
           <Button
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
@@ -396,7 +474,14 @@ export function Leave() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard title="Chờ duyệt" value={stats.pending} description="Đơn xin nghỉ" icon={<Clock className="size-5" />} tone="blue" />
+        <MetricCard title="Đã duyệt" value={stats.approved} description="Tổng cộng" icon={<CheckCircle className="size-5" />} tone="emerald" />
+        <MetricCard title="Đang nghỉ hôm nay" value={stats.onLeaveToday} description="Nhân viên" icon={<Calendar className="size-5" />} tone="orange" />
+        <MetricCard title="Từ chối" value={stats.rejected} description="Tổng cộng" icon={<XCircle className="size-5" />} tone="red" />
+      </div>
+
+      <div className="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
           <div className="flex items-start justify-between">
             <div>
@@ -453,40 +538,86 @@ export function Leave() {
       {/* Filters */}
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant={filterStatus === 'all' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('all')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('all')}
             >
+              <span>({stats.total})</span>
               Tất cả
             </Button>
             <Button
               variant={filterStatus === 'pending' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('pending')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('pending')}
             >
+              <span>({stats.pending})</span>
               Chờ duyệt
             </Button>
             <Button
               variant={filterStatus === 'approved' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('approved')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('approved')}
             >
+              <span>({stats.approved})</span>
               Đã duyệt
             </Button>
             <Button
               variant={filterStatus === 'rejected' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setFilterStatus('rejected')}
+              className="flex-row-reverse gap-1"
+              onClick={() => handleFilterStatusChange('rejected')}
             >
+              <span>({stats.rejected})</span>
               Từ chối
             </Button>
           </div>
 
-          <div className="text-sm text-gray-600">
-            Hiển thị: <span className="font-semibold text-gray-900">{filteredData.length}</span> /{' '}
-            {leaveRequests.length} đơn
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3">
+              <Calendar className="size-4 text-blue-600" />
+              <Input
+                type="date"
+                value={selectedLeaveDate}
+                onChange={(event) => {
+                  setSelectedLeaveDate(event.target.value);
+                  setFilterStatus('all');
+                  setCurrentPage(1);
+                }}
+                className="h-7 w-[145px] border-0 p-0 text-sm shadow-none focus-visible:ring-0"
+              />
+            </div>
+            {selectedLeaveDate && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSelectedLeaveDate('');
+                  setCurrentPage(1);
+                }}
+              >
+                Bỏ ngày
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSelectedLeaveDate(formatDateKey(new Date()));
+                setFilterStatus('all');
+                setCurrentPage(1);
+              }}
+            >
+              Hôm nay
+            </Button>
+            <div className="text-sm text-gray-600">
+              Hiển thị: <span className="font-semibold text-gray-900">{filteredData.length}</span> /{' '}
+              {leaveRequests.length} đơn
+            </div>
           </div>
         </div>
       </Card>
@@ -523,7 +654,7 @@ export function Leave() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredData.map((request) => (
+              {paginatedData.map((request) => (
                 <tr key={request.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-2 text-sm font-medium text-gray-900">{request.id}</td>
                   <td className="px-4 py-2">
@@ -549,11 +680,6 @@ export function Leave() {
                   <td className="px-4 py-2">{getStatusBadge(request.status)}</td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleEditLeave(request)}>
-                        <Pencil className="size-3 mr-1" />
-                        Chỉnh sửa
-                      </Button>
-
                       {request.status === 'pending' ? (
                         <>
                           <Button
@@ -595,6 +721,37 @@ export function Leave() {
           </table>
         </div>
       </Card>
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col gap-3 border border-gray-200 bg-white/95 px-5 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:flex-row md:items-center md:justify-between lg:left-64">
+        <p className="text-sm text-gray-600">
+          Hiển thị{' '}
+          <span className="font-medium">
+            {filteredData.length === 0 ? 0 : startIndex + 1}-{Math.min(endIndex, filteredData.length)}
+          </span>{' '}
+          trong tổng số <span className="font-medium">{filteredData.length}</span> đơn
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+          >
+            Trước
+          </Button>
+          <Button variant="outline" size="sm" disabled>
+            {currentPage}/{totalPages}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+          >
+            Sau
+          </Button>
+        </div>
+      </div>
 
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -669,90 +826,6 @@ export function Leave() {
               onClick={handleCreateLeave}
             >
               Tạo đơn
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Chỉnh sửa đơn nghỉ phép</DialogTitle>
-            <DialogDescription>Cập nhật loại nghỉ, thời gian và lý do nghỉ</DialogDescription>
-          </DialogHeader>
-
-          {selectedRequest && (
-            <div className="space-y-4">
-              <div className="rounded-lg border p-4 text-sm">
-                <div className="font-semibold text-gray-900">{selectedRequest.name}</div>
-                <div className="text-xs text-gray-500">
-                  {selectedRequest.employeeId} • {selectedRequest.department}
-                </div>
-              </div>
-
-              <div>
-                <Label>Loại nghỉ</Label>
-                <select
-                  className="w-full h-10 rounded-md border border-gray-200 px-3 text-sm"
-                  value={editLeave.type}
-                  onChange={(e) => setEditLeave({ ...editLeave, type: e.target.value as LeaveType })}
-                >
-                  <option value="annual">Nghỉ phép năm</option>
-                  <option value="sick">Nghỉ ốm</option>
-                  <option value="unpaid">Nghỉ không lương</option>
-                  <option value="maternity">Nghỉ thai sản</option>
-                  <option value="marriage">Nghỉ cưới</option>
-                  <option value="funeral">Nghỉ tang</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Từ ngày</Label>
-                  <Input
-                    type="date"
-                    value={editLeave.from}
-                    onChange={(e) => setEditLeave({ ...editLeave, from: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>Đến ngày</Label>
-                  <Input
-                    type="date"
-                    value={editLeave.to}
-                    onChange={(e) => setEditLeave({ ...editLeave, to: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label>Lý do</Label>
-                <Textarea
-                  value={editLeave.reason}
-                  onChange={(e) => setEditLeave({ ...editLeave, reason: e.target.value })}
-                  placeholder="Nhập lý do xin nghỉ phép"
-                  rows={3}
-                />
-              </div>
-
-              {editLeave.from && editLeave.to && calculateLeaveDays(editLeave.from, editLeave.to) > 0 && (
-                <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
-                  Số ngày nghỉ sau khi sửa: <b>{calculateLeaveDays(editLeave.from, editLeave.to)} ngày</b>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-              Hủy bỏ
-            </Button>
-            <Button
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-              onClick={handleSaveEditLeave}
-            >
-              Lưu thay đổi
             </Button>
           </div>
         </DialogContent>

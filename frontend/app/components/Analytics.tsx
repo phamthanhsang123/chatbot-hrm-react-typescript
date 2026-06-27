@@ -1,5 +1,6 @@
 import { TrendingUp, Users, DollarSign, Calendar } from 'lucide-react';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 
 export function Analytics() {
   return (
@@ -11,7 +12,14 @@ export function Analytics() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard title="Tỷ lệ tăng trưởng" value="+12.5%" description="So với năm trước" icon={<TrendingUp className="size-5" />} tone="blue" />
+        <MetricCard title="Tỷ lệ giữ chân" value="94.2%" description="Rất tốt" icon={<Users className="size-5" />} tone="emerald" />
+        <MetricCard title="Chi phí / nhân viên" value="22.5M" description="Trung bình/tháng" icon={<DollarSign className="size-5" />} tone="violet" />
+        <MetricCard title="Ngày phép TB" value="14.2" description="Ngày/năm" icon={<Calendar className="size-5" />} tone="orange" />
+      </div>
+
+      <div className="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
           <div className="flex items-start justify-between">
             <div>
@@ -66,9 +74,9 @@ export function Analytics() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Employee Growth Chart */}
-        <Card className="p-6">
+        <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
           <h3 className="text-lg font-semibold mb-6">Tăng trưởng nhân sự</h3>
           <div className="space-y-4">
             {[
@@ -101,7 +109,7 @@ export function Analytics() {
         </Card>
 
         {/* Department Distribution */}
-        <Card className="p-6">
+        <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
           <h3 className="text-lg font-semibold mb-6">Phân bổ theo phòng ban</h3>
           <div className="space-y-6">
             {[
@@ -132,19 +140,19 @@ export function Analytics() {
       </div>
 
       {/* Performance Metrics */}
-      <Card className="p-6">
+      <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
         <h3 className="text-lg font-semibold mb-6">Chỉ số hiệu suất</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Năng suất', value: '87%', trend: '+5%', color: 'text-green-600' },
             { label: 'Đúng giờ', value: '92%', trend: '+3%', color: 'text-green-600' },
             { label: 'Hoàn thành KPI', value: '85%', trend: '+8%', color: 'text-green-600' },
             { label: 'Hài lòng', value: '89%', trend: '-2%', color: 'text-red-600' },
           ].map((metric) => (
-            <div key={metric.label} className="p-4 bg-gray-50 rounded-xl">
+            <div key={metric.label} className="rounded-lg border border-gray-200 bg-white p-4">
               <p className="text-sm text-gray-600 mb-2">{metric.label}</p>
               <div className="flex items-end justify-between">
-                <p className="text-3xl font-bold text-gray-900">{metric.value}</p>
+                <p className="text-2xl font-bold text-gray-900">{metric.value}</p>
                 <p className={`text-sm font-medium ${metric.color}`}>{metric.trend}</p>
               </div>
             </div>
@@ -153,39 +161,39 @@ export function Analytics() {
       </Card>
 
       {/* Insights */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <Card className="!gap-3 border-gray-200 !p-4 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="size-10 bg-blue-500 rounded-lg flex items-center justify-center text-white text-xl flex-shrink-0">
+            <div className="flex size-10 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xl text-blue-600">
               💡
             </div>
             <div>
-              <h4 className="font-semibold text-blue-900 mb-1">Insight</h4>
-              <p className="text-sm text-blue-700">Tỷ lệ tuyển dụng tăng 15% so với quý trước. Nên tăng cường đào tạo onboarding.</p>
+              <h4 className="mb-1 font-semibold text-gray-900">Insight</h4>
+              <p className="text-sm text-gray-600">Tỷ lệ tuyển dụng tăng 15% so với quý trước. Nên tăng cường đào tạo onboarding.</p>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <Card className="!gap-3 border-gray-200 !p-4 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="size-10 bg-green-500 rounded-lg flex items-center justify-center text-white text-xl flex-shrink-0">
+            <div className="flex size-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-xl text-emerald-600">
               ⚡
             </div>
             <div>
-              <h4 className="font-semibold text-green-900 mb-1">Cảnh báo</h4>
-              <p className="text-sm text-green-700">3 nhân viên xuất sắc sắp hết hạn hợp đồng. Nên có kế hoạch gia hạn sớm.</p>
+              <h4 className="mb-1 font-semibold text-gray-900">Cảnh báo</h4>
+              <p className="text-sm text-gray-600">3 nhân viên xuất sắc sắp hết hạn hợp đồng. Nên có kế hoạch gia hạn sớm.</p>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+        <Card className="!gap-3 border-gray-200 !p-4 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="size-10 bg-purple-500 rounded-lg flex items-center justify-center text-white text-xl flex-shrink-0">
+            <div className="flex size-10 flex-shrink-0 items-center justify-center rounded-lg bg-violet-50 text-xl text-violet-600">
               📈
             </div>
             <div>
-              <h4 className="font-semibold text-purple-900 mb-1">Xu hướng</h4>
-              <p className="text-sm text-purple-700">Phòng IT có tốc độ tăng trưởng nhanh nhất, chiếm 36% tổng số nhân viên.</p>
+              <h4 className="mb-1 font-semibold text-gray-900">Xu hướng</h4>
+              <p className="text-sm text-gray-600">Phòng IT có tốc độ tăng trưởng nhanh nhất, chiếm 36% tổng số nhân viên.</p>
             </div>
           </div>
         </Card>

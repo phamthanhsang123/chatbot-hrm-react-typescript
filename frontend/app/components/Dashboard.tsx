@@ -1,6 +1,7 @@
 'use client';
 import { TrendingUp, Users, Wallet, Calendar, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from './ui/card';
+import { MetricCard } from './MetricCard';
 import { useState } from 'react';
 import {
   Dialog,
@@ -32,7 +33,14 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard title="Tổng nhân viên" value="125" description="+12% so với tháng trước" icon={<Users className="size-5" />} tone="blue" />
+        <MetricCard title="Tổng lương tháng này" value="2.1 tỷ" description="+5% so với tháng trước" icon={<Wallet className="size-5" />} tone="emerald" />
+        <MetricCard title="Nghỉ phép hôm nay" value="7" description="-3 so với hôm qua" icon={<Calendar className="size-5" />} tone="orange" />
+        <MetricCard title="Hiệu suất trung bình" value="87%" description="+2% so với tháng trước" icon={<TrendingUp className="size-5" />} tone="violet" />
+      </div>
+
+      <div className="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg">
           <div className="flex items-start justify-between">
             <div>
@@ -99,8 +107,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
           <h3 className="text-lg font-semibold mb-4">Nhân viên theo phòng ban</h3>
           <div className="space-y-3">
             {[
@@ -126,7 +134,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
           <h3 className="text-lg font-semibold mb-4">Hoạt động gần đây</h3>
           <div className="space-y-4">
             {[
@@ -151,35 +159,35 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       </div>
 
       {/* Quick Actions */}
-      <Card className="p-6">
+      <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
         <h3 className="text-lg font-semibold mb-4">Thao tác nhanh</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <button
             onClick={() => (onNavigate ? onNavigate('employees') : setShowAddEmployee(true))}
-            className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
+            className="rounded-lg border border-gray-200 bg-white p-4 text-left transition hover:border-blue-200 hover:bg-blue-50/50"
           >
-            <div className="text-3xl mb-2">👥</div>
+            <Users className="mb-2 size-5 text-blue-600" />
             <p className="text-sm font-medium">Thêm nhân viên</p>
           </button>
           <button
             onClick={() => (onNavigate ? onNavigate('leave') : setShowApproveLeave(true))}
-            className="p-4 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
+            className="rounded-lg border border-gray-200 bg-white p-4 text-left transition hover:border-emerald-200 hover:bg-emerald-50/50"
           >
-            <div className="text-3xl mb-2">✅</div>
+            <Calendar className="mb-2 size-5 text-emerald-600" />
             <p className="text-sm font-medium">Duyệt nghỉ phép</p>
           </button>
           <button
             onClick={() => (onNavigate ? onNavigate('reports') : setShowExportReport(true))}
-            className="p-4 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
+            className="rounded-lg border border-gray-200 bg-white p-4 text-left transition hover:border-violet-200 hover:bg-violet-50/50"
           >
-            <div className="text-3xl mb-2">📄</div>
+            <TrendingUp className="mb-2 size-5 text-violet-600" />
             <p className="text-sm font-medium">Xuất báo cáo</p>
           </button>
           <button
             onClick={() => (onNavigate ? onNavigate('salary') : setShowCalculateSalary(true))}
-            className="p-4 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-xl hover:scale-105 transition-transform shadow-lg"
+            className="rounded-lg border border-gray-200 bg-white p-4 text-left transition hover:border-orange-200 hover:bg-orange-50/50"
           >
-            <div className="text-3xl mb-2">💵</div>
+            <Wallet className="mb-2 size-5 text-orange-600" />
             <p className="text-sm font-medium">Tính lương</p>
           </button>
         </div>

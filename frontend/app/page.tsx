@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Swal, { type SweetAlertIcon } from 'sweetalert2';
 import { Login } from './components/Login';
 import { defaultManagementSettings, Navbar, type ManagementSettings } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
@@ -29,6 +30,34 @@ import { MANAGER_DEPARTMENT } from './types';
 
 const MANAGEMENT_SETTINGS_KEY = 'hrm-management-settings';
 
+const escapeAlertHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+const getAlertIcon = (message: string): SweetAlertIcon => {
+  if (/✅|thành công|đã lưu|đã cập nhật|đã duyệt|đã tạo/i.test(message)) return 'success';
+  if (/❌|lỗi|thất bại|từ chối|xóa/i.test(message)) return 'error';
+  if (/⚠️|vui lòng|không hợp lệ|cảnh báo/i.test(message)) return 'warning';
+  return 'info';
+};
+
+const getAlertTitle = (icon: SweetAlertIcon) => {
+  switch (icon) {
+    case 'success':
+      return 'Thành công';
+    case 'error':
+      return 'Thông báo lỗi';
+    case 'warning':
+      return 'Cần kiểm tra';
+    default:
+      return 'Thông báo';
+  }
+};
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
@@ -51,6 +80,27 @@ export default function App() {
     }
   });
   const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    const nativeAlert = window.alert;
+
+    window.alert = (message?: unknown) => {
+      const text = String(message ?? '');
+      const icon = getAlertIcon(text);
+
+      void Swal.fire({
+        title: getAlertTitle(icon),
+        icon,
+        html: `<div style="white-space:pre-line;text-align:left;line-height:1.6">${escapeAlertHtml(text)}</div>`,
+        confirmButtonText: 'Đóng',
+        confirmButtonColor: '#2563eb',
+      });
+    };
+
+    return () => {
+      window.alert = nativeAlert;
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', managementSettings.darkMode);
