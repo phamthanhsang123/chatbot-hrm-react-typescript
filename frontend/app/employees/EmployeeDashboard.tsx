@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import {
   AlertCircle,
   BriefcaseBusiness,
@@ -15,18 +14,11 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
-import { getCurrentEmployeeId } from '@/services/tasks';
-import { getEmployeePortalIdentity } from './hrmSync';
+import { getProfileInitials, useEmployeePortalProfile } from './useEmployeePortalProfile';
 
 interface EmployeeDashboardProps {
   onNavigate?: (page: string) => void;
 }
-
-const employeeMeta = {
-  position: 'Developer',
-  manager: 'Kiên Quân',
-  joinDate: '01/01/2023',
-};
 
 const taskOverview = {
   assigned: 4,
@@ -52,13 +44,8 @@ const activities = [
 ];
 
 export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
-  const avatar = employeeIdentity.employeeName
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+  const { profile, loading } = useEmployeePortalProfile();
+  const avatar = getProfileInitials(profile.employeeName);
 
   return (
     <div className="space-y-6">
@@ -70,17 +57,17 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
                 {avatar}
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Xin chào, {employeeIdentity.employeeName}</h1>
+                <h1 className="text-2xl font-bold">Xin chào, {profile.employeeName}</h1>
                 <p className="mt-1 text-blue-100">
-                  {employeeMeta.position} - {employeeIdentity.department} - Mã NV: {employeeIdentity.employeeId}
+                  {profile.position} - {profile.department} - Mã NV: {profile.employeeId}
                 </p>
                 <p className="mt-1 text-sm text-blue-100">
-                  Manager: {employeeMeta.manager} - Ngày vào làm: {employeeMeta.joinDate}
+                  Manager: {profile.managerName} - Ngày vào làm: {profile.joinDate}
                 </p>
               </div>
             </div>
             <Badge className="w-fit bg-white/15 text-white hover:bg-white/15">
-              Hôm nay: {new Date().toLocaleDateString('vi-VN')}
+              {loading ? 'Đang đồng bộ DB...' : `Hôm nay: ${new Date().toLocaleDateString('vi-VN')}`}
             </Badge>
           </div>
         </Card>

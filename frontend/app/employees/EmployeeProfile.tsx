@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User, Phone, Calendar, Briefcase, Edit, Save, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { Card } from '../components/ui/card';
@@ -8,8 +8,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { getCurrentEmployeeId } from '@/services/tasks';
-import { getEmployeePortalIdentity } from './hrmSync';
+import { getProfileInitials, useEmployeePortalProfile, type EmployeePortalProfile } from './useEmployeePortalProfile';
 
 interface ProfileState {
   fullName: string;
@@ -78,34 +77,42 @@ function FieldError({ message }: { message?: string }) {
   return <p className="mt-1 text-xs font-medium text-red-600">{message}</p>;
 }
 
+function toProfileState(profile: EmployeePortalProfile): ProfileState {
+  return {
+    fullName: profile.employeeName,
+    employeeId: profile.employeeId,
+    email: profile.email,
+    phone: profile.phone,
+    dateOfBirth: profile.dateOfBirth,
+    gender: profile.gender,
+    address: profile.address,
+    position: profile.position,
+    department: profile.department,
+    joinDate: profile.joinDate,
+    employmentType: profile.employmentType,
+    workingStatus: profile.status,
+    manager: profile.managerName,
+    education: profile.education,
+    major: profile.major,
+    skills: profile.skills,
+    emergencyContact: profile.emergencyContact,
+  };
+}
+
 export function EmployeeProfile() {
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
+  const { profile: portalProfile, loading, saveLocalProfile } = useEmployeePortalProfile();
   const [isEditing, setIsEditing] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<ProfileErrors>({});
-  const [profile, setProfile] = useState<ProfileState>(() => ({
-    // Personal Info
-    fullName: employeeIdentity.employeeName,
-    employeeId: employeeIdentity.employeeId,
-    email: 'employee@company.com',
-    phone: '0123456789',
-    dateOfBirth: '15/05/1995',
-    gender: 'Nam',
-    address: '123 Nguyễn Huệ, Quận 1, TP.HCM',
-    
-    // Work Info
-    position: 'Developer',
-    department: employeeIdentity.department,
-    joinDate: '01/01/2023',
-    employmentType: 'Toàn thời gian',
-    workingStatus: 'Đang làm việc',
-    manager: 'Trần Văn A',
-    
-    // Additional Info
-    education: 'Đại học Bách Khoa',
-    major: 'Công nghệ thông tin',
-    skills: 'React, Node.js, Python, SQL',
-    emergencyContact: 'Nguyễn Thị C - 0987654321',
-  }));
+  const [profile, setProfile] = useState<ProfileState>(() => toProfileState(portalProfile));
+
+  useEffect(() => {
+    if (isEditing) return;
+    const syncTimer = window.setTimeout(() => {
+      setProfile(toProfileState(portalProfile));
+    }, 0);
+
+    return () => window.clearTimeout(syncTimer);
+  }, [isEditing, portalProfile]);
 
   const updateProfileField = (field: ProfileField, value: string) => {
     setProfile((current) => ({ ...current, [field]: value }));
@@ -136,12 +143,26 @@ export function EmployeeProfile() {
     setProfile(normalizedProfile);
     setFieldErrors({});
 
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('hrm_employee_code', normalizedProfile.employeeId);
-      window.localStorage.setItem('hrm_employee_name', normalizedProfile.fullName);
-      window.localStorage.setItem('hrm_employee_department', normalizedProfile.department);
-      window.dispatchEvent(new CustomEvent('hrm-sync', { detail: { key: 'employee-profile' } }));
-    }
+    saveLocalProfile({
+      ...portalProfile,
+      employeeId: normalizedProfile.employeeId,
+      employeeName: normalizedProfile.fullName,
+      email: normalizedProfile.email,
+      phone: normalizedProfile.phone,
+      department: normalizedProfile.department,
+      position: normalizedProfile.position,
+      status: normalizedProfile.workingStatus,
+      managerName: normalizedProfile.manager,
+      joinDate: normalizedProfile.joinDate,
+      dateOfBirth: normalizedProfile.dateOfBirth,
+      gender: normalizedProfile.gender,
+      address: normalizedProfile.address,
+      employmentType: normalizedProfile.employmentType,
+      education: normalizedProfile.education,
+      major: normalizedProfile.major,
+      skills: normalizedProfile.skills,
+      emergencyContact: normalizedProfile.emergencyContact,
+    });
 
     setIsEditing(false);
     void Swal.fire({
@@ -164,7 +185,9 @@ export function EmployeeProfile() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Hồ sơ cá nhân</h1>
-          <p className="text-gray-500 mt-1">Quản lý thông tin cá nhân của bạn</p>
+          <p className="text-gray-500 mt-1">
+            {loading ? 'Đang đồng bộ thông tin từ database...' : 'Quản lý thông tin cá nhân của bạn'}
+          </p>
         </div>
         {!isEditing ? (
           <Button
@@ -195,7 +218,7 @@ export function EmployeeProfile() {
       <Card className="p-6 bg-gradient-to-br from-green-600 to-teal-600 text-white border-0 shadow-lg">
         <div className="flex items-center gap-6">
           <div className="size-24 shrink-0 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-4xl font-bold">
-            {profile.fullName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+            {getProfileInitials(profile.fullName)}
           </div>
           <div className="flex-1">
             <h2 className="text-3xl font-bold">{profile.fullName}</h2>
