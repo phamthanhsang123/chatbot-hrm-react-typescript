@@ -14,20 +14,11 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
+import { getProfileInitials, useEmployeePortalProfile } from './useEmployeePortalProfile';
 
 interface EmployeeDashboardProps {
   onNavigate?: (page: string) => void;
 }
-
-const employeeData = {
-  name: 'Nguyễn Văn A',
-  employeeCode: 'NV001',
-  department: 'IT',
-  position: 'Developer',
-  manager: 'Kiên Quân',
-  joinDate: '01/01/2023',
-  avatar: 'NA',
-};
 
 const taskOverview = {
   assigned: 4,
@@ -53,6 +44,9 @@ const activities = [
 ];
 
 export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
+  const { profile, loading } = useEmployeePortalProfile();
+  const avatar = getProfileInitials(profile.employeeName);
+
   return (
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -60,20 +54,20 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl font-bold shadow-inner backdrop-blur-sm">
-                {employeeData.avatar}
+                {avatar}
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Xin chào, {employeeData.name}</h1>
+                <h1 className="text-2xl font-bold">Xin chào, {profile.employeeName}</h1>
                 <p className="mt-1 text-blue-100">
-                  {employeeData.position} - {employeeData.department} - Mã NV: {employeeData.employeeCode}
+                  {profile.position} - {profile.department} - Mã NV: {profile.employeeId}
                 </p>
                 <p className="mt-1 text-sm text-blue-100">
-                  Manager: {employeeData.manager} - Ngày vào làm: {employeeData.joinDate}
+                  Manager: {profile.managerName} - Ngày vào làm: {profile.joinDate}
                 </p>
               </div>
             </div>
             <Badge className="w-fit bg-white/15 text-white hover:bg-white/15">
-              Hôm nay: {new Date().toLocaleDateString('vi-VN')}
+              {loading ? 'Đang đồng bộ DB...' : `Hôm nay: ${new Date().toLocaleDateString('vi-VN')}`}
             </Badge>
           </div>
         </Card>

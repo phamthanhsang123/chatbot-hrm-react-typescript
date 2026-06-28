@@ -60,6 +60,10 @@ export function fetchEmployees() {
   return request<EmployeeApiItem[]>('/api/admin/employees');
 }
 
+export function fetchEmployeeById(id: number) {
+  return request<EmployeeApiItem>(`/api/admin/employees/${id}`);
+}
+
 export function fetchDepartments() {
   return request<DepartmentOption[]>('/api/admin/employees/departments');
 }

@@ -21,6 +21,7 @@ import {
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
+import { useEmployeePortalProfile } from './useEmployeePortalProfile';
 
 interface EmployeeNavbarProps {
   onToggleSidebar: () => void;
@@ -60,6 +61,7 @@ const initialNotifications: Notification[] = [
 ];
 
 export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProps) {
+  const { profile } = useEmployeePortalProfile();
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
   const [showSettings, setShowSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -167,8 +169,8 @@ export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProp
                   <User className="size-4" />
                 </div>
                 <div className="hidden text-left lg:block">
-                  <p className="text-sm font-medium">Nguyễn Văn A</p>
-                  <p className="text-xs text-gray-500">Developer - IT</p>
+                  <p className="text-sm font-medium">{profile.employeeName}</p>
+                  <p className="text-xs text-gray-500">{profile.position} - {profile.department}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -204,13 +206,13 @@ export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProp
                   <Label htmlFor="fullname" className="text-xs">
                     Họ và tên
                   </Label>
-                  <Input id="fullname" defaultValue="Nguyễn Văn A" className="h-9 text-sm" />
+                  <Input id="fullname" value={profile.employeeName} readOnly className="h-9 text-sm" />
                 </div>
                 <div>
                   <Label htmlFor="email-settings" className="text-xs">
                     Email
                   </Label>
-                  <Input id="email-settings" type="email" defaultValue="thanhsang3213121@gmail.com" className="h-9 text-sm" />
+                  <Input id="email-settings" type="email" value={profile.email} readOnly className="h-9 text-sm" />
                 </div>
               </div>
             </div>

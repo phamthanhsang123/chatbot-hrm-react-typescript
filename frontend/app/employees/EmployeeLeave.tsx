@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Calendar, Plus, Eye, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Calendar, Plus, Eye } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -15,33 +16,62 @@ import {
 import { Label } from '../components/ui/label';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
+import { getCurrentEmployeeId } from '@/services/tasks';
+import { HRM_SYNC_KEYS, getEmployeePortalIdentity, readSyncedRecords, upsertSyncedRecord } from './hrmSync';
+
+type LeaveStatus = 'pending' | 'approved' | 'rejected';
+type LeaveType = 'annual' | 'sick' | 'unpaid' | 'maternity' | 'marriage' | 'funeral';
+
+const leaveTypeLabels: Record<LeaveType, string> = {
+  annual: 'Nghỉ phép năm',
+  sick: 'Nghỉ ốm',
+  unpaid: 'Nghỉ không lương',
+  maternity: 'Nghỉ thai sản',
+  marriage: 'Nghỉ cưới',
+  funeral: 'Nghỉ tang',
+};
 
 interface LeaveRequest {
   id: number;
-  type: string;
+  employeeId: string;
+  name: string;
+  department: string;
+  type: LeaveType;
   from: string;
   to: string;
   days: number;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: LeaveStatus;
   appliedDate: string;
+  reviewedDate?: string;
+  reviewedBy?: string;
   reviewNote?: string;
 }
 
+const demoLeaveRequests: LeaveRequest[] = [
+  { id: 1, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'annual', from: '2026-01-20', to: '2026-01-22', days: 3, reason: 'Về quê', status: 'approved', appliedDate: '2026-01-15', reviewedDate: '2026-01-16', reviewedBy: 'HR Manager', reviewNote: 'Đã duyệt' },
+  { id: 2, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'sick', from: '2026-01-10', to: '2026-01-10', days: 1, reason: 'Ốm', status: 'approved', appliedDate: '2026-01-10', reviewedDate: '2026-01-10', reviewedBy: 'HR Manager', reviewNote: 'Đã duyệt' },
+  { id: 3, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'annual', from: '2026-01-25', to: '2026-01-26', days: 2, reason: 'Du lịch', status: 'pending', appliedDate: '2026-01-16' },
+  { id: 4, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'unpaid', from: '2026-01-05', to: '2026-01-05', days: 1, reason: 'Làm giấy tờ', status: 'rejected', appliedDate: '2026-01-03', reviewedDate: '2026-01-04', reviewedBy: 'HR Manager', reviewNote: 'Không đủ điều kiện' },
+];
+
 export function EmployeeLeave() {
+  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
 
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([
-    { id: 1, type: 'Nghỉ phép năm', from: '20/01/2026', to: '22/01/2026', days: 3, reason: 'Về quê', status: 'approved', appliedDate: '15/01/2026', reviewNote: 'Đã duyệt' },
-    { id: 2, type: 'Nghỉ ốm', from: '10/01/2026', to: '10/01/2026', days: 1, reason: 'Ốm', status: 'approved', appliedDate: '10/01/2026', reviewNote: 'Đã duyệt' },
-    { id: 3, type: 'Nghỉ phép năm', from: '25/01/2026', to: '26/01/2026', days: 2, reason: 'Du lịch', status: 'pending', appliedDate: '16/01/2026' },
-    { id: 4, type: 'Nghỉ việc riêng', from: '05/01/2026', to: '05/01/2026', days: 1, reason: 'Làm giấy tờ', status: 'rejected', appliedDate: '03/01/2026', reviewNote: 'Không đủ điều kiện' },
-  ]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
+    const synced = readSyncedRecords<LeaveRequest>(HRM_SYNC_KEYS.leaveRequests).filter(
+      (request) => request.employeeId === employeeIdentity.employeeId,
+    );
+    if (synced.length === 0) return demoLeaveRequests;
+    const syncedIds = new Set(synced.map((request) => request.id));
+    return [...synced, ...demoLeaveRequests.filter((request) => !syncedIds.has(request.id))];
+  });
 
   const [newLeave, setNewLeave] = useState({
-    type: 'Nghỉ phép năm',
+    type: 'annual' as LeaveType,
     from: '',
     to: '',
     reason: '',
@@ -60,39 +90,64 @@ export function EmployeeLeave() {
     return diff + 1;
   };
 
+  const formatLeaveDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN');
+
   const handleCreateLeave = () => {
     if (!newLeave.from || !newLeave.to || !newLeave.reason) {
-      alert('⚠️ Vui lòng điền đầy đủ thông tin!');
+      void Swal.fire({
+        icon: 'warning',
+        title: 'Thiếu thông tin',
+        text: 'Vui lòng chọn đầy đủ ngày nghỉ và nhập lý do nghỉ phép.',
+        confirmButtonText: 'Đã hiểu',
+        confirmButtonColor: '#059669',
+      });
       return;
     }
 
     const days = calculateDays(newLeave.from, newLeave.to);
+    if (days <= 0) {
+      void Swal.fire({
+        icon: 'warning',
+        title: 'Ngày nghỉ không hợp lệ',
+        text: 'Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.',
+        confirmButtonText: 'Đã hiểu',
+        confirmButtonColor: '#059669',
+      });
+      return;
+    }
     
     const request: LeaveRequest = {
       id: Math.max(...leaveRequests.map(r => r.id)) + 1,
+      employeeId: employeeIdentity.employeeId,
+      name: employeeIdentity.employeeName,
+      department: employeeIdentity.department,
       type: newLeave.type,
-      from: new Date(newLeave.from).toLocaleDateString('vi-VN'),
-      to: new Date(newLeave.to).toLocaleDateString('vi-VN'),
+      from: newLeave.from,
+      to: newLeave.to,
       days,
       reason: newLeave.reason,
       status: 'pending',
-      appliedDate: new Date().toLocaleDateString('vi-VN'),
+      appliedDate: new Date().toISOString().slice(0, 10),
     };
 
     setLeaveRequests([request, ...leaveRequests]);
-
-    alert(
-      `✅ Đã gửi đơn nghỉ phép thành công!\n\n` +
-      `Loại: ${newLeave.type}\n` +
-      `Từ: ${request.from}\n` +
-      `Đến: ${request.to}\n` +
-      `Số ngày: ${days}\n` +
-      `Lý do: ${newLeave.reason}\n\n` +
-      `Đơn của bạn đang chờ phê duyệt.`
+    upsertSyncedRecord(
+      HRM_SYNC_KEYS.leaveRequests,
+      request,
+      (current) => current.employeeId === request.employeeId && current.id === request.id,
     );
-
     setShowCreateDialog(false);
-    setNewLeave({ type: 'Nghỉ phép năm', from: '', to: '', reason: '' });
+    setNewLeave({ type: 'annual', from: '', to: '', reason: '' });
+
+    void Swal.fire({
+      icon: 'success',
+      title: 'Đã gửi đơn nghỉ phép',
+      text:
+        `${leaveTypeLabels[request.type]}: ${formatLeaveDate(request.from)} - ${formatLeaveDate(request.to)} (${days} ngày). ` +
+        `Lý do: ${request.reason}. Đơn của bạn đang chờ HR phê duyệt.`,
+      confirmButtonText: 'Hoàn tất',
+      confirmButtonColor: '#059669',
+    });
   };
 
   const handleViewDetail = (request: LeaveRequest) => {
@@ -212,10 +267,10 @@ export function EmployeeLeave() {
               {leaveRequests.map((request) => (
                 <tr key={request.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    <span className="text-sm font-medium text-gray-900">{request.type}</span>
+                    <span className="text-sm font-medium text-gray-900">{leaveTypeLabels[request.type]}</span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{request.from}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{request.to}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{formatLeaveDate(request.from)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{formatLeaveDate(request.to)}</td>
                   <td className="px-6 py-4">
                     <span className="text-sm font-semibold text-blue-600">{request.days} ngày</span>
                   </td>
@@ -240,7 +295,7 @@ export function EmployeeLeave() {
                        '✗ Từ chối'}
                     </Badge>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{request.appliedDate}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{formatLeaveDate(request.appliedDate)}</td>
                   <td className="px-6 py-4 text-center">
                     <Button
                       size="sm"
@@ -272,14 +327,11 @@ export function EmployeeLeave() {
               <select
                 className="w-full h-10 rounded-md border border-gray-200 px-3 text-sm"
                 value={newLeave.type}
-                onChange={(e) => setNewLeave({ ...newLeave, type: e.target.value })}
+                onChange={(e) => setNewLeave({ ...newLeave, type: e.target.value as LeaveType })}
               >
-                <option>Nghỉ phép năm</option>
-                <option>Nghỉ ốm</option>
-                <option>Nghỉ không lương</option>
-                <option>Nghỉ thai sản</option>
-                <option>Nghỉ việc riêng</option>
-                <option>Nghỉ hiếu/hỷ</option>
+                {(Object.keys(leaveTypeLabels) as LeaveType[]).map((type) => (
+                  <option key={type} value={type}>{leaveTypeLabels[type]}</option>
+                ))}
               </select>
             </div>
 
@@ -369,7 +421,7 @@ export function EmployeeLeave() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-gray-600">Loại nghỉ phép</p>
-                    <p className="font-medium">{selectedRequest.type}</p>
+                    <p className="font-medium">{leaveTypeLabels[selectedRequest.type]}</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Số ngày</p>
@@ -377,15 +429,15 @@ export function EmployeeLeave() {
                   </div>
                   <div>
                     <p className="text-gray-600">Từ ngày</p>
-                    <p className="font-medium">{selectedRequest.from}</p>
+                    <p className="font-medium">{formatLeaveDate(selectedRequest.from)}</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Đến ngày</p>
-                    <p className="font-medium">{selectedRequest.to}</p>
+                    <p className="font-medium">{formatLeaveDate(selectedRequest.to)}</p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-gray-600">Ngày gửi đơn</p>
-                    <p className="font-medium">{selectedRequest.appliedDate}</p>
+                    <p className="font-medium">{formatLeaveDate(selectedRequest.appliedDate)}</p>
                   </div>
                 </div>
 
@@ -398,6 +450,10 @@ export function EmployeeLeave() {
                   <div className="pt-3 border-t">
                     <p className="text-gray-600 text-sm mb-1">Ghi chú phê duyệt</p>
                     <p className="text-sm">{selectedRequest.reviewNote}</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {selectedRequest.reviewedBy || 'HR'}
+                      {selectedRequest.reviewedDate ? ` - ${formatLeaveDate(selectedRequest.reviewedDate)}` : ''}
+                    </p>
                   </div>
                 )}
               </div>
