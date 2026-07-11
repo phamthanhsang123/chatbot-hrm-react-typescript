@@ -16,6 +16,7 @@ import {
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { MetricCard } from './MetricCard';
+import { HRM_SYNC_KEYS, readSyncedRecords } from '../employees/hrmSync';
 
 // Helper function to get day of week in Vietnamese
 const getDayOfWeek = (dateStr: string): string => {
@@ -96,6 +97,8 @@ interface WorkReport {
 
 interface AttendanceRequest {
   id: number;
+  syncKey?: string;
+  externalId?: number;
   employeeName: string;
   employeeId: string;
   department: string;
@@ -157,6 +160,75 @@ interface CalendarAttendanceEvent extends LiveAttendanceStatus {
 }
 
 const LIVE_ATTENDANCE_STORAGE_KEY = 'hrm-live-attendance';
+
+const normalizeAttendanceDate = (value?: string) => {
+  if (!value) return formatDate(new Date());
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+    const [year, month, day] = value.slice(0, 10).split('-');
+    return `${day}/${month}/${year}`;
+  }
+  return value;
+};
+
+const requestSyncKey = (request: Pick<AttendanceRequest, 'employeeId' | 'date' | 'type' | 'submittedAt' | 'checkIn' | 'checkOut'>) =>
+  [
+    request.employeeId,
+    normalizeAttendanceDate(request.date),
+    request.type,
+    request.submittedAt,
+    request.checkIn,
+    request.checkOut,
+  ].join('|');
+
+const minutesToHoursLabel = (checkIn?: string, checkOut?: string) => {
+  if (!checkIn || !checkOut) return '0h';
+  const minutes = Math.max(0, timeToMinutes(checkOut) - timeToMinutes(checkIn));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+};
+
+const getAttendanceStatusFromLive = (record: LiveAttendanceStatus): EmployeeAttendance['status'] => {
+  if (!record.checkIn) return 'missing';
+  if (!record.checkOut) return 'missing';
+  return timeToMinutes(record.checkIn) > timeToMinutes('08:30') ? 'late' : 'ontime';
+};
+
+const normalizeSyncedAttendanceRequest = (item: Partial<AttendanceRequest>): AttendanceRequest | null => {
+  if (!item.employeeId || !item.employeeName || !item.type || !item.checkIn || !item.checkOut) return null;
+
+  const normalized: AttendanceRequest = {
+    id: Number(item.id || 0) + 10000,
+    externalId: Number(item.id || 0),
+    employeeName: item.employeeName,
+    employeeId: item.employeeId,
+    department: item.department || 'IT',
+    date: normalizeAttendanceDate(item.date),
+    checkIn: item.checkIn,
+    checkOut: item.checkOut,
+    reason: item.reason || 'Nhân viên gửi đơn chấm công từ cổng Employee.',
+    status: item.status || 'pending',
+    submittedAt: item.submittedAt || new Date().toLocaleString('vi-VN'),
+    reviewedAt: item.reviewedAt,
+    reviewedBy: item.reviewedBy,
+    reviewNote: item.reviewNote,
+    type: item.type,
+    originalCheckIn: item.originalCheckIn,
+    originalCheckOut: item.originalCheckOut,
+    workReport: item.workReport
+      ? {
+          title: item.workReport.title || 'Báo cáo công việc',
+          description: item.workReport.description || '',
+          tasks: item.workReport.tasks || [],
+          achievements: item.workReport.achievements || [],
+          note: item.workReport.note,
+        }
+      : undefined,
+  };
+
+  normalized.syncKey = requestSyncKey(normalized);
+  return normalized;
+};
 
 export function AttendanceApproval() {
   const [selectedRequest, setSelectedRequest] = useState<AttendanceRequest | null>(null);
@@ -558,20 +630,52 @@ export function AttendanceApproval() {
       }
     };
 
+    const loadSyncedRequests = () => {
+      const synced = readSyncedRecords<Partial<AttendanceRequest>>(HRM_SYNC_KEYS.attendanceRequests)
+        .map(normalizeSyncedAttendanceRequest)
+        .filter((item): item is AttendanceRequest => Boolean(item));
+
+      if (synced.length === 0) return;
+
+      setRequests((current) => {
+        const syncedKeys = new Set(synced.map((request) => request.syncKey));
+        const localOnly = current.filter((request) => !request.syncKey || !syncedKeys.has(request.syncKey));
+        return [...synced, ...localOnly];
+      });
+    };
+
     loadLiveAttendance();
+    loadSyncedRequests();
 
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === LIVE_ATTENDANCE_STORAGE_KEY) {
         loadLiveAttendance();
       }
+      if (event.key === HRM_SYNC_KEYS.attendanceRequests) {
+        loadSyncedRequests();
+      }
+    };
+
+    const handleHrmSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string }>).detail;
+      if (!detail?.key || detail.key === LIVE_ATTENDANCE_STORAGE_KEY) {
+        loadLiveAttendance();
+      }
+      if (!detail?.key || detail.key === HRM_SYNC_KEYS.attendanceRequests) {
+        loadSyncedRequests();
+      }
     };
 
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('hrm-sync', handleHrmSync);
     window.addEventListener('focus', loadLiveAttendance);
+    window.addEventListener('focus', loadSyncedRequests);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('hrm-sync', handleHrmSync);
       window.removeEventListener('focus', loadLiveAttendance);
+      window.removeEventListener('focus', loadSyncedRequests);
     };
   }, []);
 
@@ -610,7 +714,28 @@ export function AttendanceApproval() {
   // Get attendance for selected date
   const attendanceForDate = useMemo(() => {
     const dateStr = formatDate(selectedDate);
-    return allAttendance.filter(att => {
+    const liveAsHistory: EmployeeAttendance[] = liveAttendance.map((record) => ({
+      employeeId: record.employeeId,
+      employeeName: record.employeeName,
+      department: record.department,
+      date: record.date,
+      checkIn: record.checkIn || '-',
+      checkOut: record.checkOut || '-',
+      hours: minutesToHoursLabel(record.checkIn, record.checkOut),
+      status: getAttendanceStatusFromLive(record),
+      note: record.status === 'online'
+        ? 'Đang làm việc - dữ liệu realtime từ Employee'
+        : record.checkOutDate && record.checkOutDate !== record.date
+          ? `Đã kết thúc ca vào ${record.checkOutDate}`
+          : 'Đã check-out - dữ liệu realtime từ Employee',
+    }));
+
+    const merged = new Map<string, EmployeeAttendance>();
+    [...allAttendance, ...liveAsHistory].forEach((item) => {
+      merged.set(`${item.employeeId}-${item.date}`, item);
+    });
+
+    return Array.from(merged.values()).filter(att => {
       const matchesDate = att.date === dateStr;
       const matchesSearch = 
         att.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -619,7 +744,7 @@ export function AttendanceApproval() {
       
       return matchesDate && matchesSearch && matchesDepartment;
     }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [allAttendance, selectedDate, searchQuery, departmentFilter]);
+  }, [allAttendance, liveAttendance, selectedDate, searchQuery, departmentFilter]);
 
   const employeeRoster = useMemo<EmployeeLiveRoster[]>(() => {
     const roster = new Map<string, EmployeeLiveRoster>();
@@ -878,23 +1003,62 @@ export function AttendanceApproval() {
     setReviewNote('');
   };
 
+  const syncReviewedRequestToEmployee = (reviewedRequest: AttendanceRequest) => {
+    if (!reviewedRequest.syncKey) return;
+
+    const synced = readSyncedRecords<Partial<AttendanceRequest>>(HRM_SYNC_KEYS.attendanceRequests);
+    const next = synced.map((item) => {
+      const normalized = normalizeSyncedAttendanceRequest(item);
+      if (!normalized || normalized.syncKey !== reviewedRequest.syncKey) return item;
+
+      return {
+        ...item,
+        status: reviewedRequest.status,
+        reviewedAt: reviewedRequest.reviewedAt,
+        reviewedBy: reviewedRequest.reviewedBy,
+        reviewNote: reviewedRequest.reviewNote,
+      };
+    });
+
+    const serialized = JSON.stringify(next);
+    window.localStorage.setItem(HRM_SYNC_KEYS.attendanceRequests, serialized);
+    window.dispatchEvent(new CustomEvent('hrm-sync', { detail: { key: HRM_SYNC_KEYS.attendanceRequests } }));
+
+    try {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: HRM_SYNC_KEYS.attendanceRequests,
+          newValue: serialized,
+          storageArea: window.localStorage,
+        }),
+      );
+    } catch {
+      // Older browsers may block synthetic StorageEvent.
+    }
+  };
+
   const handleSubmitReview = () => {
     if (!selectedRequest) return;
 
+    let reviewedRequest: AttendanceRequest | null = null;
     const updatedRequests = requests.map(req => {
       if (req.id === selectedRequest.id) {
-        return {
+        reviewedRequest = {
           ...req,
           status: actionType === 'approve' ? 'approved' as const : 'rejected' as const,
           reviewedAt: new Date().toLocaleString('vi-VN'),
           reviewedBy: 'HR Manager',
           reviewNote: reviewNote || (actionType === 'approve' ? 'Đơn được phê duyệt' : 'Đơn bị từ chối'),
         };
+        return reviewedRequest;
       }
       return req;
     });
 
     setRequests(updatedRequests);
+    if (reviewedRequest) {
+      syncReviewedRequestToEmployee(reviewedRequest);
+    }
     setShowActionDialog(false);
     setShowDetailDialog(false);
     setReviewNote('');
