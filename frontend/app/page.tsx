@@ -155,7 +155,7 @@ export default function App() {
     };
 
     return (
-      <div className="h-screen w-full min-w-0 flex overflow-hidden bg-gray-50 overscroll-none">
+      <div className="h-screen w-full min-w-0 flex overflow-hidden bg-slate-50 overscroll-none">
         {/* Employee Sidebar */}
         <EmployeeSidebar 
           isOpen={sidebarOpen} 
@@ -236,7 +236,7 @@ export default function App() {
   return (
     <div
       className={`h-screen w-full min-w-0 flex overflow-hidden overscroll-none transition-colors ${
-        managementSettings.darkMode ? 'bg-slate-950 text-slate-100' : 'bg-gray-50'
+        managementSettings.darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50'
       }`}
     >
       {/* Admin / Manager Sidebar */}
@@ -260,6 +260,7 @@ export default function App() {
           onSettingsSave={handleManagementSettingsSave}
           settingsOpen={managementSettingsOpen}
           onSettingsOpenChange={setManagementSettingsOpen}
+          userRole={userRole === 'manager' ? 'manager' : 'admin'}
         />
 
         {/* Page Content */}
