@@ -16,11 +16,11 @@ namespace Admin.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int managerId)
+        public async Task<IActionResult> GetAll([FromQuery] int managerId, [FromQuery] int? month, [FromQuery] int? year)
         {
             try
             {
-                return Ok(await _service.GetManagerTasks(managerId));
+                return Ok(await _service.GetManagerTasks(managerId, month, year));
             }
             catch (InvalidOperationException ex)
             {

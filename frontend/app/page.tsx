@@ -24,6 +24,7 @@ import { Attendance } from './employees/Attendance';
 import { EmployeeLeave } from './employees/EmployeeLeave'; 
 import { EmployeeSalary } from './employees/EmployeeSalary'; 
 import { EmployeeProfile } from './employees/EmployeeProfile';
+import { EmployeeTasks } from './employees/EmployeeTasks';
 import type { UserRole } from './types';
 import { MANAGER_DEPARTMENT } from './types';
 
@@ -57,12 +58,29 @@ const getAlertTitle = (icon: SweetAlertIcon) => {
   }
 };
 
+function loadManagementSettings() {
+  if (typeof window === 'undefined') return defaultManagementSettings;
+
+  const savedSettings = window.localStorage.getItem(MANAGEMENT_SETTINGS_KEY);
+  if (!savedSettings) return defaultManagementSettings;
+
+  try {
+    return {
+      ...defaultManagementSettings,
+      ...JSON.parse(savedSettings),
+    };
+  } catch {
+    window.localStorage.removeItem(MANAGEMENT_SETTINGS_KEY);
+    return defaultManagementSettings;
+  }
+}
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [managementSettings, setManagementSettings] = useState<ManagementSettings>(defaultManagementSettings);
+  const [managementSettings, setManagementSettings] = useState<ManagementSettings>(loadManagementSettings);
   const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -84,20 +102,6 @@ export default function App() {
     return () => {
       window.alert = nativeAlert;
     };
-  }, []);
-
-  useEffect(() => {
-    const savedSettings = window.localStorage.getItem(MANAGEMENT_SETTINGS_KEY);
-    if (!savedSettings) return;
-
-    try {
-      setManagementSettings({
-        ...defaultManagementSettings,
-        ...JSON.parse(savedSettings),
-      });
-    } catch {
-      window.localStorage.removeItem(MANAGEMENT_SETTINGS_KEY);
-    }
   }, []);
 
   useEffect(() => {
@@ -132,7 +136,9 @@ export default function App() {
     const renderEmployeePage = () => {
       switch (currentPage) {
         case 'dashboard':
-          return <EmployeeDashboard />;
+          return <EmployeeDashboard onNavigate={setCurrentPage} />;
+        case 'tasks':
+          return <EmployeeTasks />;
         case 'attendance':
           return <Attendance />;
         case 'leave':
