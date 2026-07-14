@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Check, LogOut, Menu, Search, Settings, User } from 'lucide-react';
+import { Bell, Check, LogOut, Menu, Search, Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import {
@@ -21,6 +21,7 @@ import {
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
+import type { ManagementRole } from '../types';
 
 export interface ManagementSettings {
   fullName: string;
@@ -40,6 +41,7 @@ interface NavbarProps {
   onSettingsSave: (settings: ManagementSettings) => void;
   settingsOpen?: boolean;
   onSettingsOpenChange?: (open: boolean) => void;
+  userRole?: ManagementRole;
 }
 
 interface Notification {
@@ -69,7 +71,26 @@ export function Navbar({
   onSettingsSave,
   settingsOpen,
   onSettingsOpenChange,
+  userRole = 'admin',
 }: NavbarProps) {
+  const roleProfile = userRole === 'manager'
+    ? {
+        fullName: 'Nguyễn Văn A',
+        email: 'manager.it@company.com',
+        title: 'Manager IT',
+        scope: 'Quản lý phòng ban IT',
+        searchPlaceholder: 'Tìm nhân viên, task, phòng ban...',
+      }
+    : {
+        fullName: 'Admin HR',
+        email: 'admin.hr@company.com',
+        title: 'HR Admin',
+        scope: 'Quản trị toàn hệ thống',
+        searchPlaceholder: 'Tìm nhân viên, phòng ban, chức vụ...',
+      };
+  const displayName = settings.fullName === defaultManagementSettings.fullName ? roleProfile.fullName : settings.fullName;
+  const displayEmail = settings.email === defaultManagementSettings.email ? roleProfile.email : settings.email;
+
   const [notifications, setNotifications] = useState<Notification[]>([
     {
       id: 1,
@@ -116,7 +137,7 @@ export function Navbar({
   });
 
   const unreadCount = visibleNotifications.filter((notification) => !notification.read).length;
-  const initials = settings.fullName
+  const initials = displayName
     .split(' ')
     .filter(Boolean)
     .slice(-1)
@@ -175,7 +196,7 @@ export function Navbar({
   return (
     <nav
       className={`sticky top-0 z-50 h-16 border-b shadow-sm transition-colors ${
-        settings.darkMode ? 'border-slate-800 bg-slate-950 text-slate-100' : 'border-gray-200 bg-white text-gray-900'
+        settings.darkMode ? 'border-slate-800 bg-slate-950 text-slate-100' : 'border-slate-200 bg-white/95 text-slate-900 backdrop-blur'
       }`}
     >
       <div className="flex h-full items-center justify-between px-4">
@@ -184,16 +205,16 @@ export function Navbar({
             variant="ghost"
             size="icon"
             onClick={onToggleSidebar}
-            className={settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}
+            className={settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}
           >
             <Menu className="size-5" />
           </Button>
 
-          <div className="hidden items-center gap-2 text-2xl font-bold text-blue-600 lg:flex">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-lg text-white shadow-lg shadow-blue-200">
+          <div className="hidden items-center gap-2 text-2xl font-bold text-slate-900 lg:flex">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-900 to-indigo-700 text-lg text-white shadow-lg shadow-slate-200">
               HR
             </div>
-            HRM SYSTEM
+            <span>HRM SYSTEM</span>
           </div>
         </div>
 
@@ -202,11 +223,11 @@ export function Navbar({
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Tìm kiếm nhân viên, phòng ban..."
-              className={`w-full rounded-lg border py-2 pl-10 pr-4 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              placeholder={roleProfile.searchPlaceholder}
+              className={`w-full rounded-lg border py-2 pl-10 pr-4 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                 settings.darkMode
                   ? 'border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500'
-                  : 'border-gray-200 bg-white text-gray-900'
+                  : 'border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400'
               }`}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
@@ -220,11 +241,11 @@ export function Navbar({
               <Button
                 variant="ghost"
                 size="icon"
-                className={`relative ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}`}
+                className={`relative ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
               >
                 <Bell className="size-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex size-5 animate-pulse items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                  <span className="absolute -right-1 -top-1 flex size-5 animate-pulse items-center justify-center rounded-full bg-rose-500 text-xs text-white">
                     {unreadCount}
                   </span>
                 )}
@@ -270,7 +291,7 @@ export function Navbar({
           <Button
             variant="ghost"
             size="icon"
-            className={`hidden md:flex ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}`}
+            className={`hidden md:flex ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
             onClick={() => setShowSettings(true)}
           >
             <Settings className="size-5" />
@@ -280,19 +301,24 @@ export function Navbar({
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className={`flex items-center gap-2 ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-gray-100'}`}
+                className={`flex items-center gap-2 ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-slate-100'}`}
               >
-                <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white shadow-md">
+                <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-800 to-indigo-700 text-sm font-bold text-white shadow-md">
                   {initials}
                 </div>
                 <div className="hidden text-left lg:block">
-                  <p className="text-sm font-medium">{settings.fullName}</p>
-                  <p className={`text-xs ${settings.darkMode ? 'text-slate-400' : 'text-gray-500'}`}>HR Manager</p>
+                  <p className="text-sm font-medium">{displayName}</p>
+                  <p className={`text-xs ${settings.darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{roleProfile.title}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Tài khoản</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                <div>
+                  <p className="text-sm font-semibold">{displayName}</p>
+                  <p className="text-xs font-normal text-gray-500">{displayEmail}</p>
+                </div>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setShowSettings(true)}>
                 <Settings className="mr-2 size-4" />
@@ -312,7 +338,7 @@ export function Navbar({
         <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Cài đặt</DialogTitle>
-            <DialogDescription>Tùy chỉnh thiết lập của bạn</DialogDescription>
+            <DialogDescription>{roleProfile.scope}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">

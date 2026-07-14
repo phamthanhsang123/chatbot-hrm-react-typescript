@@ -1,7 +1,7 @@
 'use client';
 
 import { Bell, BriefcaseBusiness, Check, LogOut, Menu, Search, Settings, User } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -21,8 +21,7 @@ import {
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
-import { getCurrentEmployeeId } from '@/services/tasks';
-import { getEmployeePortalIdentity } from './hrmSync';
+import { useEmployeePortalProfile } from './useEmployeePortalProfile';
 
 interface EmployeeNavbarProps {
   onToggleSidebar: () => void;
@@ -62,7 +61,7 @@ const initialNotifications: Notification[] = [
 ];
 
 export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProps) {
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
+  const { profile } = useEmployeePortalProfile();
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
   const [showSettings, setShowSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -170,8 +169,8 @@ export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProp
                   <User className="size-4" />
                 </div>
                 <div className="hidden text-left lg:block">
-                  <p className="text-sm font-medium">{employeeIdentity.employeeName}</p>
-                  <p className="text-xs text-gray-500">Developer - {employeeIdentity.department}</p>
+                  <p className="text-sm font-medium">{profile.employeeName}</p>
+                  <p className="text-xs text-gray-500">{profile.position} - {profile.department}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -207,13 +206,13 @@ export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProp
                   <Label htmlFor="fullname" className="text-xs">
                     Họ và tên
                   </Label>
-                  <Input id="fullname" defaultValue={employeeIdentity.employeeName} className="h-9 text-sm" />
+                  <Input id="fullname" value={profile.employeeName} readOnly className="h-9 text-sm" />
                 </div>
                 <div>
                   <Label htmlFor="email-settings" className="text-xs">
                     Email
                   </Label>
-                  <Input id="email-settings" type="email" defaultValue="thanhsang3213121@gmail.com" className="h-9 text-sm" />
+                  <Input id="email-settings" type="email" value={profile.email} readOnly className="h-9 text-sm" />
                 </div>
               </div>
             </div>

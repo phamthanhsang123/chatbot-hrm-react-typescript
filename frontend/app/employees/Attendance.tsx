@@ -511,6 +511,44 @@ export function Attendance() {
     }
   }, [currentDate, employeeIdentity.employeeId, mergeRecord]);
 
+  useEffect(() => {
+    const loadReviewedRequests = () => {
+      const syncedRequests = readSyncedRecords<AttendanceRequest>(HRM_SYNC_KEYS.attendanceRequests).filter(
+        (request) => request.employeeId === employeeIdentity.employeeId,
+      );
+
+      if (syncedRequests.length === 0) return;
+
+      setRequests((current) => {
+        const syncedIds = new Set(syncedRequests.map((request) => request.id));
+        return [...syncedRequests, ...current.filter((request) => !syncedIds.has(request.id))];
+      });
+    };
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === HRM_SYNC_KEYS.attendanceRequests) {
+        loadReviewedRequests();
+      }
+    };
+
+    const handleHrmSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string }>).detail;
+      if (!detail?.key || detail.key === HRM_SYNC_KEYS.attendanceRequests) {
+        loadReviewedRequests();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('hrm-sync', handleHrmSync);
+    window.addEventListener('focus', loadReviewedRequests);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('hrm-sync', handleHrmSync);
+      window.removeEventListener('focus', loadReviewedRequests);
+    };
+  }, [employeeIdentity.employeeId]);
+
   const loadAttendance = useCallback(async () => {
     const { month, year } = parsePeriod(period);
     setLoading(true);
