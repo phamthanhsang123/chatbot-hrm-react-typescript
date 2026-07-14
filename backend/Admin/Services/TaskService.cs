@@ -70,6 +70,7 @@ namespace Admin.Services
             EnsureManagerCanAccessEmployee(manager, employee);
 
             var now = DateTime.Now;
+            var priority = NormalizePriority(dto.Priority);
             var task = new EmployeeTask
             {
                 EmployeeId = employee.Id,
@@ -78,10 +79,10 @@ namespace Admin.Services
                 Title = dto.Title.Trim(),
                 Description = dto.Description?.Trim(),
                 Deadline = dto.Deadline,
-                Priority = NormalizePriority(dto.Priority),
+                Priority = priority,
                 Status = "NEW",
                 ProgressPercent = 0,
-                ExpectedScore = ClampScore(dto.ExpectedScore),
+                ExpectedScore = GetExpectedScoreByPriority(priority),
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -113,7 +114,7 @@ namespace Admin.Services
             task.Description = dto.Description?.Trim();
             task.Deadline = dto.Deadline;
             task.Priority = NormalizePriority(dto.Priority);
-            task.ExpectedScore = ClampScore(dto.ExpectedScore);
+            task.ExpectedScore = GetExpectedScoreByPriority(task.Priority);
             task.UpdatedAt = DateTime.Now;
 
             await _db.SaveChangesAsync();
@@ -367,6 +368,18 @@ namespace Admin.Services
         private static decimal ClampScore(decimal value)
         {
             return Math.Max(0, Math.Min(100, value));
+        }
+
+        private static decimal GetExpectedScoreByPriority(string priority)
+        {
+            return priority switch
+            {
+                "LOW" => 10,
+                "MEDIUM" => 20,
+                "HIGH" => 30,
+                "CRITICAL" => 40,
+                _ => 20
+            };
         }
     }
 }

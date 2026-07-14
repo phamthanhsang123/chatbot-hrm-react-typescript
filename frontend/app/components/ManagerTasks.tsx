@@ -57,7 +57,7 @@ const emptyForm = {
   description: '',
   deadline: '',
   priority: 'MEDIUM' as TaskPriority,
-  expectedScore: '100',
+  expectedScore: '20',
 };
 
 const statusMeta: Record<TaskStatus, { label: string; className: string }> = {
@@ -75,6 +75,13 @@ const priorityMeta: Record<TaskPriority, string> = {
   MEDIUM: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
   HIGH: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
   CRITICAL: 'bg-red-100 text-red-700 hover:bg-red-100',
+};
+
+const priorityScoreMap: Record<TaskPriority, number> = {
+  LOW: 10,
+  MEDIUM: 20,
+  HIGH: 30,
+  CRITICAL: 40,
 };
 
 function currentPeriodValue() {
@@ -119,6 +126,10 @@ function buildPeriodOptions() {
 }
 
 const periodOptions = buildPeriodOptions();
+
+function expectedScoreForPriority(priority: TaskPriority) {
+  return priorityScoreMap[priority] ?? 20;
+}
 
 const toast = Swal.mixin({
   toast: true,
@@ -306,12 +317,27 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   ];
 
   const updateTaskForm = (key: keyof typeof taskForm, value: string) => {
-    setTaskForm((current) => ({ ...current, [key]: value }));
+    setTaskForm((current) => {
+      if (key === 'priority') {
+        const nextPriority = value as TaskPriority;
+        return {
+          ...current,
+          priority: nextPriority,
+          expectedScore: String(expectedScoreForPriority(nextPriority)),
+        };
+      }
+
+      return { ...current, [key]: value };
+    });
   };
 
   const openCreateDialog = () => {
     setEditingTask(null);
-    setTaskForm({ ...emptyForm, deadline: periodEndDateInput(period) });
+    setTaskForm({
+      ...emptyForm,
+      deadline: periodEndDateInput(period),
+      expectedScore: String(expectedScoreForPriority(emptyForm.priority)),
+    });
     setTaskDialogOpen(true);
   };
 
@@ -323,7 +349,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
       description: task.description || '',
       deadline: toDateInput(task.deadline),
       priority: task.priority,
-      expectedScore: String(task.expectedScore),
+      expectedScore: String(expectedScoreForPriority(task.priority)),
     });
     setTaskDialogOpen(true);
   };
@@ -341,7 +367,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
       description: taskForm.description.trim(),
       deadline: `${taskForm.deadline}T17:00:00`,
       priority: taskForm.priority,
-      expectedScore: Number(taskForm.expectedScore || 100),
+      expectedScore: expectedScoreForPriority(taskForm.priority),
     };
 
     setSavingTask(true);
@@ -771,8 +797,8 @@ function TaskDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto p-0">
-        <DialogHeader className="border-b border-slate-100 p-5 text-left">
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto rounded-[28px] border border-slate-200 p-0 shadow-2xl">
+        <DialogHeader className="border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-blue-50 p-6 text-left">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase text-blue-600">Chi tiết task</p>
@@ -783,12 +809,12 @@ function TaskDetailDialog({
         <DialogDescription className="text-sm leading-6 text-slate-600">{task.description || 'Task này chưa có mô tả.'}</DialogDescription>
         </DialogHeader>
 
-      <div className="space-y-4 p-5">
+      <div className="space-y-5 p-6">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <Info icon={<UserRound className="size-4" />} label="Nhân viên" value={task.employeeName} />
           <Info icon={<CalendarDays className="size-4" />} label="Deadline" value={formatDate(task.deadline)} />
           <Info icon={<TimerReset className="size-4" />} label="Còn lại" value={deadlineLabel(task)} />
-          <Info icon={<ClipboardList className="size-4" />} label="Điểm kỳ vọng" value={String(task.expectedScore)} />
+          <Info icon={<ClipboardList className="size-4" />} label="Điểm task" value={`${task.expectedScore} điểm`} />
         </div>
 
         <div>
@@ -856,14 +882,14 @@ function TaskDetailDialog({
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-slate-100 p-4 text-sm text-slate-500">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
             {task.status === 'APPROVED'
               ? 'Task đã hoàn thành và được nghiệm thu.'
               : 'Task chưa gửi hoàn thành nên chưa cần review.'}
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2">
           {mode === 'manage' && (
             <Button variant="outline" onClick={() => onEdit(task)} disabled={!canEditTask(task)}>
               <Edit3 className="mr-2 size-4" />
@@ -902,18 +928,18 @@ function TaskFormDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl rounded-[28px] border border-slate-200 p-0 shadow-2xl">
+        <DialogHeader className="border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-blue-50 p-6">
           <DialogTitle>{editingTask ? 'Chỉnh sửa task' : 'Giao task mới'}</DialogTitle>
           <DialogDescription>
             {editingTask ? 'Chỉnh sửa thông tin task khi task chưa đóng.' : 'Giao task cho nhân viên trong phòng ban.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4">
-          <div>
+        <div className="grid gap-5 p-6">
+          <div className="grid gap-2">
             <Label>Nhân viên</Label>
             <Select value={form.employeeId} onValueChange={(value) => onUpdateForm('employeeId', value)} disabled={Boolean(editingTask)}>
-              <SelectTrigger>
+              <SelectTrigger className="h-11 rounded-2xl">
                 <SelectValue placeholder="Chọn nhân viên" />
               </SelectTrigger>
               <SelectContent>
@@ -925,23 +951,23 @@ function TaskFormDialog({
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label>Tên task</Label>
-            <Input value={form.title} onChange={(event) => onUpdateForm('title', event.target.value)} placeholder="Ví dụ: Hoàn thiện báo cáo tuần" />
+            <Input className="h-11 rounded-2xl" value={form.title} onChange={(event) => onUpdateForm('title', event.target.value)} placeholder="Ví dụ: Hoàn thiện báo cáo tuần" />
           </div>
-          <div>
+          <div className="grid gap-2">
             <Label>Mô tả</Label>
-            <Textarea value={form.description} onChange={(event) => onUpdateForm('description', event.target.value)} placeholder="Yêu cầu, tiêu chí hoàn thành..." />
+            <Textarea className="min-h-28 rounded-2xl" value={form.description} onChange={(event) => onUpdateForm('description', event.target.value)} placeholder="Yêu cầu, tiêu chí hoàn thành..." />
           </div>
           <div className="grid gap-3 md:grid-cols-3">
-            <div>
+            <div className="grid gap-2">
               <Label>Deadline</Label>
-              <Input type="date" value={form.deadline} onChange={(event) => onUpdateForm('deadline', event.target.value)} />
+              <Input className="h-11 rounded-2xl" type="date" value={form.deadline} onChange={(event) => onUpdateForm('deadline', event.target.value)} />
             </div>
-            <div>
+            <div className="grid gap-2">
               <Label>Ưu tiên</Label>
               <Select value={form.priority} onValueChange={(value) => onUpdateForm('priority', value as TaskPriority)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-2xl">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -952,10 +978,16 @@ function TaskFormDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Điểm kỳ vọng</Label>
-              <Input type="number" min={0} max={100} value={form.expectedScore} onChange={(event) => onUpdateForm('expectedScore', event.target.value)} />
+            <div className="grid gap-2">
+              <Label>Điểm tự động</Label>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <p className="text-lg font-bold text-blue-900">{form.expectedScore} điểm</p>
+                <p className="mt-1 text-xs text-blue-700">LOW = 10, MEDIUM = 20, HIGH = 30, CRITICAL = 40</p>
+              </div>
             </div>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Hệ thống tự gán điểm theo độ ưu tiên để manager và AI đánh giá theo cùng một chuẩn.
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
