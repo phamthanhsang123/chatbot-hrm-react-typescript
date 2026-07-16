@@ -6,8 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  LayoutDashboard,
-  MessageSquare,
   Settings,
   User,
   Wallet,
@@ -31,12 +29,10 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { id: 'dashboard', label: 'Tổng quan', icon: <LayoutDashboard className="size-5" /> },
   { id: 'tasks', label: 'Task của tôi', icon: <BriefcaseBusiness className="size-5" />, badge: 'New' },
   { id: 'attendance', label: 'Chấm công', icon: <Clock className="size-5" /> },
   { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 2 },
   { id: 'salary', label: 'Lương của tôi', icon: <Wallet className="size-5" /> },
-  { id: 'chatbot', label: 'AI Assistant', icon: <MessageSquare className="size-5" />, badge: 'AI' },
   { id: 'profile', label: 'Hồ sơ cá nhân', icon: <User className="size-5" /> },
 ];
 
@@ -56,20 +52,20 @@ export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate }: Em
 
       <aside
         className={`
-          fixed left-0 top-0 z-50 h-screen w-64 bg-gradient-to-b from-blue-600 via-blue-700 to-indigo-800 text-white shadow-2xl
+          fixed left-0 top-0 z-50 h-screen w-72 bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 text-white shadow-2xl
           transition-all duration-300 ease-in-out lg:sticky
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}
+          ${isCollapsed ? 'lg:w-20' : 'lg:w-72'}
         `}
       >
         <div className="flex h-full flex-col">
-          <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+          <div className="flex h-20 items-center justify-between border-b border-white/10 px-5">
             {!isCollapsed && (
-              <div className="flex items-center gap-2">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-white/10 shadow-lg backdrop-blur-md">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-lg backdrop-blur-md">
                   <User className="size-5" />
                 </div>
-                <span className="text-lg font-bold">Employee Portal</span>
+                <span className="truncate text-xl font-bold leading-tight">Employee Portal</span>
               </div>
             )}
             <Button
@@ -82,32 +78,38 @@ export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate }: Em
             </Button>
           </div>
 
-          <nav className="flex-1 overflow-y-auto px-3 py-6">
-            <div className="space-y-1">
+          <nav className="flex-1 overflow-y-auto px-4 py-6">
+            <div className="space-y-2">
               {menuItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => handleNavigate(item.id)}
                   className={`
-                    group flex w-full items-center gap-3 rounded-xl px-3 py-3 transition-all duration-200
+                    group flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 transition-all duration-200
                     ${
                       currentPage === item.id
-                        ? 'bg-white text-blue-700 shadow-lg shadow-blue-900/20'
-                        : 'text-white/90 hover:bg-white/10 hover:text-white'
+                        ? 'bg-white/95 text-slate-950 shadow-lg shadow-black/20'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
                     }
                     ${isCollapsed ? 'justify-center' : ''}
                   `}
                 >
-                  <div className={`${currentPage === item.id ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
+                  <div
+                    className={`flex size-9 shrink-0 items-center justify-center rounded-xl transition-all ${
+                      currentPage === item.id
+                        ? 'bg-indigo-50 text-indigo-700'
+                        : 'bg-white/5 text-slate-300 group-hover:bg-white/10 group-hover:text-white'
+                    }`}
+                  >
                     {item.icon}
                   </div>
                   {!isCollapsed && (
                     <>
-                      <span className="flex-1 text-left font-medium">{item.label}</span>
+                      <span className="flex-1 truncate text-left text-[15px] font-semibold leading-5">{item.label}</span>
                       {item.badge && (
                         <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            currentPage === item.id ? 'bg-blue-100 text-blue-700' : 'bg-white/20 text-white'
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                            currentPage === item.id ? 'bg-indigo-100 text-indigo-700' : 'bg-white/10 text-slate-200'
                           }`}
                         >
                           {item.badge}
@@ -120,15 +122,17 @@ export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate }: Em
             </div>
           </nav>
 
-          <div className="border-t border-white/10 p-3">
+          <div className="border-t border-white/10 p-4">
             <button
-              className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-white/90 transition-all duration-200 hover:bg-white/10 hover:text-white ${
+              className={`group flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white ${
                 isCollapsed ? 'justify-center' : ''
               }`}
               onClick={() => setShowSettings(!showSettings)}
             >
-              <Settings className="size-5 transition-transform duration-300 group-hover:rotate-90" />
-              {!isCollapsed && <span className="flex-1 text-left font-medium">Cài đặt</span>}
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5">
+                <Settings className="size-5 transition-transform duration-300 group-hover:rotate-90" />
+              </span>
+              {!isCollapsed && <span className="flex-1 text-left text-[15px] font-semibold">Cài đặt</span>}
             </button>
 
             {showSettings && !isCollapsed && (
