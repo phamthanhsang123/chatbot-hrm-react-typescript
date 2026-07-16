@@ -9,6 +9,8 @@ Tai lieu nay dung de cac thanh vien khac clone/pull code ve co the biet cach mo 
 | Frontend HRM | http://localhost:3000 |
 | Backend API root | http://localhost:5297 |
 | Swagger test API | http://localhost:5297/swagger |
+| Backend API public Railway | https://api-production-ffaa0.up.railway.app |
+| Swagger public Railway | https://api-production-ffaa0.up.railway.app/swagger |
 
 ## 2. Lenh chay du an
 
@@ -23,6 +25,12 @@ Backend mac dinh chay o:
 
 ```text
 http://localhost:5297
+```
+
+Backend da deploy public tren Railway:
+
+```text
+https://api-production-ffaa0.up.railway.app
 ```
 
 ### Frontend
@@ -63,6 +71,12 @@ Base URL:
 
 ```text
 http://localhost:5297
+```
+
+Neu dung API public Railway, thay base URL bang:
+
+```text
+https://api-production-ffaa0.up.railway.app
 ```
 
 | Chuc nang | Method | Endpoint |
