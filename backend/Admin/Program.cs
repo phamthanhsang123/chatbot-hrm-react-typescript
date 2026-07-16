@@ -23,7 +23,11 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseMySql(connectionString, ServerVersion.Parse("8.0.36-mysql"));
+    options.UseMySql(
+        connectionString,
+        ServerVersion.Parse("8.0.36-mysql"),
+        mySqlOptions => mySqlOptions.CommandTimeout(5)
+    );
 });
 
 // =========================
