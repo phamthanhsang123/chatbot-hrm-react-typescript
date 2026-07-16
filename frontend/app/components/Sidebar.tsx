@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  BarChart3,
   BrainCircuit,
   Calendar,
   ChevronLeft,
@@ -41,7 +40,6 @@ const adminMenuItems: MenuItem[] = [
   { id: 'attendance-approval', label: 'Duyệt chấm công', icon: <ClipboardCheck className="size-5" />, badge: 3 },
   { id: 'competency', label: 'Đánh giá năng lực', icon: <BrainCircuit className="size-5" />, badge: 'AI' },
   { id: 'reports', label: 'Báo cáo', icon: <FileText className="size-5" /> },
-  { id: 'analytics', label: 'Phân tích', icon: <BarChart3 className="size-5" /> },
 ];
 
 const managerMenuItems: MenuItem[] = [

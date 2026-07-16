@@ -9,7 +9,6 @@ import { EmployeeTable } from './components/EmployeeTable';
 import { Salary } from './components/Salary';
 import { Leave } from './components/Leave';
 import { Reports } from './components/Reports';
-import { Analytics } from './components/Analytics';
 import { AttendanceApproval } from './components/AttendanceApproval';
 import { CompetencyEvaluation } from './components/CompetencyEvaluation';
 
@@ -215,8 +214,6 @@ export default function App() {
         return <CompetencyEvaluation userRole="admin" />;
       case 'reports':
         return <Reports />;
-      case 'analytics':
-        return <Analytics />;
       default:
         return <EmployeeTable userRole="admin" />;
     }
