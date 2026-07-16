@@ -19,7 +19,6 @@ import { CompetencyEvaluation } from './components/CompetencyEvaluation';
 // Employee Components
 import { defaultEmployeePortalSettings, EmployeeNavbar, type EmployeePortalSettings } from './employees/EmployeeNavbar';
 import { EmployeeSidebar } from './employees/EmployeeSidebar'; 
-import { EmployeeDashboard } from './employees/EmployeeDashboard'; 
 import { Attendance } from './employees/Attendance'; 
 import { EmployeeLeave } from './employees/EmployeeLeave'; 
 import { EmployeeSalary } from './employees/EmployeeSalary'; 
@@ -142,7 +141,7 @@ export default function App() {
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
     setIsLoggedIn(true);
-    setCurrentPage('dashboard');
+    setCurrentPage(role === 'employee' ? 'tasks' : 'dashboard');
   };
 
   const handleLogout = () => {
@@ -163,8 +162,6 @@ export default function App() {
   if (userRole === 'employee') {
     const renderEmployeePage = () => {
       switch (currentPage) {
-        case 'dashboard':
-          return <EmployeeDashboard onNavigate={setCurrentPage} />;
         case 'tasks':
           return <EmployeeTasks />;
         case 'attendance':
@@ -173,12 +170,10 @@ export default function App() {
           return <EmployeeLeave />;
         case 'salary':
           return <EmployeeSalary />;
-        case 'chatbot':
-          return <Chatbot />;
         case 'profile':
           return <EmployeeProfile />;
         default:
-          return <EmployeeDashboard />;
+          return <EmployeeTasks />;
       }
     };
 

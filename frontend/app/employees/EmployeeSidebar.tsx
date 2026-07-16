@@ -6,8 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  LayoutDashboard,
-  MessageSquare,
   Settings,
   User,
   Wallet,
@@ -33,12 +31,10 @@ interface MenuItem {
 }
 
 const employeeMenuItems: MenuItem[] = [
-  { id: 'dashboard', label: 'Tổng quan', icon: <LayoutDashboard className="size-5" /> },
   { id: 'tasks', label: 'Task của tôi', icon: <BriefcaseBusiness className="size-5" />, badge: 'New' },
   { id: 'attendance', label: 'Chấm công', icon: <Clock className="size-5" /> },
   { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 2 },
   { id: 'salary', label: 'Lương của tôi', icon: <Wallet className="size-5" /> },
-  { id: 'chatbot', label: 'AI Assistant', icon: <MessageSquare className="size-5" />, badge: 'AI' },
   { id: 'profile', label: 'Hồ sơ cá nhân', icon: <User className="size-5" /> },
 ];
 
