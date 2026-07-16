@@ -4,13 +4,10 @@ import Swal, { type SweetAlertIcon } from 'sweetalert2';
 import { Login } from './components/Login';
 import { defaultManagementSettings, Navbar, type ManagementSettings } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
-import { Dashboard } from './components/Dashboard';
-import { ManagerDashboard } from './components/ManagerDashboard';
 import { ManagerTasks } from './components/ManagerTasks';
 import { EmployeeTable } from './components/EmployeeTable';
 import { Salary } from './components/Salary';
 import { Leave } from './components/Leave';
-import { Chatbot } from './components/Chatbot';
 import { Reports } from './components/Reports';
 import { Analytics } from './components/Analytics';
 import { AttendanceApproval } from './components/AttendanceApproval';
@@ -19,7 +16,6 @@ import { CompetencyEvaluation } from './components/CompetencyEvaluation';
 // Employee Components
 import { EmployeeNavbar } from './employees/EmployeeNavbar'; 
 import { EmployeeSidebar } from './employees/EmployeeSidebar'; 
-import { EmployeeDashboard } from './employees/EmployeeDashboard'; 
 import { Attendance } from './employees/Attendance'; 
 import { EmployeeLeave } from './employees/EmployeeLeave'; 
 import { EmployeeSalary } from './employees/EmployeeSalary'; 
@@ -29,6 +25,11 @@ import type { UserRole } from './types';
 import { MANAGER_DEPARTMENT } from './types';
 
 const MANAGEMENT_SETTINGS_KEY = 'hrm-management-settings';
+
+const getDefaultPageForRole = (role: UserRole | null) => {
+  if (role === 'employee') return 'attendance';
+  return 'employees';
+};
 
 const escapeAlertHtml = (value: string) =>
   value
@@ -79,7 +80,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [currentPage, setCurrentPage] = useState(getDefaultPageForRole(null));
   const [managementSettings, setManagementSettings] = useState<ManagementSettings>(loadManagementSettings);
   const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
 
@@ -116,13 +117,13 @@ export default function App() {
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
     setIsLoggedIn(true);
-    setCurrentPage('dashboard');
+    setCurrentPage(getDefaultPageForRole(role));
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     setUserRole(null);
-    setCurrentPage('dashboard');
+    setCurrentPage(getDefaultPageForRole(null));
     setSidebarOpen(false);
   };
 
@@ -135,8 +136,6 @@ export default function App() {
   if (userRole === 'employee') {
     const renderEmployeePage = () => {
       switch (currentPage) {
-        case 'dashboard':
-          return <EmployeeDashboard onNavigate={setCurrentPage} />;
         case 'tasks':
           return <EmployeeTasks />;
         case 'attendance':
@@ -145,12 +144,10 @@ export default function App() {
           return <EmployeeLeave />;
         case 'salary':
           return <EmployeeSalary />;
-        case 'chatbot':
-          return <Chatbot />;
         case 'profile':
           return <EmployeeProfile />;
         default:
-          return <EmployeeDashboard />;
+          return <Attendance />;
       }
     };
 
@@ -186,8 +183,6 @@ export default function App() {
   const renderManagementPage = () => {
     if (userRole === 'manager') {
       switch (currentPage) {
-        case 'dashboard':
-          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
         case 'employees':
           return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
         case 'manager-tasks':
@@ -202,16 +197,12 @@ export default function App() {
           return <CompetencyEvaluation userRole="manager" departmentScope={MANAGER_DEPARTMENT} />;
         case 'reports':
           return <Reports />;
-        case 'chatbot':
-          return <Chatbot />;
         default:
-          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
+          return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
       }
     }
 
     switch (currentPage) {
-      case 'dashboard':
-        return <Dashboard onNavigate={setCurrentPage} />;
       case 'employees':
         return <EmployeeTable userRole="admin" />;
       case 'salary':
@@ -222,14 +213,12 @@ export default function App() {
         return <AttendanceApproval />;
       case 'competency':
         return <CompetencyEvaluation userRole="admin" />;
-      case 'chatbot':
-        return <Chatbot />;
       case 'reports':
         return <Reports />;
       case 'analytics':
         return <Analytics />;
       default:
-        return <Dashboard onNavigate={setCurrentPage} />;
+        return <EmployeeTable userRole="admin" />;
     }
   };
 
