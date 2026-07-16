@@ -466,6 +466,10 @@ namespace Admin.Services
 
             return role.Trim().ToUpperInvariant() switch
             {
+                "ADMIN" => "ADMIN",
+                "HR" => "ADMIN",
+                "QUẢN TRỊ" => "ADMIN",
+                "QUAN TRI" => "ADMIN",
                 "MANAGER" => "MANAGER",
                 "QUẢN LÝ" => "MANAGER",
                 "QUAN LY" => "MANAGER",

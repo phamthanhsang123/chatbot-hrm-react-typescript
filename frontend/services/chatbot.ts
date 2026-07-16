@@ -1,5 +1,5 @@
 // services/chatbot.ts
-const rawApiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5297';
+const rawApiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api-production-ffaa0.up.railway.app';
 export const API_BASE = rawApiBase.replace(/\/+$/, '');
 
 export async function chatWithBot(message: string, session_id: number) {

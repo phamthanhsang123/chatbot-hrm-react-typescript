@@ -26,7 +26,15 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
         connectionString,
         ServerVersion.Parse("8.0.36-mysql"),
-        mySqlOptions => mySqlOptions.CommandTimeout(5)
+        mySqlOptions =>
+        {
+            mySqlOptions.CommandTimeout(30);
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null
+            );
+        }
     );
 });
 

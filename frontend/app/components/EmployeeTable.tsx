@@ -247,7 +247,7 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       setEmployees([]);
       setDepartments([]);
       setPositions([]);
-      setError('Không tải được danh sách nhân viên từ API. Hãy kiểm tra backend http://localhost:5297 và database.');
+      setError('Không tải được danh sách nhân viên từ API. Hãy kiểm tra backend https://api-production-ffaa0.up.railway.app và database.');
       toast.fire({
         icon: 'error',
         title: 'Không kết nối được API nhân viên',
