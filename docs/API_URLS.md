@@ -207,17 +207,7 @@ GET http://localhost:5297/api/admin/competency/1/analyze
 | Duyet review nang luc | POST | `/api/manager/competency/{reviewId}/approve` |
 | Tu choi review nang luc | POST | `/api/manager/competency/{reviewId}/reject` |
 
-## 13. API Chatbot / AI Assistant
-
-| Chuc nang | Method | Endpoint |
-|---|---:|---|
-| Tao phien chat | POST | `/chat/session` |
-| Lay danh sach phien chat | GET | `/chat/sessions` |
-| Lay lich su chat | GET | `/chat/history/{sessionId}` |
-| Gui tin nhan chatbot | POST | `/chat` |
-| Xoa phien chat | DELETE | `/chat/session/{sessionId}` |
-
-## 14. Ghi chu cho thanh vien khac
+## 13. Ghi chu cho thanh vien khac
 
 - Nen xem Swagger truoc khi code frontend: `http://localhost:5297/swagger`.
 - Frontend lay API base tu bien moi truong `NEXT_PUBLIC_API_BASE_URL`, mac dinh la `http://localhost:5297`.
