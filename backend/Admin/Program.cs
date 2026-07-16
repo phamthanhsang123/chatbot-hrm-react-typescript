@@ -23,7 +23,19 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseMySql(connectionString, ServerVersion.Parse("8.0.36-mysql"));
+    options.UseMySql(
+        connectionString,
+        ServerVersion.Parse("8.0.36-mysql"),
+        mySqlOptions =>
+        {
+            mySqlOptions.CommandTimeout(30);
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null
+            );
+        }
+    );
 });
 
 // =========================
@@ -129,6 +141,12 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    app.Urls.Add($"http://0.0.0.0:{port}");
+}
 
 // =========================
 // PROXY / RAILWAY
