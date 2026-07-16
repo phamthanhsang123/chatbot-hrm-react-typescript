@@ -5,7 +5,7 @@ namespace Admin.Controllers
 {
     [ApiController]
     [Route("api/test")]
-    public class TestController
+    public class TestController : ControllerBase
     {
         private readonly AppDbContext _db;
 
@@ -17,13 +17,14 @@ namespace Admin.Controllers
         [HttpGet("mysql")]
         public IActionResult TestMySql()
         {
-            return Ok(_db.Users.Count());
-        }
-        
-        [HttpGet("mysql")]
-        private IActionResult Ok(int v)
-        {
-            throw new NotImplementedException();
+            return Ok(new
+            {
+                employees = _db.Employees.Count(),
+                departments = _db.Departments.Count(),
+                positions = _db.Positions.Count(),
+                tasks = _db.Tasks.Count(),
+                competencyReviews = _db.CompetencyReviews.Count()
+            });
         }
     }
 }
