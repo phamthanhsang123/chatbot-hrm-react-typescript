@@ -134,6 +134,12 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    app.Urls.Add($"http://0.0.0.0:{port}");
+}
+
 // =========================
 // PROXY / RAILWAY
 // =========================
