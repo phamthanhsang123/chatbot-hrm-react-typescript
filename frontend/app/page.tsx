@@ -17,7 +17,7 @@ import { AttendanceApproval } from './components/AttendanceApproval';
 import { CompetencyEvaluation } from './components/CompetencyEvaluation';
 
 // Employee Components
-import { EmployeeNavbar } from './employees/EmployeeNavbar'; 
+import { defaultEmployeePortalSettings, EmployeeNavbar, type EmployeePortalSettings } from './employees/EmployeeNavbar';
 import { EmployeeSidebar } from './employees/EmployeeSidebar'; 
 import { EmployeeDashboard } from './employees/EmployeeDashboard'; 
 import { Attendance } from './employees/Attendance'; 
@@ -29,6 +29,7 @@ import type { UserRole } from './types';
 import { MANAGER_DEPARTMENT } from './types';
 
 const MANAGEMENT_SETTINGS_KEY = 'hrm-management-settings';
+const EMPLOYEE_SETTINGS_KEY = 'hrm-employee-settings';
 
 const escapeAlertHtml = (value: string) =>
   value
@@ -75,6 +76,23 @@ function loadManagementSettings() {
   }
 }
 
+function loadEmployeeSettings() {
+  if (typeof window === 'undefined') return defaultEmployeePortalSettings;
+
+  const savedSettings = window.localStorage.getItem(EMPLOYEE_SETTINGS_KEY);
+  if (!savedSettings) return defaultEmployeePortalSettings;
+
+  try {
+    return {
+      ...defaultEmployeePortalSettings,
+      ...JSON.parse(savedSettings),
+    };
+  } catch {
+    window.localStorage.removeItem(EMPLOYEE_SETTINGS_KEY);
+    return defaultEmployeePortalSettings;
+  }
+}
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
@@ -82,6 +100,8 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [managementSettings, setManagementSettings] = useState<ManagementSettings>(loadManagementSettings);
   const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
+  const [employeeSettings, setEmployeeSettings] = useState<EmployeePortalSettings>(loadEmployeeSettings);
+  const [employeeSettingsOpen, setEmployeeSettingsOpen] = useState(false);
 
   useEffect(() => {
     const nativeAlert = window.alert;
@@ -105,12 +125,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', managementSettings.darkMode);
-  }, [managementSettings.darkMode]);
+    const darkMode = userRole === 'employee' ? employeeSettings.darkMode : managementSettings.darkMode;
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [employeeSettings.darkMode, managementSettings.darkMode, userRole]);
 
   const handleManagementSettingsSave = (nextSettings: ManagementSettings) => {
     setManagementSettings(nextSettings);
     window.localStorage.setItem(MANAGEMENT_SETTINGS_KEY, JSON.stringify(nextSettings));
+  };
+
+  const handleEmployeeSettingsSave = (nextSettings: EmployeePortalSettings) => {
+    setEmployeeSettings(nextSettings);
+    window.localStorage.setItem(EMPLOYEE_SETTINGS_KEY, JSON.stringify(nextSettings));
   };
 
   const handleLogin = (role: UserRole) => {
@@ -124,6 +150,8 @@ export default function App() {
     setUserRole(null);
     setCurrentPage('dashboard');
     setSidebarOpen(false);
+    setManagementSettingsOpen(false);
+    setEmployeeSettingsOpen(false);
   };
 
   // Show login screen
@@ -155,13 +183,19 @@ export default function App() {
     };
 
     return (
-      <div className="h-screen w-full min-w-0 flex overflow-hidden bg-slate-50 overscroll-none">
+      <div
+        className={`h-screen w-full min-w-0 flex overflow-hidden overscroll-none transition-colors ${
+          employeeSettings.darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50'
+        }`}
+      >
         {/* Employee Sidebar */}
         <EmployeeSidebar 
           isOpen={sidebarOpen} 
           onClose={() => setSidebarOpen(false)}
           currentPage={currentPage}
           onNavigate={setCurrentPage}
+          onOpenSettings={() => setEmployeeSettingsOpen(true)}
+          defaultCollapsed={employeeSettings.sidebarCollapsed}
         />
 
         {/* Main Content */}
@@ -170,6 +204,10 @@ export default function App() {
           <EmployeeNavbar 
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             onLogout={handleLogout}
+            settings={employeeSettings}
+            onSettingsSave={handleEmployeeSettingsSave}
+            settingsOpen={employeeSettingsOpen}
+            onSettingsOpenChange={setEmployeeSettingsOpen}
           />
 
           {/* Page Content */}
