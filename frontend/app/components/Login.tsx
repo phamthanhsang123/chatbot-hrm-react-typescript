@@ -7,8 +7,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card } from './ui/card';
 import type { UserRole } from '../types';
-
-const LOGIN_API_BASE = 'https://api-production-ffaa0.up.railway.app';
+import { API_BASE } from '@/services/apiBase';
 
 interface LoginProps {
   onLogin: (role: UserRole) => void;
@@ -63,7 +62,7 @@ export function Login({ onLogin }: LoginProps) {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${LOGIN_API_BASE}/api/admin/auth/login`, {
+      const response = await fetch(`${API_BASE}/api/admin/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,7 +106,7 @@ export function Login({ onLogin }: LoginProps) {
       onLogin(mapApiRole(data.role));
     } catch (error) {
       console.error('Login request error:', error);
-      setMessage(`Không kết nối được API đăng nhập (${LOGIN_API_BASE}). Kiểm tra backend đang chạy chưa.`);
+      setMessage(`Không kết nối được API đăng nhập (${API_BASE}). Kiểm tra backend đang chạy chưa.`);
     } finally {
       setIsLoading(false);
     }
@@ -122,7 +121,7 @@ export function Login({ onLogin }: LoginProps) {
     }
 
     try {
-      const response = await fetch(`${LOGIN_API_BASE}/api/admin/auth/forgot-password`, {
+      const response = await fetch(`${API_BASE}/api/admin/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
@@ -132,7 +131,7 @@ export function Login({ onLogin }: LoginProps) {
       setMessage(data?.message || (response.ok ? 'Đã gửi yêu cầu đặt lại mật khẩu.' : 'Không thể đặt lại mật khẩu.'));
     } catch (error) {
       console.error('Forgot password request error:', error);
-      setMessage(`Không kết nối được API quên mật khẩu (${LOGIN_API_BASE}).`);
+      setMessage(`Không kết nối được API quên mật khẩu (${API_BASE}).`);
     }
   };
 

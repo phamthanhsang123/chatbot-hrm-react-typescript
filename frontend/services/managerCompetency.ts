@@ -1,4 +1,4 @@
-import { API_BASE } from './chatbot';
+import { API_BASE } from './apiBase';
 import type { TaskApiItem } from './tasks';
 
 export interface CompetencyInputDataApi {

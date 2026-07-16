@@ -7,7 +7,8 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Trash2 } from 'lucide-react';
-import { API_BASE, chatWithBot, fetchChatHistory, fetchSessions, deleteSession } from '@/services/chatbot';
+import { API_BASE } from '@/services/apiBase';
+import { chatWithBot, fetchChatHistory, fetchSessions, deleteSession } from '@/services/chatbot';
 
 interface Message {
   id: number;

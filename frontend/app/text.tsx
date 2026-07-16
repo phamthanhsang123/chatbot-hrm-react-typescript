@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { API_BASE } from "@/services/chatbot";
+import { API_BASE } from "@/services/apiBase";
 
 export default function Home() {
   const [input, setInput] = useState("");

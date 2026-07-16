@@ -1,4 +1,4 @@
-import { API_BASE } from './chatbot';
+import { API_BASE } from './apiBase';
 
 export type TaskStatus = 'NEW' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED' | 'OVERDUE';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
