@@ -13,6 +13,7 @@ import {
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { MetricCard } from '../components/MetricCard';
 import { Progress } from '../components/ui/progress';
 import { getProfileInitials, useEmployeePortalProfile } from './useEmployeePortalProfile';
 
@@ -29,11 +30,11 @@ const taskOverview = {
   averageProgress: 66,
 };
 
-const stats = [
-  { label: 'Giờ làm tháng này', value: '160h', detail: '/ 176h', icon: Clock, tone: 'text-blue-600 bg-blue-50' },
-  { label: 'Ngày phép còn lại', value: '7', detail: '/ 12 ngày', icon: Calendar, tone: 'text-emerald-600 bg-emerald-50' },
-  { label: 'Task đang xử lý', value: taskOverview.active.toString(), detail: `${taskOverview.submitted} chờ duyệt`, icon: BriefcaseBusiness, tone: 'text-indigo-600 bg-indigo-50' },
-  { label: 'Lương gần nhất', value: '17tr', detail: 'đã thanh toán', icon: Wallet, tone: 'text-purple-600 bg-purple-50' },
+const metrics = [
+  { title: 'Giờ làm tháng này', value: '160h', description: 'Mục tiêu 176h', icon: Clock, tone: 'blue' as const },
+  { title: 'Ngày phép còn lại', value: '7', description: 'Trên tổng 12 ngày/năm', icon: Calendar, tone: 'emerald' as const },
+  { title: 'Task đang xử lý', value: taskOverview.active, description: `${taskOverview.submitted} task chờ duyệt`, icon: BriefcaseBusiness, tone: 'violet' as const },
+  { title: 'Lương gần nhất', value: '17tr', description: 'Đã thanh toán', icon: Wallet, tone: 'slate' as const },
 ];
 
 const activities = [
@@ -49,8 +50,8 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="border-0 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-6 text-white shadow-lg">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="border-0 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-6 text-white shadow-lg">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl font-bold shadow-inner backdrop-blur-sm">
@@ -58,10 +59,10 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
               </div>
               <div>
                 <h1 className="text-2xl font-bold">Xin chào, {profile.employeeName}</h1>
-                <p className="mt-1 text-blue-100">
+                <p className="mt-1 text-slate-200">
                   {profile.position} - {profile.department} - Mã NV: {profile.employeeId}
                 </p>
-                <p className="mt-1 text-sm text-blue-100">
+                <p className="mt-1 text-sm text-slate-300">
                   Manager: {profile.managerName} - Ngày vào làm: {profile.joinDate}
                 </p>
               </div>
@@ -72,7 +73,7 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-gray-900">Task trong kỳ</h2>
@@ -108,31 +109,25 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => {
+          const Icon = metric.icon;
           return (
-            <Card key={stat.label} className="p-5">
-              <div className="flex items-center gap-4">
-                <div className={`flex size-12 shrink-0 items-center justify-center rounded-lg ${stat.tone}`}>
-                  <Icon className="size-6" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm text-gray-500">{stat.label}</p>
-                  <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-gray-900">{stat.value}</span>
-                    <span className="text-sm text-gray-500">{stat.detail}</span>
-                  </div>
-                </div>
-              </div>
-            </Card>
+            <MetricCard
+              key={metric.title}
+              title={metric.title}
+              value={metric.value}
+              description={metric.description}
+              icon={<Icon className="size-5" />}
+              tone={metric.tone}
+            />
           );
         })}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <div className="border-b border-gray-100 p-5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="overflow-hidden border-gray-200 shadow-sm">
+          <div className="border-b border-gray-100 p-4">
             <h2 className="text-lg font-semibold text-gray-900">Hoạt động gần đây</h2>
             <p className="text-sm text-gray-500">Các sự kiện nhân viên đẩy lên cho Manager/HR xử lý</p>
           </div>
@@ -155,7 +150,7 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
         </Card>
 
         <div className="space-y-4">
-          <Card className="p-5">
+          <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <UserCheck className="size-5 text-emerald-600" />
               <h2 className="text-lg font-semibold text-gray-900">Tác vụ nhanh</h2>
@@ -176,7 +171,7 @@ export function EmployeeDashboard({ onNavigate }: EmployeeDashboardProps) {
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <AlertCircle className="size-5 text-amber-600" />
               <h2 className="text-lg font-semibold text-gray-900">Nguyên tắc đồng bộ</h2>
