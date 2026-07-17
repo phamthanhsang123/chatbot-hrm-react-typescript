@@ -39,6 +39,7 @@ const adminMenuItems: MenuItem[] = [
   { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 5 },
   { id: 'attendance-approval', label: 'Duyệt chấm công', icon: <ClipboardCheck className="size-5" />, badge: 3 },
   { id: 'competency', label: 'Đánh giá năng lực', icon: <BrainCircuit className="size-5" />, badge: 'AI' },
+  { id: 'ai-assistant', label: 'AI Assistant', icon: <BrainCircuit className="size-5" />, badge: 'New' },
   { id: 'reports', label: 'Báo cáo', icon: <FileText className="size-5" /> },
 ];
 
@@ -49,6 +50,7 @@ const managerMenuItems: MenuItem[] = [
   { id: 'leave', label: 'Duyệt nghỉ phép', icon: <Calendar className="size-5" />, badge: 3 },
   { id: 'attendance-approval', label: 'Chấm công team', icon: <ClipboardCheck className="size-5" />, badge: 2 },
   { id: 'competency', label: 'Năng lực team', icon: <BrainCircuit className="size-5" />, badge: 'AI' },
+  { id: 'ai-assistant', label: 'AI Assistant', icon: <BrainCircuit className="size-5" />, badge: 'New' },
   { id: 'reports', label: 'Báo cáo team', icon: <FileText className="size-5" /> },
 ];
 
@@ -206,3 +208,4 @@ export function Sidebar({
     </>
   );
 }
+

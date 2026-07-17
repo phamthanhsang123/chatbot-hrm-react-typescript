@@ -1,504 +1,222 @@
 'use client';
 
-import { Send, Bot, User, Sparkles, Clock, TrendingUp } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Bot, BrainCircuit, RefreshCw, Search, Sparkles, Users } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { Trash2 } from 'lucide-react';
 import { API_BASE } from '@/services/apiBase';
-import { chatWithBot, fetchChatHistory, fetchSessions, deleteSession } from '@/services/chatbot';
+import { fetchEmployees, type EmployeeApiItem } from '@/services/employees';
+import { fetchCompetencyDashboard, type CompetencyDashboard } from '@/services/competency';
 
-interface Message {
-  id: number;
-  text: string;
-  sender: 'user' | 'bot';
-  time: string;
+const now = new Date();
+const currentMonth = now.getMonth() + 1;
+const currentYear = now.getFullYear();
+
+function formatMoney(value?: number | null) {
+  return `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 }
 
-interface SessionItem {
-  session_id: number;
-  created_at: string;
-  title?: string;
-  last_message?: string;
-}
+function buildAssistantReply(query: string, employees: EmployeeApiItem[], dashboard: CompetencyDashboard | null) {
+  const normalized = query.trim().toLowerCase();
+  const activeEmployees = employees.filter((item) => item.status !== 'Đã nghỉ việc' && item.status !== 'inactive');
+  const managers = employees.filter((item) => item.role?.toUpperCase() === 'MANAGER');
+  const totalSalary = activeEmployees.reduce((sum, item) => sum + Number(item.salaryBase || 0), 0);
 
+  if (!normalized) {
+    return 'Bạn có thể hỏi về tổng nhân viên, quản lý, phòng ban, lương cơ bản hoặc đánh giá năng lực.';
+  }
+
+  if (normalized.includes('lương') || normalized.includes('luong')) {
+    return `Tổng lương cơ bản của ${activeEmployees.length} nhân viên đang làm việc là ${formatMoney(totalSalary)}. Mức trung bình khoảng ${formatMoney(activeEmployees.length ? totalSalary / activeEmployees.length : 0)}.`;
+  }
+
+  if (normalized.includes('quản lý') || normalized.includes('quan ly') || normalized.includes('manager')) {
+    const names = managers.map((item) => item.fullName).join(', ') || 'chưa có dữ liệu';
+    return `Hiện có ${managers.length} nhân sự vai trò quản lý: ${names}.`;
+  }
+
+  if (normalized.includes('năng lực') || normalized.includes('nang luc') || normalized.includes('đánh giá') || normalized.includes('danh gia')) {
+    if (!dashboard) return 'API đánh giá năng lực chưa trả dữ liệu dashboard. Bạn thử lại sau khi backend ổn định.';
+    return `Dashboard năng lực tháng ${dashboard.month}/${dashboard.year}: ${dashboard.totalEmployees} nhân viên, điểm trung bình ${dashboard.averageScore}, xuất sắc ${dashboard.excellent}, tốt ${dashboard.good}, cần cải thiện ${dashboard.needsImprovement}.`;
+  }
+
+  if (normalized.includes('phòng ban') || normalized.includes('phong ban') || normalized.includes('department')) {
+    const counts = activeEmployees.reduce<Record<string, number>>((acc, item) => {
+      const name = item.departmentName || 'Chưa phân phòng';
+      acc[name] = (acc[name] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts)
+      .map(([name, count]) => `${name}: ${count} nhân viên`)
+      .join('\n') || 'Chưa có dữ liệu phòng ban.';
+  }
+
+  const matched = employees.filter((item) => {
+    const haystack = `${item.fullName} ${item.email} ${item.departmentName || ''} ${item.positionTitle || ''}`.toLowerCase();
+    return haystack.includes(normalized);
+  });
+
+  if (matched.length > 0) {
+    return matched
+      .slice(0, 5)
+      .map((item) => `${item.fullName} - ${item.departmentName || 'Chưa có phòng ban'} - ${item.positionTitle || 'Chưa có chức vụ'} - ${formatMoney(item.salaryBase)}`)
+      .join('\n');
+  }
+
+  return `Tôi đang dùng dữ liệu thật từ Railway (${API_BASE}). Hiện có ${activeEmployees.length} nhân viên đang làm việc, ${managers.length} quản lý. Bạn có thể hỏi: "tổng lương", "quản lý", "phòng ban", "đánh giá năng lực" hoặc nhập tên nhân viên.`;
+}
 
 export function Chatbot() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: 'Xin chào! Tôi là AI Assistant của hệ thống HRM, có thể hỗ trợ phân tích nhân sự và đánh giá năng lực. Bạn cần tôi hỗ trợ gì hôm nay?',
-      sender: 'bot',
-      time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-    },
-  ]);
+  const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
+  const [dashboard, setDashboard] = useState<CompetencyDashboard | null>(null);
+  const [query, setQuery] = useState('');
+  const [reply, setReply] = useState('Đang tải dữ liệu từ Railway...');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const [inputMessage, setInputMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activeCount = useMemo(
+    () => employees.filter((item) => item.status !== 'Đã nghỉ việc' && item.status !== 'inactive').length,
+    [employees]
+  );
 
-  const [sessionId, setSessionId] = useState<number | null>(null);
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [creatingSession, setCreatingSession] = useState(false);
+  const managerCount = useMemo(
+    () => employees.filter((item) => item.role?.toUpperCase() === 'MANAGER').length,
+    [employees]
+  );
 
-  const USER_ID = 3; // TODO: sau này lấy từ login/JWT
-  const handleDeleteSession = async (sid: number) => {
-    const ok = confirm(`Xóa Session #${sid}? (Sẽ mất toàn bộ lịch sử)`);
-    if (!ok) return;
+  const loadData = async () => {
+    setLoading(true);
+    setError('');
 
     try {
-      await deleteSession(USER_ID, sid);
-      const list = await loadSessions();
-
-      // nếu đang mở đúng session bị xóa -> chuyển sang session gần nhất hoặc reset
-      if (sessionId === sid) {
-        if (list.length > 0) {
-          await selectSession(list[0].session_id);
-        } else {
-          setSessionId(null);
-          setMessages([
-            {
-              id: Date.now(),
-              text: 'Đã xóa. Bạn có thể bấm "Chat mới" để bắt đầu 😊',
-              sender: 'bot',
-              time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-            },
-          ]);
-        }
-      }
-    } catch (err) {
-      console.error('Delete session lỗi:', err);
-      alert('❌ Xóa thất bại. Kiểm tra backend/log.');
-    }
-  };
-
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping]);
-
-  // ====== helper: tạo session chắc chắn ======
-  const createSession = async (): Promise<number> => {
-    setCreatingSession(true);
-    try {
-      const res = await fetch(`${API_BASE}/chat/session?user_id=${USER_ID}`, {
-        method: 'POST',
-      });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`Create session failed: ${res.status} ${txt}`);
-      }
-
-      const data = await res.json();
-
-      if (!data?.session_id) {
-        throw new Error(`Create session response missing session_id: ${JSON.stringify(data)}`);
-      }
-
-      const sid = Number(data.session_id);
-      setSessionId(sid);
-      return sid;
-    } finally {
-      setCreatingSession(false);
-    }
-  };
-
-  // ====== helper: load list session ======
-  const loadSessions = async (): Promise<SessionItem[]> => {
-    try {
-      const list = await fetchSessions(USER_ID);
-      setSessions(list);
-      return list;
-    } catch (err) {
-      console.error('Load sessions lỗi:', err);
-      setSessions([]);
-      return [];
-    }
-  };
-
-
-  // ====== INIT: tạo session mới khi vào trang (1 lần) + load session list ======
-  useEffect(() => {
-    const init = async () => {
-      const list = await loadSessions();
-
-      // ✅ Nếu có session thì mở session gần nhất (list đã sort DESC từ backend)
-      if (list.length > 0) {
-        await selectSession(list[0].session_id);
-        return;
-      }
-
-      // ✅ Không có session nào: chỉ hiện lời chào, chờ user bấm "Chat mới" hoặc gửi tin nhắn
-      setSessionId(null);
-      setMessages([
-        {
-          id: Date.now(),
-          text: 'Xin chào! Tôi là AI Assistant của hệ thống HRM, có thể hỗ trợ phân tích nhân sự và đánh giá năng lực. Bạn cần tôi hỗ trợ gì hôm nay?',
-          sender: 'bot',
-          time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-        },
+      const [employeeList, competencyDashboard] = await Promise.all([
+        fetchEmployees(),
+        fetchCompetencyDashboard(currentMonth, currentYear).catch(() => null),
       ]);
-    };
 
-    init();
+      setEmployees(employeeList);
+      setDashboard(competencyDashboard);
+      setReply(`Đã kết nối Railway API. Hiện có ${employeeList.length} hồ sơ nhân viên. Bạn muốn hỏi gì?`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không kết nối được API Railway.';
+      setError(message);
+      setReply(`Không tải được dữ liệu từ Railway.\n${message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
   }, []);
 
-  // ====== CLICK SESSION: load 10 messages gần nhất ======
-  const selectSession = async (sid: number) => {
-    try {
-      setSessionId(sid);
-      const history = await fetchChatHistory(sid);
-
-      if (history && history.length > 0) {
-        setMessages(history);
-      } else {
-        setMessages([
-          {
-            id: Date.now(),
-            text: 'Session này chưa có tin nhắn. Bạn có thể bắt đầu chat 😊',
-            sender: 'bot',
-            time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-          },
-        ]);
-      }
-    } catch (err) {
-      console.error('Load history lỗi:', err);
-    }
+  const submitQuestion = () => {
+    setReply(buildAssistantReply(query, employees, dashboard));
   };
 
-  // ====== TẠO CHAT MỚI ======
-  const createNewSession = async () => {
-    try {
-      const sid = await createSession();
-      await loadSessions();
-
-      setMessages([
-        {
-          id: Date.now(),
-          text: 'Xin chào! Tôi là AI Assistant của hệ thống HRM, có thể hỗ trợ phân tích nhân sự và đánh giá năng lực. Bạn cần tôi hỗ trợ gì hôm nay?',
-          sender: 'bot',
-          time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-        },
-      ]);
-
-      // nếu muốn load history (thường sẽ rỗng)
-      // const history = await fetchChatHistory(sid);
-      // if (history?.length) setMessages(history);
-
-    } catch (err) {
-      console.error('Create new session lỗi:', err);
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isTyping) return;
-
-    const userText = inputMessage;
-
-    // ✅ nếu sessionId null (do init chưa xong), tự tạo session ngay tại đây
-    let sid = sessionId;
-    if (!sid) {
-      try {
-        sid = await createSession();
-        await loadSessions();
-      } catch (err) {
-        console.error('Không tạo được session khi gửi:', err);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now(),
-            text: `❌ Không tạo được session. Kiểm tra backend đang chạy chưa (${API_BASE}).`,
-            sender: 'bot',
-            time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-          },
-        ]);
-        return;
-      }
-    }
-
-    const userMessage: Message = {
-      id: Date.now(),
-      text: userText,
-      sender: 'user',
-      time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInputMessage('');
-    setIsTyping(true);
-
-    const loadingId = Date.now() + 1;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: loadingId,
-        text: 'Đang xử lý...',
-        sender: 'bot',
-        time: '',
-      },
-    ]);
-
-    try {
-      // ✅ GỌI BACKEND có session_id
-      const data = await chatWithBot(userText, sid);
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === loadingId
-            ? {
-              ...m,
-              text: data.reply,
-              time: new Date().toLocaleTimeString('vi-VN', {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            }
-            : m
-        )
-      );
-
-      // refresh list session
-      await loadSessions();
-    } catch (err) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === loadingId
-            ? { ...m, text: '❌ Không kết nối được server hoặc server lỗi' }
-            : m
-        )
-      );
-    } finally {
-      setIsTyping(false);
-    }
-  };
-
-  const quickActions = [
-    { text: 'Xem ngày nghỉ phép còn lại', icon: '📅' },
-    { text: 'Tạo đơn xin nghỉ phép', icon: '✍️' },
-    { text: 'Đánh giá năng lực nhân viên', icon: 'AI' },
-    { text: 'Xem bảng lương', icon: '💰' },
-    { text: 'Quên chấm công - Bổ sung', icon: '⚠️' },
-    { text: 'Kiểm tra chấm công', icon: '⏰' },
-    { text: 'Liên hệ HR', icon: '📞' },
-  ];
+  const suggestions = ['Tổng lương', 'Có bao nhiêu quản lý?', 'Thống kê phòng ban', 'Đánh giá năng lực'];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="size-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
-            <Bot className="size-6 text-white" />
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg">
+            <Bot className="size-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-3xl font-bold text-gray-900">AI Assistant</h1>
-              <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0">
-                <Sparkles className="size-3 mr-1" />
-                AI Powered
-              </Badge>
-              <Badge className="bg-gray-100 text-gray-700 border-0">
-                {sessionId ? `Session #${sessionId}` : (creatingSession ? 'Đang tạo session...' : 'Chưa có session')}
+              <Badge className="border-0 bg-emerald-100 text-emerald-700">
+                <Sparkles className="mr-1 size-3" />
+                Railway API
               </Badge>
             </div>
-            <p className="text-gray-500 mt-1">Trợ lý ảo hỗ trợ nhân viên 24/7</p>
+            <p className="mt-1 text-gray-500">Trợ lý hỏi nhanh dữ liệu HRM từ backend public.</p>
           </div>
         </div>
+        <Button variant="outline" onClick={() => void loadData()} disabled={loading}>
+          <RefreshCw className={`mr-2 size-4 ${loading ? 'animate-spin' : ''}`} />
+          Làm mới
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* LEFT: SESSION LIST */}
-        <div className="lg:col-span-1">
-          <Card className="p-4 shadow-lg border-0 h-[650px] flex flex-col">
-            <Button onClick={createNewSession} className="w-full mb-4" disabled={creatingSession || isTyping}>
-              + Chat mới
-            </Button>
-
-            <div className="flex-1 overflow-y-auto space-y-2">
-              {sessions.map((s) => (
-                <div
-                  key={s.session_id}
-                  className={`w-full p-3 rounded-xl border transition-all flex items-center justify-between gap-2 ${sessionId === s.session_id
-                      ? 'bg-blue-100 border-blue-200'
-                      : 'bg-white hover:bg-gray-50 border-gray-100'
-                    }`}
-                >
-                  <button
-                    onClick={() => selectSession(s.session_id)}
-                    className="flex-1 text-left"
-                  >
-                    <div className="text-sm font-medium line-clamp-1">
-                      {s.title?.trim() ? s.title : `Session #${s.session_id}`}
-                    </div>
-                    <div className="text-xs text-gray-500 line-clamp-1">
-                      {s.last_message?.trim() ? s.last_message : s.created_at}
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => handleDeleteSession(s.session_id)}
-                    className="p-2 rounded-lg hover:bg-white/60"
-                    title="Xóa session"
-                    disabled={creatingSession || isTyping}
-                  >
-                    <Trash2 className="size-4 text-gray-500 hover:text-red-600" />
-                  </button>
-                </div>
-              ))}
-
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Tổng hồ sơ</p>
+              <p className="mt-2 text-3xl font-bold">{employees.length}</p>
             </div>
-          </Card>
-        </div>
-
-        {/* RIGHT: CHAT UI */}
-        <div className="lg:col-span-3">
-          <Card className="h-[650px] flex flex-col overflow-hidden shadow-xl border-0">
-            {/* Chat Header */}
-            <div className="p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white relative overflow-hidden">
-              <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
-              <div className="relative z-10 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="size-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm shadow-lg">
-                    <Bot className="size-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">AI Assistant</h3>
-                    <div className="flex items-center gap-2 text-sm text-blue-100">
-                      <div className="size-2 bg-green-400 rounded-full animate-pulse"></div>
-                      <span>Đang hoạt động</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-blue-100">Session</div>
-                  <div className="text-sm font-semibold">
-                    {sessionId ? `#${sessionId}` : (creatingSession ? 'Đang tạo...' : '...')}
-                  </div>
-                </div>
-              </div>
+            <Users className="size-8 text-blue-600" />
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Đang làm việc</p>
+              <p className="mt-2 text-3xl font-bold">{activeCount}</p>
             </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-50 to-white">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-3 animate-fadeIn ${message.sender === 'user' ? 'flex-row-reverse' : ''}`}
-                >
-                  <div
-                    className={`size-10 shrink-0 rounded-xl flex items-center justify-center shadow-md ${message.sender === 'bot'
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
-                      : 'bg-gradient-to-br from-gray-600 to-gray-700 text-white'
-                      }`}
-                  >
-                    {message.sender === 'bot' ? <Bot className="size-5" /> : <User className="size-5" />}
-                  </div>
-                  <div className={`flex-1 ${message.sender === 'user' ? 'flex justify-end' : ''}`}>
-                    <div
-                      className={`max-w-md p-4 rounded-2xl shadow-md ${message.sender === 'bot'
-                        ? 'bg-white border border-gray-100'
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
-                        }`}
-                    >
-                      <p className="text-sm leading-relaxed whitespace-pre-line">{message.text}</p>
-                      <div
-                        className={`flex items-center gap-1 text-xs mt-2 ${message.sender === 'bot' ? 'text-gray-400' : 'text-blue-100'
-                          }`}
-                      >
-                        <Clock className="size-3" />
-                        <span>{message.time}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* Typing Indicator */}
-              {isTyping && (
-                <div className="flex gap-3 animate-fadeIn">
-                  <div className="size-10 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
-                    <Bot className="size-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="max-w-md p-4 rounded-2xl bg-white border border-gray-100 shadow-md">
-                      <div className="flex gap-1">
-                        <div className="size-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                        <div className="size-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        <div className="size-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
+            <Users className="size-8 text-emerald-600" />
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Quản lý</p>
+              <p className="mt-2 text-3xl font-bold">{managerCount}</p>
             </div>
-
-            {/* Input */}
-            <div className="p-4 bg-white border-t border-gray-100">
-              <div className="flex gap-3">
-                <Input
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Nhập tin nhắn của bạn..."
-                  className="flex-1 h-12 border-2 focus:border-blue-600 transition-all"
-                  disabled={isTyping || creatingSession}
-                />
-                <Button
-                  onClick={handleSendMessage}
-                  disabled={isTyping || creatingSession || !inputMessage.trim()}
-                  className="h-12 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-200 transition-all hover:scale-105"
-                >
-                  <Send className="size-5" />
-                </Button>
-              </div>
-            </div>
-          </Card>
-        </div>
+            <BrainCircuit className="size-8 text-purple-600" />
+          </div>
+        </Card>
       </div>
 
-      {/* Quick actions */}
-      <Card className="p-6 shadow-lg border-0">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="size-5 text-blue-600" />
-          <h3 className="font-semibold text-lg">Thao tác nhanh</h3>
+      <Card className="p-6">
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submitQuestion();
+              }}
+              className="pl-10"
+              placeholder="Hỏi: tổng lương, quản lý, phòng ban, tên nhân viên..."
+            />
+          </div>
+          <Button onClick={submitQuestion} disabled={loading}>
+            Hỏi AI
+          </Button>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          {quickActions.map((action, index) => (
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {suggestions.map((item) => (
             <Button
-              key={index}
-              variant="outline"
-              onClick={() => setInputMessage(action.text)}
+              key={item}
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setQuery(item);
+                setReply(buildAssistantReply(item, employees, dashboard));
+              }}
             >
-              {action.icon} {action.text}
+              {item}
             </Button>
           ))}
         </div>
-      </Card>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-        .bg-grid-pattern {
-          background-image: 
-            linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
-          background-size: 20px 20px;
-        }
-      `}</style>
+        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+          <div className="mb-2 flex items-center gap-2 font-semibold text-blue-900">
+            <Bot className="size-5" />
+            Phản hồi
+          </div>
+          <p className="whitespace-pre-line text-sm leading-6 text-slate-700">{reply}</p>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        </div>
+      </Card>
     </div>
   );
 }

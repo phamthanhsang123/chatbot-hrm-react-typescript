@@ -11,6 +11,7 @@ import { Leave } from './components/Leave';
 import { Reports } from './components/Reports';
 import { AttendanceApproval } from './components/AttendanceApproval';
 import { CompetencyEvaluation } from './components/CompetencyEvaluation';
+import { Chatbot } from './components/Chatbot';
 
 // Employee Components
 import { EmployeeNavbar } from './employees/EmployeeNavbar'; 
@@ -194,6 +195,8 @@ export default function App() {
           return <AttendanceApproval />;
         case 'competency':
           return <CompetencyEvaluation userRole="manager" departmentScope={MANAGER_DEPARTMENT} />;
+        case 'ai-assistant':
+          return <Chatbot />;
         case 'reports':
           return <Reports />;
         default:
@@ -212,6 +215,8 @@ export default function App() {
         return <AttendanceApproval />;
       case 'competency':
         return <CompetencyEvaluation userRole="admin" />;
+      case 'ai-assistant':
+        return <Chatbot />;
       case 'reports':
         return <Reports />;
       default:

@@ -67,16 +67,16 @@ Ung dung hien tai dung mot man hinh chinh `http://localhost:3000`, sau do nguoi 
 
 ## 4. API Auth
 
-Base URL:
-
-```text
-http://localhost:5297
-```
-
-Neu dung API public Railway, thay base URL bang:
+Base URL public dang duoc frontend su dung:
 
 ```text
 https://api-production-ffaa0.up.railway.app
+```
+
+Base URL local khi chay backend tren may:
+
+```text
+http://localhost:5297
 ```
 
 | Chuc nang | Method | Endpoint |
@@ -209,7 +209,7 @@ GET http://localhost:5297/api/admin/competency/1/analyze
 
 ## 13. Ghi chu cho thanh vien khac
 
-- Nen xem Swagger truoc khi code frontend: `http://localhost:5297/swagger`.
-- Frontend lay API base tu bien moi truong `NEXT_PUBLIC_API_BASE_URL`, mac dinh la `http://localhost:5297`.
+- Nen xem Swagger public truoc khi code frontend: `https://api-production-ffaa0.up.railway.app/swagger`.
+- Frontend lay API base tu `frontend/services/apiBase.ts`, hien dang tro den Railway public.
 - Khong push mat khau database that len GitHub. Neu can doi database, dung bien moi truong hoac file cau hinh local rieng.
 - Cac endpoint co fallback demo de giao dien van co du lieu khi database rong hoac chua dong bo schema.
