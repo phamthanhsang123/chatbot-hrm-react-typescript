@@ -33,7 +33,10 @@ Backend da deploy public tren Railway:
 https://api-production-ffaa0.up.railway.app
 ```
 
-### Bien moi truong can co tren Railway
+Backend co the deploy sang Render bang file `render.yaml` o thu muc goc repo.
+Khi tao service tren Render, chon Blueprint hoac Docker Web Service va set cac bien moi truong ben duoi.
+
+### Bien moi truong can co tren Railway/Render
 
 Backend uu tien doc database theo cac bien sau:
 
@@ -47,6 +50,18 @@ DATABASE_URL
 Neu muon tu tao/cap nhat tai khoan Admin khi deploy, them:
 
 ```text
+SEED_ADMIN_EMAIL=admin@hrm.local
+SEED_ADMIN_PASSWORD=<mat_khau_manh>
+SEED_ADMIN_NAME=Admin HR
+```
+
+Voi Render, them cac bien:
+
+```text
+ASPNETCORE_ENVIRONMENT=Production
+Jwt__Issuer=HRM.Admin.API
+Jwt__Key=<jwt_secret_manh>
+ConnectionStrings__DefaultConnection=<mysql_connection_string>
 SEED_ADMIN_EMAIL=admin@hrm.local
 SEED_ADMIN_PASSWORD=<mat_khau_manh>
 SEED_ADMIN_NAME=Admin HR

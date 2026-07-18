@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: hrm-backend-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Admin/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Jwt__Issuer
+        value: HRM.Admin.API
+      - key: Jwt__Key
+        sync: false
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_ADMIN_NAME
+        sync: false
