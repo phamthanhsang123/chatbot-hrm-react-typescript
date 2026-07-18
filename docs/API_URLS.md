@@ -33,6 +33,25 @@ Backend da deploy public tren Railway:
 https://api-production-ffaa0.up.railway.app
 ```
 
+### Bien moi truong can co tren Railway
+
+Backend uu tien doc database theo cac bien sau:
+
+```text
+ConnectionStrings__DefaultConnection
+MYSQL_PUBLIC_URL
+MYSQL_URL
+DATABASE_URL
+```
+
+Neu muon tu tao/cap nhat tai khoan Admin khi deploy, them:
+
+```text
+SEED_ADMIN_EMAIL=admin@hrm.local
+SEED_ADMIN_PASSWORD=<mat_khau_manh>
+SEED_ADMIN_NAME=Admin HR
+```
+
 ### Frontend
 
 ```powershell

@@ -1,5 +1,6 @@
 ﻿using Admin.Data;
 using Admin.Services;
+using Admin.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -169,6 +170,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
+await SeedAdminFromEnvironmentAsync(app);
+
 app.MapControllers();
 app.MapGet("/", () => "HRM API is running 🚀");
 
@@ -216,4 +219,54 @@ static string NormalizeMySqlConnectionString(string rawConnectionString)
     };
 
     return csBuilder.ConnectionString;
+}
+
+static async Task SeedAdminFromEnvironmentAsync(WebApplication app)
+{
+    var adminEmail = app.Configuration["SEED_ADMIN_EMAIL"];
+    var adminPassword = app.Configuration["SEED_ADMIN_PASSWORD"];
+
+    if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+    {
+        return;
+    }
+
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    var normalizedEmail = adminEmail.Trim().ToLowerInvariant();
+    var admin = await db.Employees.FirstOrDefaultAsync(e => e.Email.ToLower() == normalizedEmail);
+
+    if (admin == null)
+    {
+        var departmentId = await db.Departments
+            .OrderBy(d => d.Id)
+            .Select(d => (int?)d.Id)
+            .FirstOrDefaultAsync();
+
+        var positionId = await db.Positions
+            .Where(p => !departmentId.HasValue || p.DepartmentId == departmentId)
+            .OrderBy(p => p.Id)
+            .Select(p => (int?)p.Id)
+            .FirstOrDefaultAsync();
+
+        admin = new Employee
+        {
+            Email = normalizedEmail,
+            FullName = app.Configuration["SEED_ADMIN_NAME"] ?? "Admin HR",
+            Role = "ADMIN",
+            Status = "active",
+            Phone = app.Configuration["SEED_ADMIN_PHONE"],
+            Cccd = app.Configuration["SEED_ADMIN_CCCD"],
+            DepartmentId = departmentId,
+            PositionId = positionId,
+            SalaryBase = 0
+        };
+
+        db.Employees.Add(admin);
+    }
+
+    admin.Role = "ADMIN";
+    admin.Password = BCrypt.Net.BCrypt.HashPassword(adminPassword);
+    await db.SaveChangesAsync();
 }
