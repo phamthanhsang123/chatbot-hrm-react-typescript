@@ -72,6 +72,36 @@ namespace Admin.Services
             return query.ToList();
         }
 
+        public List<SalaryRowDto> GetByEmployee(int employeeId, int month, int year)
+        {
+            var query =
+                from e in _context.Employees
+                join d in _context.Departments on e.DepartmentId equals d.Id into departmentJoin
+                from d in departmentJoin.DefaultIfEmpty()
+                join pos in _context.Positions on e.PositionId equals pos.Id into positionJoin
+                from pos in positionJoin.DefaultIfEmpty()
+                join p in _context.Payrolls.Where(x => x.Month == month && x.Year == year)
+                    on e.Id equals p.EmployeeId into payrollJoin
+                from p in payrollJoin.DefaultIfEmpty()
+                where e.Id == employeeId
+                select new SalaryRowDto
+                {
+                    Id = p != null ? p.Id : 0,
+                    EmployeeId = e.Id,
+                    EmployeeCode = "NV" + e.Id.ToString("D3"),
+                    EmployeeName = e.FullName,
+                    Department = d != null ? d.Name : "Chưa phân phòng",
+                    Position = pos != null ? pos.Title : "Nhân viên",
+                    SalaryBase = p != null ? p.SalaryBase : (e.SalaryBase ?? 0),
+                    Bonus = p != null ? p.Bonus : 0,
+                    TotalIncome = p != null ? p.TotalSalary : (e.SalaryBase ?? 0),
+                    NetPay = p != null ? p.TotalSalary - p.Deductions : (e.SalaryBase ?? 0),
+                    Status = p != null ? p.Status : "Chờ duyệt"
+                };
+
+            return query.ToList();
+        }
+
         // =========================
         // CALCULATE SALARY
         // =========================

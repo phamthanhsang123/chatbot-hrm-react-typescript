@@ -7,7 +7,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { fetchSalaryRows, type SalaryRowApiItem } from '@/services/salary';
+import { fetchEmployeeSalaryRows, type SalaryRowApiItem } from '@/services/salary';
 import { getCurrentEmployeeId } from '@/services/tasks';
 import { HRM_SYNC_KEYS, getEmployeePortalIdentity, readSyncedRecords } from './hrmSync';
 
@@ -263,7 +263,7 @@ export function EmployeeSalary() {
     Promise.all(
       months.map(async (key) => {
         const [year, month] = key.split('-').map(Number);
-        const rows = await fetchSalaryRows(month, year);
+        const rows = await fetchEmployeeSalaryRows(numericEmployeeId, month, year);
         return rows
           .filter((item) => item.employeeId === numericEmployeeId || item.employeeCode === employeeIdentity.employeeId)
           .map((item) => mapApiSalaryRecord(item, key, employeeIdentity));

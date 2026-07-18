@@ -51,6 +51,10 @@ export function fetchSalaryRows(month: number, year: number, status?: string) {
   return request<SalaryRowApiItem[]>(`/api/admin/salary?month=${month}&year=${year}${statusQuery}`);
 }
 
+export function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
+  return request<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
+}
+
 export function calculateMonthlySalary(month: number, year: number) {
   return request<{ message: string }>(`/api/admin/salary/calculate?month=${month}&year=${year}`, {
     method: 'POST',
