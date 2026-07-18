@@ -47,6 +47,7 @@ const managerMenuItems: MenuItem[] = [
   { id: 'employees', label: 'Nhân viên team', icon: <Users className="size-5" />, badge: 'IT' },
   { id: 'manager-tasks', label: 'Giao task', icon: <ClipboardList className="size-5" />, badge: 4 },
   { id: 'task-review', label: 'Duyệt task', icon: <ClipboardCheck className="size-5" />, badge: 1 },
+  { id: 'salary', label: 'Lương team', icon: <Wallet className="size-5" /> },
   { id: 'leave', label: 'Duyệt nghỉ phép', icon: <Calendar className="size-5" />, badge: 3 },
   { id: 'attendance-approval', label: 'Chấm công team', icon: <ClipboardCheck className="size-5" />, badge: 2 },
   { id: 'competency', label: 'Năng lực team', icon: <BrainCircuit className="size-5" />, badge: 'AI' },
@@ -208,4 +209,3 @@ export function Sidebar({
     </>
   );
 }
-

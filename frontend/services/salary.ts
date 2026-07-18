@@ -2,8 +2,11 @@ import { API_BASE } from './apiBase';
 import { getStoredToken } from './authSession';
 
 export interface SalaryDashboardApi {
+  totalGross?: number;
   totalNet: number;
   avgNet: number;
+  totalBonus?: number;
+  totalDeduction?: number;
   pending: number;
   count: number;
 }
@@ -17,8 +20,22 @@ export interface SalaryRowApiItem {
   position: string;
   salaryBase: number;
   bonus: number;
+  allowance?: number;
+  overtimePay?: number;
+  salaryDeduction?: number;
+  insuranceDeduction?: number;
+  taxDeduction?: number;
+  penaltyDeduction?: number;
   totalIncome: number;
+  totalDeduction?: number;
   netPay: number;
+  standardDays?: number;
+  workDays?: number;
+  paidLeaveDays?: number;
+  unpaidLeaveDays?: number;
+  lateDays?: number;
+  earlyLeaveDays?: number;
+  overtimeHours?: number;
   status: string;
 }
 
@@ -65,6 +82,11 @@ export function fetchSalaryDashboard(month: number, year: number) {
 export function fetchSalaryRows(month: number, year: number, status?: string) {
   const statusQuery = status && status !== 'all' ? `&status=${encodeURIComponent(status)}` : '';
   return request<SalaryRowApiItem[]>(`/api/admin/salary?month=${month}&year=${year}${statusQuery}`);
+}
+
+export function fetchManagerSalaryRows(managerId: number, month: number, year: number, status?: string) {
+  const statusQuery = status && status !== 'all' ? `&status=${encodeURIComponent(status)}` : '';
+  return request<SalaryRowApiItem[]>(`/api/manager/salary?managerId=${managerId}&month=${month}&year=${year}${statusQuery}`);
 }
 
 export async function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {

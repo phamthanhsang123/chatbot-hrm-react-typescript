@@ -16,6 +16,7 @@ import { Input } from "./ui/input";
 import {
     approveSalary,
     calculateMonthlySalary,
+    fetchManagerSalaryRows,
     fetchSalaryRows,
     paySalary,
     type SalaryRowApiItem,
@@ -99,7 +100,12 @@ function mapSalaryRow(row: SalaryRowApiItem, month: string): SalaryItem {
     const bonus = Number(row.bonus || 0);
     const totalIncome = Number(row.totalIncome || baseSalary + bonus);
     const netPay = Number(row.netPay || totalIncome);
-    const deduction = Math.max(0, totalIncome - netPay);
+    const totalDeduction = Number(row.totalDeduction ?? Math.max(0, totalIncome - netPay));
+    const insuranceDeduction = Number(row.insuranceDeduction || 0);
+    const taxDeduction = Number(row.taxDeduction || 0);
+    const penaltyDeduction = Number(row.penaltyDeduction || 0);
+    const salaryDeduction = Number(row.salaryDeduction || 0);
+    const fallbackDeduction = Math.max(0, totalDeduction - insuranceDeduction - taxDeduction - penaltyDeduction - salaryDeduction);
 
     return {
         id: row.id,
@@ -109,28 +115,36 @@ function mapSalaryRow(row: SalaryRowApiItem, month: string): SalaryItem {
         position: row.position || "Chưa có chức vụ",
         month,
         baseSalary,
-        mealAllowance: 0,
+        mealAllowance: Number(row.allowance || 0),
         transportAllowance: 0,
         phoneAllowance: 0,
         housingAllowance: 0,
-        standardDays: 22,
-        workDays: 22,
-        overtimeHours: 0,
+        standardDays: Number(row.standardDays || 22),
+        workDays: Number(row.workDays || 0),
+        overtimeHours: Number(row.overtimeHours || 0),
         overtimeRate: 1.5,
         kpiBonus: bonus,
         projectBonus: 0,
         holidayBonus: 0,
-        socialInsurance: deduction,
+        socialInsurance: insuranceDeduction + fallbackDeduction,
         healthInsurance: 0,
         unemploymentInsurance: 0,
-        personalIncomeTax: 0,
+        personalIncomeTax: taxDeduction,
         advancePayment: 0,
-        penalties: 0,
+        penalties: penaltyDeduction,
+        salaryDeduction,
         status: normalizeApiSalaryStatus(row.status),
     };
 }
 
-export function Salary() {
+interface SalaryProps {
+    scope?: "admin" | "manager";
+    managerId?: number;
+    departmentScope?: string;
+}
+
+export function Salary({ scope = "admin", managerId, departmentScope }: SalaryProps) {
+    const canManagePayroll = scope === "admin";
     const todayISO = () => new Date().toISOString().slice(0, 10);
 
     const formatCurrency = (amount: number) =>
@@ -571,7 +585,9 @@ export function Salary() {
         setApiError("");
 
         try {
-            const rows = await fetchSalaryRows(month, year);
+            const rows = scope === "manager" && managerId
+                ? await fetchManagerSalaryRows(managerId, month, year)
+                : await fetchSalaryRows(month, year);
             const mapped = rows.map((row) => mapSalaryRow(row, selectedMonth));
             setSalaryData((current) => [
                 ...current.filter((item) => item.month !== selectedMonth),
@@ -579,7 +595,7 @@ export function Salary() {
             ]);
         } catch (error) {
             console.error("Load salary API failed:", error);
-            setApiError("Không tải được bảng lương từ Render API. Hãy đăng nhập Admin hoặc kiểm tra backend.");
+            setApiError("Không tải được bảng lương từ Render API. Hãy kiểm tra backend hoặc quyền tài khoản.");
         } finally {
             setApiLoading(false);
         }
@@ -587,7 +603,7 @@ export function Salary() {
 
     useEffect(() => {
         void loadSalaryFromApi();
-    }, [selectedMonth]);
+    }, [selectedMonth, scope, managerId]);
 
     const monthData = useMemo(
         () => salaryData.filter((x) => x.month === selectedMonth),
@@ -758,8 +774,12 @@ export function Salary() {
         <div className="space-y-5 text-[13px]">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Quản lý lương thưởng</h1>
-                    <p className="mt-1 text-gray-500">Theo dõi bảng lương, duyệt và thanh toán theo từng tháng.</p>
+                    <h1 className="text-3xl font-bold text-gray-900">{scope === "manager" ? "Lương thưởng team" : "Quản lý lương thưởng"}</h1>
+                    <p className="mt-1 text-gray-500">
+                        {scope === "manager"
+                            ? `Theo dõi bảng lương nhân viên trong phạm vi ${departmentScope || "phòng ban"}.`
+                            : "Theo dõi bảng lương, duyệt và thanh toán theo từng tháng."}
+                    </p>
                     <p className="mt-1 text-xs text-blue-600">{apiLoading ? "Đang tải bảng lương từ Render API..." : "Dữ liệu lương được đồng bộ từ Render API"}</p>
                 </div>
 
@@ -768,10 +788,12 @@ export function Salary() {
                         <Download className="size-4" />
                         Xuất báo cáo
                     </Button>
-                    <Button className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCalculateSalary}>
-                        <Calculator className="size-4" />
-                        Tính lương
-                    </Button>
+                    {canManagePayroll && (
+                        <Button className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCalculateSalary}>
+                            <Calculator className="size-4" />
+                            Tính lương
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -939,16 +961,18 @@ export function Salary() {
                                                 <Button size="sm" variant="outline" onClick={() => handleViewDetail(item)}>
                                                     Chi tiết
                                                 </Button>
-                                                <Button size="sm" variant="outline" className="gap-1" onClick={() => handleEditSalary(item)}>
-                                                    <Pencil className="size-3" />
-                                                    Sửa
-                                                </Button>
-                                                {item.status === "calculated" && (
+                                                {canManagePayroll && (
+                                                    <Button size="sm" variant="outline" className="gap-1" onClick={() => handleEditSalary(item)}>
+                                                        <Pencil className="size-3" />
+                                                        Sửa
+                                                    </Button>
+                                                )}
+                                                {canManagePayroll && item.status === "calculated" && (
                                                     <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleApproveSalary(item)}>
                                                         Duyệt
                                                     </Button>
                                                 )}
-                                                {item.status === "approved" && (
+                                                {canManagePayroll && item.status === "approved" && (
                                                     <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handlePaySalary(item)}>
                                                         Thanh toán
                                                     </Button>

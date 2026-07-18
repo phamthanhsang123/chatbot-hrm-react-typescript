@@ -110,7 +110,12 @@ function normalizeSalaryStatus(status?: string): SalaryStatus {
 }
 
 function mapApiSalaryRecord(item: SalaryRowApiItem, month: string, fallback: ReturnType<typeof getEmployeePortalIdentity>): SalaryRecord {
-  const totalDeduction = Math.max(0, Number(item.totalIncome || 0) - Number(item.netPay || 0));
+  const totalDeduction = Number(item.totalDeduction ?? Math.max(0, Number(item.totalIncome || 0) - Number(item.netPay || 0)));
+  const insuranceDeduction = Number(item.insuranceDeduction || 0);
+  const taxDeduction = Number(item.taxDeduction || 0);
+  const penaltyDeduction = Number(item.penaltyDeduction || 0);
+  const salaryDeduction = Number(item.salaryDeduction || 0);
+  const fallbackDeduction = Math.max(0, totalDeduction - insuranceDeduction - taxDeduction - penaltyDeduction - salaryDeduction);
   return {
     id: item.id,
     employeeId: item.employeeCode || `NV${String(item.employeeId).padStart(3, '0')}`,
@@ -119,23 +124,24 @@ function mapApiSalaryRecord(item: SalaryRowApiItem, month: string, fallback: Ret
     position: item.position || 'Nhân viên',
     month,
     baseSalary: Number(item.salaryBase) || 0,
-    mealAllowance: 0,
+    mealAllowance: Number(item.allowance || 0),
     transportAllowance: 0,
     phoneAllowance: 0,
     housingAllowance: 0,
-    standardDays: 22,
-    workDays: 22,
-    overtimeHours: 0,
+    standardDays: Number(item.standardDays || 22),
+    workDays: Number(item.workDays || 0),
+    overtimeHours: Number(item.overtimeHours || 0),
     overtimeRate: 1.5,
     kpiBonus: Number(item.bonus) || 0,
     projectBonus: 0,
     holidayBonus: 0,
-    socialInsurance: 0,
+    socialInsurance: insuranceDeduction + fallbackDeduction,
     healthInsurance: 0,
     unemploymentInsurance: 0,
-    personalIncomeTax: totalDeduction,
+    personalIncomeTax: taxDeduction,
     advancePayment: 0,
-    penalties: 0,
+    penalties: penaltyDeduction,
+    salaryDeduction,
     status: normalizeSalaryStatus(item.status),
     calculatedDate: `${month}-24`,
     approvedDate: normalizeSalaryStatus(item.status) === 'approved' || normalizeSalaryStatus(item.status) === 'paid' ? `${month}-26` : undefined,
