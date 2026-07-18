@@ -65,14 +65,14 @@ function buildAssistantReply(query: string, employees: EmployeeApiItem[], dashbo
       .join('\n');
   }
 
-  return `Tôi đang dùng dữ liệu thật từ Railway (${API_BASE}). Hiện có ${activeEmployees.length} nhân viên đang làm việc, ${managers.length} quản lý. Bạn có thể hỏi: "tổng lương", "quản lý", "phòng ban", "đánh giá năng lực" hoặc nhập tên nhân viên.`;
+  return `Tôi đang dùng dữ liệu thật từ Render (${API_BASE}). Hiện có ${activeEmployees.length} nhân viên đang làm việc, ${managers.length} quản lý. Bạn có thể hỏi: "tổng lương", "quản lý", "phòng ban", "đánh giá năng lực" hoặc nhập tên nhân viên.`;
 }
 
 export function Chatbot() {
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
   const [dashboard, setDashboard] = useState<CompetencyDashboard | null>(null);
   const [query, setQuery] = useState('');
-  const [reply, setReply] = useState('Đang tải dữ liệu từ Railway...');
+  const [reply, setReply] = useState('Đang tải dữ liệu từ Render...');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -98,11 +98,11 @@ export function Chatbot() {
 
       setEmployees(employeeList);
       setDashboard(competencyDashboard);
-      setReply(`Đã kết nối Railway API. Hiện có ${employeeList.length} hồ sơ nhân viên. Bạn muốn hỏi gì?`);
+      setReply(`Đã kết nối Render API. Hiện có ${employeeList.length} hồ sơ nhân viên. Bạn muốn hỏi gì?`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Không kết nối được API Railway.';
+      const message = err instanceof Error ? err.message : 'Không kết nối được API Render.';
       setError(message);
-      setReply(`Không tải được dữ liệu từ Railway.\n${message}`);
+      setReply(`Không tải được dữ liệu từ Render.\n${message}`);
     } finally {
       setLoading(false);
     }
@@ -130,7 +130,7 @@ export function Chatbot() {
               <h1 className="text-3xl font-bold text-gray-900">AI Assistant</h1>
               <Badge className="border-0 bg-emerald-100 text-emerald-700">
                 <Sparkles className="mr-1 size-3" />
-                Railway API
+                Render API
               </Badge>
             </div>
             <p className="mt-1 text-gray-500">Trợ lý hỏi nhanh dữ liệu HRM từ backend public.</p>

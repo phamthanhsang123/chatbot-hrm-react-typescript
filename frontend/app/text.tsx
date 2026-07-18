@@ -6,7 +6,7 @@ import { fetchEmployees, type EmployeeApiItem } from "@/services/employees";
 
 export default function ApiSmokeTest() {
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
-  const [message, setMessage] = useState("Đang kiểm tra Railway API...");
+  const [message, setMessage] = useState("Đang kiểm tra Render API...");
 
   useEffect(() => {
     fetchEmployees()
@@ -15,7 +15,7 @@ export default function ApiSmokeTest() {
         setMessage(`Kết nối thành công ${API_BASE}`);
       })
       .catch((error) => {
-        setMessage(error instanceof Error ? error.message : "Không kết nối được Railway API.");
+        setMessage(error instanceof Error ? error.message : "Không kết nối được Render API.");
       });
   }, []);
 

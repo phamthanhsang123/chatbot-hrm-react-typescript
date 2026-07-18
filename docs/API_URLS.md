@@ -9,8 +9,6 @@ Tai lieu nay dung de cac thanh vien khac clone/pull code ve co the biet cach mo 
 | Frontend HRM | http://localhost:3000 |
 | Backend API root | http://localhost:5297 |
 | Swagger test API | http://localhost:5297/swagger |
-| Backend API public Railway | https://api-production-ffaa0.up.railway.app |
-| Swagger public Railway | https://api-production-ffaa0.up.railway.app/swagger |
 | Backend API public Render | https://hrm-backend-api-hzgh.onrender.com |
 | Swagger public Render | https://hrm-backend-api-hzgh.onrender.com/swagger |
 
@@ -29,12 +27,6 @@ Backend mac dinh chay o:
 http://localhost:5297
 ```
 
-Backend da deploy public tren Railway:
-
-```text
-https://api-production-ffaa0.up.railway.app
-```
-
 Backend da deploy public tren Render:
 
 ```text
@@ -44,7 +36,7 @@ https://hrm-backend-api-hzgh.onrender.com
 Backend co the deploy sang Render bang file `render.yaml` o thu muc goc repo.
 Khi tao service tren Render, chon Blueprint hoac Docker Web Service va set cac bien moi truong ben duoi.
 
-### Bien moi truong can co tren Railway/Render
+### Bien moi truong can co tren Render
 
 Backend uu tien doc database theo cac bien sau:
 
@@ -251,7 +243,7 @@ GET http://localhost:5297/api/admin/competency/1/analyze
 
 ## 13. Ghi chu cho thanh vien khac
 
-- Nen xem Swagger public truoc khi code frontend: `https://api-production-ffaa0.up.railway.app/swagger`.
-- Frontend lay API base tu `frontend/services/apiBase.ts`, hien dang tro den Railway public.
+- Nen xem Swagger public truoc khi code frontend: `https://hrm-backend-api-hzgh.onrender.com/swagger`.
+- Frontend lay API base tu `frontend/services/apiBase.ts`, hien dang tro den Render public.
 - Khong push mat khau database that len GitHub. Neu can doi database, dung bien moi truong hoac file cau hinh local rieng.
 - Cac endpoint co fallback demo de giao dien van co du lieu khi database rong hoac chua dong bo schema.
