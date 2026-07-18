@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase';
+import { getStoredToken } from './authSession';
 
 export interface CompetencyItem {
   employeeId: number;
@@ -29,7 +30,10 @@ export interface CompetencyDashboard {
 }
 
 export async function fetchCompetencyList(month: number, year: number) {
-  const res = await fetch(`${API_BASE}/api/admin/competency?month=${month}&year=${year}`);
+  const token = getStoredToken();
+  const res = await fetch(`${API_BASE}/api/admin/competency?month=${month}&year=${year}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
 
   if (!res.ok) {
     const txt = await res.text();
@@ -40,7 +44,10 @@ export async function fetchCompetencyList(month: number, year: number) {
 }
 
 export async function fetchCompetencyDashboard(month: number, year: number) {
-  const res = await fetch(`${API_BASE}/api/admin/competency/dashboard?month=${month}&year=${year}`);
+  const token = getStoredToken();
+  const res = await fetch(`${API_BASE}/api/admin/competency/dashboard?month=${month}&year=${year}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
 
   if (!res.ok) {
     const txt = await res.text();
@@ -51,7 +58,10 @@ export async function fetchCompetencyDashboard(month: number, year: number) {
 }
 
 export async function analyzeEmployeeCompetency(employeeId: number, month: number, year: number) {
-  const res = await fetch(`${API_BASE}/api/admin/competency/${employeeId}/analyze?month=${month}&year=${year}`);
+  const token = getStoredToken();
+  const res = await fetch(`${API_BASE}/api/admin/competency/${employeeId}/analyze?month=${month}&year=${year}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
 
   if (!res.ok) {
     const txt = await res.text();

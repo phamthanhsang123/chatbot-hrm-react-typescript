@@ -2,7 +2,7 @@
 import { TrendingUp, Users, Wallet, Calendar, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from './ui/card';
 import { MetricCard } from './MetricCard';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,10 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { fetchCompetencyDashboard } from '@/services/competency';
+import { fetchEmployees } from '@/services/employees';
+import { fetchLeaveDashboard } from '@/services/leave';
+import { fetchSalaryDashboard } from '@/services/salary';
 
 interface DashboardProps {
   onNavigate?: (page: string) => void;
@@ -23,6 +27,65 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [showApproveLeave, setShowApproveLeave] = useState(false);
   const [showExportReport, setShowExportReport] = useState(false);
   const [showCalculateSalary, setShowCalculateSalary] = useState(false);
+  const [apiStatus, setApiStatus] = useState('Đang tải dữ liệu từ Render API...');
+  const [summary, setSummary] = useState({
+    employees: 0,
+    managers: 0,
+    totalSalary: 0,
+    onLeaveToday: 0,
+    averageScore: 0,
+    departments: [] as Array<{ dept: string; count: number; percent: number; color: string }>,
+  });
+  const now = useMemo(() => new Date(), []);
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  const formatCurrencyShort = (value: number) => {
+    if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)} tỷ`;
+    if (value >= 1_000_000) return `${Math.round(value / 1_000_000)} triệu`;
+    return new Intl.NumberFormat('vi-VN').format(value);
+  };
+
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const [employees, salary, leave, competency] = await Promise.all([
+          fetchEmployees(),
+          fetchSalaryDashboard(currentMonth, currentYear).catch(() => null),
+          fetchLeaveDashboard().catch(() => null),
+          fetchCompetencyDashboard(currentMonth, currentYear).catch(() => null),
+        ]);
+
+        const activeEmployees = employees.filter((employee) => employee.status !== 'Đã nghỉ việc');
+        const departmentCounts = activeEmployees.reduce<Record<string, number>>((acc, employee) => {
+          const name = employee.departmentName || 'Chưa phân phòng';
+          acc[name] = (acc[name] || 0) + 1;
+          return acc;
+        }, {});
+        const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500'];
+
+        setSummary({
+          employees: activeEmployees.length,
+          managers: activeEmployees.filter((employee) => employee.role?.toUpperCase() === 'MANAGER').length,
+          totalSalary: Number(salary?.totalNet || activeEmployees.reduce((sum, employee) => sum + Number(employee.salaryBase || 0), 0)),
+          onLeaveToday: Number(leave?.onLeaveToday || 0),
+          averageScore: Math.round(Number(competency?.averageScore || 0)),
+          departments: Object.entries(departmentCounts).map(([dept, count], index) => ({
+            dept,
+            count,
+            percent: activeEmployees.length ? Math.round((count / activeEmployees.length) * 100) : 0,
+            color: colors[index % colors.length],
+          })),
+        });
+        setApiStatus('Dữ liệu Dashboard được đồng bộ từ Render API');
+      } catch (error) {
+        console.error('Load dashboard API failed:', error);
+        setApiStatus('Không tải được Dashboard từ Render API.');
+      }
+    }
+
+    void loadDashboard();
+  }, [currentMonth, currentYear]);
 
   return (
     <div className="space-y-6">
@@ -30,14 +93,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 mt-1">Tổng quan hệ thống HRM</p>
+        <p className="mt-1 text-xs text-blue-600">{apiStatus}</p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard title="Tổng nhân viên" value="125" description="+12% so với tháng trước" icon={<Users className="size-5" />} tone="blue" />
-        <MetricCard title="Tổng lương tháng này" value="2.1 tỷ" description="+5% so với tháng trước" icon={<Wallet className="size-5" />} tone="emerald" />
-        <MetricCard title="Nghỉ phép hôm nay" value="7" description="-3 so với hôm qua" icon={<Calendar className="size-5" />} tone="orange" />
-        <MetricCard title="Hiệu suất trung bình" value="87%" description="+2% so với tháng trước" icon={<TrendingUp className="size-5" />} tone="violet" />
+        <MetricCard title="Tổng nhân viên" value={summary.employees} description={`${summary.managers} quản lý`} icon={<Users className="size-5" />} tone="blue" />
+        <MetricCard title="Tổng lương tháng này" value={formatCurrencyShort(summary.totalSalary)} description={`Tháng ${currentMonth}/${currentYear}`} icon={<Wallet className="size-5" />} tone="emerald" />
+        <MetricCard title="Nghỉ phép hôm nay" value={summary.onLeaveToday} description="Theo đơn đã duyệt" icon={<Calendar className="size-5" />} tone="orange" />
+        <MetricCard title="Hiệu suất trung bình" value={`${summary.averageScore}%`} description="Điểm năng lực AI" icon={<TrendingUp className="size-5" />} tone="violet" />
       </div>
 
       <div className="hidden grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -111,13 +175,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <Card className="!gap-4 border-gray-200 !p-4 shadow-sm">
           <h3 className="text-lg font-semibold mb-4">Nhân viên theo phòng ban</h3>
           <div className="space-y-3">
-            {[
-              { dept: 'IT Department', count: 45, color: 'bg-blue-500', percent: 36 },
-              { dept: 'Sales', count: 32, color: 'bg-green-500', percent: 26 },
-              { dept: 'Marketing', count: 18, color: 'bg-purple-500', percent: 14 },
-              { dept: 'HR', count: 15, color: 'bg-orange-500', percent: 12 },
-              { dept: 'Finance', count: 15, color: 'bg-pink-500', percent: 12 },
-            ].map((item) => (
+            {(summary.departments.length > 0 ? summary.departments : [{ dept: 'Chưa có dữ liệu', count: 0, color: 'bg-gray-300', percent: 0 }]).map((item) => (
               <div key={item.dept}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium">{item.dept}</span>

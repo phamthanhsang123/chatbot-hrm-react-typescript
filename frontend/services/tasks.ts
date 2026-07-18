@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase';
+import { getStoredToken } from './authSession';
 
 export type TaskStatus = 'NEW' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED' | 'OVERDUE';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -74,10 +75,12 @@ function periodQuery(period?: TaskPeriodQuery) {
 }
 
 async function request<T>(path: string, init?: RequestInit) {
+  const token = getStoredToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers || {}),
     },
   });

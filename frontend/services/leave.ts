@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase';
+import { getStoredToken } from './authSession';
 
 export interface LeaveRequestApiItem {
   id: number;
@@ -29,10 +30,12 @@ export interface LeaveCreatePayload {
 }
 
 async function request<T>(path: string, init?: RequestInit) {
+  const token = getStoredToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers || {}),
     },
   });

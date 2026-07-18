@@ -16,6 +16,14 @@ import {
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
+import {
+  approveLeaveRequest,
+  createLeaveRequest,
+  fetchLeaveRequests,
+  rejectLeaveRequest,
+  type LeaveRequestApiItem,
+} from '@/services/leave';
+import { fetchEmployees, type EmployeeApiItem } from '@/services/employees';
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected';
 type LeaveType = 'annual' | 'sick' | 'unpaid' | 'maternity' | 'marriage' | 'funeral';
@@ -53,6 +61,43 @@ interface LeaveRequest {
   reviewNote?: string;
 }
 
+function normalizeLeaveStatus(status: string): LeaveStatus {
+  const value = status.trim().toLowerCase();
+  if (value.includes('duyệt') && !value.includes('chờ')) return 'approved';
+  if (value.includes('từ chối') || value.includes('rejected')) return 'rejected';
+  return 'pending';
+}
+
+function normalizeLeaveType(type: string): LeaveType {
+  const value = type.toLowerCase();
+  if (value.includes('ốm') || value.includes('sick')) return 'sick';
+  if (value.includes('không') || value.includes('unpaid')) return 'unpaid';
+  if (value.includes('thai') || value.includes('maternity')) return 'maternity';
+  if (value.includes('cưới') || value.includes('marriage')) return 'marriage';
+  if (value.includes('tang') || value.includes('funeral')) return 'funeral';
+  return 'annual';
+}
+
+function toDateInputValue(value: string) {
+  return value ? value.slice(0, 10) : '';
+}
+
+function mapLeaveRequest(item: LeaveRequestApiItem): LeaveRequest {
+  return {
+    id: item.id,
+    employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
+    name: item.employeeName || `NV${item.employeeId}`,
+    department: 'API',
+    type: normalizeLeaveType(item.leaveType),
+    from: toDateInputValue(item.startDate),
+    to: toDateInputValue(item.endDate),
+    days: Number(item.totalDays || 0),
+    reason: item.reason || '',
+    status: normalizeLeaveStatus(item.status),
+    appliedDate: toDateInputValue(item.startDate),
+  };
+}
+
 export function Leave() {
   const [filterStatus, setFilterStatus] = useState<LeaveFilterStatus>('pending');
   const [currentPage, setCurrentPage] = useState(1);
@@ -63,9 +108,13 @@ export function Leave() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [rejectNote, setRejectNote] = useState('');
+  const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   // Form state for create dialog
   const [newLeave, setNewLeave] = useState({
+    employeeId: '',
     employeeName: '',
     type: 'annual' as LeaveType,
     from: '',
@@ -265,6 +314,30 @@ export function Leave() {
     return { total, pending, approved, rejected, onLeaveToday };
   }, [leaveRequests]);
 
+  const loadLeaveData = async () => {
+    setApiLoading(true);
+    setApiError('');
+
+    try {
+      const [requests, employeeList] = await Promise.all([
+        fetchLeaveRequests(),
+        fetchEmployees(),
+      ]);
+
+      setLeaveRequests(requests.map(mapLeaveRequest));
+      setEmployees(employeeList.filter((employee) => employee.status !== 'Đã nghỉ việc'));
+    } catch (error) {
+      console.error('Load leave API failed:', error);
+      setApiError('Không tải được dữ liệu nghỉ phép từ Render API. Giao diện đang giữ dữ liệu hiện có.');
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLeaveData();
+  }, []);
+
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
@@ -326,103 +399,80 @@ export function Leave() {
     return Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   };
 
-  const handleConfirmApprove = () => {
+  const handleConfirmApprove = async () => {
     if (!selectedRequest) return;
 
-    setLeaveRequests((prev) =>
-      prev.map((x) => {
-        if (x.id !== selectedRequest.id) return x;
-        return {
-          ...x,
-          status: 'approved',
-          reviewedDate: new Date().toISOString().slice(0, 10),
-          reviewedBy: 'HR Manager',
-        };
-      })
-    );
-
-    alert(
-      `✅ Đã duyệt đơn nghỉ phép!\n\n` +
-      `Nhân viên: ${selectedRequest.name}\n` +
-      `Loại: ${getLeaveTypeLabel(selectedRequest.type)}\n` +
-      `Số ngày: ${selectedRequest.days} ngày\n` +
-      `Từ ${formatDate(selectedRequest.from)} đến ${formatDate(selectedRequest.to)}`
-    );
-
-    setShowApproveDialog(false);
+    try {
+      await approveLeaveRequest(selectedRequest.id);
+      await loadLeaveData();
+      alert(`? ?? duy?t ??n ngh? ph?p cho ${selectedRequest.name}!`);
+    } catch (error) {
+      console.error('Approve leave API failed:', error);
+      alert('Kh?ng duy?t ???c ??n ngh? ph?p t? Render API.');
+    } finally {
+      setShowApproveDialog(false);
+    }
   };
 
-  const handleConfirmReject = () => {
+  const handleConfirmReject = async () => {
     if (!selectedRequest) return;
 
     if (!rejectNote.trim()) {
-      alert('⚠️ Vui lòng nhập lý do từ chối!');
+      alert('Vui l?ng nh?p l? do t? ch?i!');
       return;
     }
 
-    setLeaveRequests((prev) =>
-      prev.map((x) => {
-        if (x.id !== selectedRequest.id) return x;
-        return {
-          ...x,
-          status: 'rejected',
-          reviewedDate: new Date().toISOString().slice(0, 10),
-          reviewedBy: 'HR Manager',
-          reviewNote: rejectNote,
-        };
-      })
-    );
-
-    alert(
-      `❌ Đã từ chối đơn nghỉ phép!\n\n` +
-      `Nhân viên: ${selectedRequest.name}\n` +
-      `Lý do từ chối: ${rejectNote}`
-    );
-
-    setShowRejectDialog(false);
+    try {
+      await rejectLeaveRequest(selectedRequest.id);
+      await loadLeaveData();
+      alert(`?? t? ch?i ??n ngh? ph?p c?a ${selectedRequest.name}.`);
+    } catch (error) {
+      console.error('Reject leave API failed:', error);
+      alert('Kh?ng t? ch?i ???c ??n ngh? ph?p t? Render API.');
+    } finally {
+      setShowRejectDialog(false);
+    }
   };
 
-  const handleCreateLeave = () => {
-    if (!newLeave.employeeName || !newLeave.from || !newLeave.to || !newLeave.reason) {
-      alert('⚠️ Vui lòng điền đầy đủ thông tin!');
+  const handleCreateLeave = async () => {
+    if (!newLeave.employeeId || !newLeave.from || !newLeave.to || !newLeave.reason) {
+      alert('Vui l?ng ?i?n ??y ?? th?ng tin!');
       return;
     }
 
-    const from = new Date(newLeave.from);
-    const to = new Date(newLeave.to);
-    const days = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-    const newRequest: LeaveRequest = {
-      id: Math.max(...leaveRequests.map((x) => x.id)) + 1,
-      employeeId: 'NV999',
-      name: newLeave.employeeName,
-      department: 'IT',
-      type: newLeave.type,
-      from: newLeave.from,
-      to: newLeave.to,
-      days,
-      reason: newLeave.reason,
-      status: 'pending',
-      appliedDate: new Date().toISOString().slice(0, 10),
+    const selectedEmployee = employees.find((employee) => String(employee.id) === newLeave.employeeId);
+    const typeIdMap: Record<LeaveType, number> = {
+      annual: 1,
+      sick: 2,
+      unpaid: 3,
+      maternity: 4,
+      marriage: 5,
+      funeral: 6,
     };
 
-    setLeaveRequests((prev) => [newRequest, ...prev]);
-
-    alert(
-      `✅ Đã tạo đơn nghỉ phép thành công!\n\n` +
-      `Nhân viên: ${newLeave.employeeName}\n` +
-      `Loại: ${getLeaveTypeLabel(newLeave.type)}\n` +
-      `Số ngày: ${days} ngày`
-    );
-
-    setShowCreateDialog(false);
-    setNewLeave({
-      employeeName: '',
-      type: 'annual',
-      from: '',
-      to: '',
-      reason: '',
-    });
+    try {
+      await createLeaveRequest({
+        employeeId: Number(newLeave.employeeId),
+        leaveTypeId: typeIdMap[newLeave.type],
+        startDate: newLeave.from,
+        endDate: newLeave.to,
+        reason: newLeave.reason,
+      });
+      await loadLeaveData();
+      alert(`? ?? t?o ??n ngh? ph?p cho ${selectedEmployee?.fullName || 'nh?n vi?n'}!`);
+      setShowCreateDialog(false);
+      setNewLeave({
+        employeeId: '',
+        employeeName: '',
+        type: 'annual',
+        from: '',
+        to: '',
+        reason: '',
+      });
+    } catch (error) {
+      console.error('Create leave API failed:', error);
+      alert('Kh?ng t?o ???c ??n ngh? ph?p t? Render API.');
+    }
   };
 
   const handleViewStats = () => {
@@ -457,6 +507,7 @@ export function Leave() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Quản lý nghỉ phép</h1>
           <p className="text-gray-500 mt-1">Theo dõi và duyệt đơn xin nghỉ phép</p>
+          <p className="mt-1 text-xs text-blue-600">{apiLoading ? 'Đang tải dữ liệu từ Render API...' : 'Dữ liệu nghỉ phép được đồng bộ từ Render API'}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleViewStats}>
@@ -472,6 +523,12 @@ export function Leave() {
           </Button>
         </div>
       </div>
+
+      {apiError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {apiError}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
@@ -763,12 +820,26 @@ export function Leave() {
 
           <div className="space-y-4">
             <div>
-              <Label>Tên nhân viên</Label>
-              <Input
-                value={newLeave.employeeName}
-                onChange={(e) => setNewLeave({ ...newLeave, employeeName: e.target.value })}
-                placeholder="Nhập tên nhân viên"
-              />
+              <Label>Nh?n vi?n</Label>
+              <select
+                className="h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                value={newLeave.employeeId}
+                onChange={(e) => {
+                  const employee = employees.find((item) => String(item.id) === e.target.value);
+                  setNewLeave({
+                    ...newLeave,
+                    employeeId: e.target.value,
+                    employeeName: employee?.fullName || '',
+                  });
+                }}
+              >
+                <option value="">Ch?n nh?n vi?n t? API</option>
+                {employees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.fullName} - {employee.departmentName || 'Ch?a ph?n ph?ng'}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
