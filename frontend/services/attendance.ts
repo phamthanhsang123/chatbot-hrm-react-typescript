@@ -33,6 +33,25 @@ export interface AttendanceMonthlyReportItem {
   totalHours: number;
 }
 
+export interface AttendanceRequestApiItem {
+  id: number;
+  employeeName: string;
+  employeeId: string;
+  department: string;
+  date: string;
+  checkIn: string;
+  checkOut: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | string;
+  submittedAt: string;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  reviewNote?: string | null;
+  type: 'supplement' | 'adjustment' | string;
+  originalCheckIn?: string | null;
+  originalCheckOut?: string | null;
+}
+
 async function request<T>(path: string, init?: RequestInit) {
   const token = getStoredToken();
   const res = await fetch(`${API_BASE}${path}`, {
@@ -71,4 +90,22 @@ export function fetchAttendanceByDate(date: string) {
 
 export function fetchAttendanceMonthlyReport(year: number, month: number) {
   return request<AttendanceMonthlyReportItem[]>(`/api/admin/attendance/report?year=${year}&month=${month}`);
+}
+
+export function fetchAttendanceRequests() {
+  return request<AttendanceRequestApiItem[]>('/api/admin/attendance/requests');
+}
+
+export function approveAttendanceRequest(id: number, note?: string) {
+  return request<AttendanceRequestApiItem>(`/api/admin/attendance/requests/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+export function rejectAttendanceRequest(id: number, note?: string) {
+  return request<AttendanceRequestApiItem>(`/api/admin/attendance/requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
 }
