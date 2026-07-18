@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BrainCircuit,
@@ -15,13 +16,18 @@ import { Card } from './ui/card';
 import { MetricCard } from './MetricCard';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { fetchAttendanceRequests } from '@/services/attendance';
+import { fetchCompetencyDashboard } from '@/services/competency';
+import { fetchEmployees } from '@/services/employees';
+import { fetchLeaveDashboard } from '@/services/leave';
+import { fetchManagerTasks } from '@/services/tasks';
 
 interface ManagerDashboardProps {
   departmentName: string;
   onNavigate: (page: string) => void;
 }
 
-const teamMembers = [
+const fallbackTeamMembers = [
   { name: 'Nguyễn Văn A', role: 'Developer', score: 89, status: 'Ổn định' },
   { name: 'Lê Văn C', role: 'Team Lead', score: 77, status: 'Cần theo dõi' },
   { name: 'Hoàng Minh Tuấn', role: 'DevOps Engineer', score: 84, status: 'Tốt' },
@@ -38,6 +44,65 @@ const actionItems = [
 ];
 
 export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboardProps) {
+  const [teamMembers, setTeamMembers] = useState(fallbackTeamMembers);
+  const [pendingWork, setPendingWork] = useState(7);
+  const [apiStatus, setApiStatus] = useState('');
+  const managerId = useMemo(() => {
+    if (typeof window === 'undefined') return 2;
+    const value = Number(window.localStorage.getItem('hrm_employee_id') || 2);
+    return Number.isFinite(value) && value > 0 ? value : 2;
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const now = new Date();
+    setApiStatus('Đang đồng bộ dữ liệu Manager từ Render API...');
+
+    Promise.all([
+      fetchEmployees(),
+      fetchManagerTasks(managerId).catch(() => []),
+      fetchLeaveDashboard().catch(() => null),
+      fetchAttendanceRequests().catch(() => []),
+      fetchCompetencyDashboard(now.getMonth() + 1, now.getFullYear()).catch(() => null),
+    ])
+      .then(([employees, tasks, leaveDashboard, attendanceRequests, competencyDashboard]) => {
+        if (!mounted) return;
+        const scopedEmployees = employees.filter((employee) =>
+          departmentName === 'Toàn hệ thống' ||
+          !employee.departmentName ||
+          employee.departmentName === departmentName,
+        );
+        const scoreMap = new Map(
+          (competencyDashboard?.topEmployees || []).map((item) => [item.employeeId, item.totalScore]),
+        );
+
+        if (scopedEmployees.length > 0) {
+          setTeamMembers(scopedEmployees.slice(0, 8).map((employee) => {
+            const score = Math.round(scoreMap.get(employee.id) || 80);
+            return {
+              name: employee.fullName,
+              role: employee.positionTitle || employee.role || 'Nhân viên',
+              score,
+              status: score >= 85 ? 'Tốt' : score >= 80 ? 'Ổn định' : 'Cần theo dõi',
+            };
+          }));
+        }
+
+        const waitingTasks = tasks.filter((task) => task.status === 'SUBMITTED' || task.status === 'REVISION_REQUIRED').length;
+        const waitingAttendance = attendanceRequests.filter((request) => request.status === 'pending').length;
+        setPendingWork(waitingTasks + (leaveDashboard?.pending || 0) + waitingAttendance);
+        setApiStatus('');
+      })
+      .catch((error) => {
+        console.error('fetch manager dashboard failed:', error);
+        if (mounted) setApiStatus('Đang hiển thị dữ liệu dự phòng vì API Manager Dashboard chưa phản hồi.');
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [departmentName, managerId]);
+
   const averageScore = Math.round(teamMembers.reduce((sum, member) => sum + member.score, 0) / teamMembers.length);
   const watchCount = teamMembers.filter((member) => member.score < 80).length;
 
@@ -52,6 +117,7 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard Manager</h1>
               <p className="text-sm text-gray-500">Theo dõi nhân sự, chấm công và năng lực phòng ban {departmentName}</p>
+              {apiStatus && <p className="mt-1 text-xs text-blue-600">{apiStatus}</p>}
             </div>
           </div>
         </div>
@@ -62,7 +128,7 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
         <MetricCard title="Nhân viên trong team" value={teamMembers.length} description={`Phạm vi ${departmentName}`} icon={<Users className="size-5" />} tone="blue" />
         <MetricCard title="Điểm năng lực TB" value={averageScore} description="Trung bình theo phòng ban" icon={<TrendingUp className="size-5" />} tone="emerald" />
         <MetricCard title="Cần theo dõi" value={watchCount} description="Nhân viên dưới ngưỡng 80" icon={<AlertTriangle className="size-5" />} tone="orange" />
-        <MetricCard title="Việc chờ xử lý" value="7" description="Task, phép và chấm công" icon={<ClipboardCheck className="size-5" />} tone="violet" />
+        <MetricCard title="Việc chờ xử lý" value={pendingWork} description="Task, phép và chấm công" icon={<ClipboardCheck className="size-5" />} tone="violet" />
       </div>
 
       <div className="hidden gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Clock3, DollarSign, Download, Eye, ShieldCheck, Wallet } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { fetchSalaryRows, type SalaryRowApiItem } from '@/services/salary';
 import { getCurrentEmployeeId } from '@/services/tasks';
 import { HRM_SYNC_KEYS, getEmployeePortalIdentity, readSyncedRecords } from './hrmSync';
 
@@ -98,6 +99,48 @@ function totalDeductions(record: SalaryRecord) {
 
 function netSalary(record: SalaryRecord) {
   return Math.round(totalIncome(record) - totalDeductions(record));
+}
+
+function normalizeSalaryStatus(status?: string): SalaryStatus {
+  const normalized = (status || '').toLowerCase();
+  if (normalized.includes('paid') || normalized.includes('thanh')) return 'paid';
+  if (normalized.includes('approved') || normalized.includes('duy')) return 'approved';
+  if (normalized.includes('calculated') || normalized.includes('tính') || normalized.includes('tinh')) return 'calculated';
+  return 'pending';
+}
+
+function mapApiSalaryRecord(item: SalaryRowApiItem, month: string, fallback: ReturnType<typeof getEmployeePortalIdentity>): SalaryRecord {
+  const totalDeduction = Math.max(0, Number(item.totalIncome || 0) - Number(item.netPay || 0));
+  return {
+    id: item.id,
+    employeeId: item.employeeCode || `NV${String(item.employeeId).padStart(3, '0')}`,
+    name: item.employeeName || fallback.employeeName,
+    department: item.department || fallback.department,
+    position: item.position || 'Nhân viên',
+    month,
+    baseSalary: Number(item.salaryBase) || 0,
+    mealAllowance: 0,
+    transportAllowance: 0,
+    phoneAllowance: 0,
+    housingAllowance: 0,
+    standardDays: 22,
+    workDays: 22,
+    overtimeHours: 0,
+    overtimeRate: 1.5,
+    kpiBonus: Number(item.bonus) || 0,
+    projectBonus: 0,
+    holidayBonus: 0,
+    socialInsurance: 0,
+    healthInsurance: 0,
+    unemploymentInsurance: 0,
+    personalIncomeTax: totalDeduction,
+    advancePayment: 0,
+    penalties: 0,
+    status: normalizeSalaryStatus(item.status),
+    calculatedDate: `${month}-24`,
+    approvedDate: normalizeSalaryStatus(item.status) === 'approved' || normalizeSalaryStatus(item.status) === 'paid' ? `${month}-26` : undefined,
+    paidDate: normalizeSalaryStatus(item.status) === 'paid' ? `${month}-28` : undefined,
+  };
 }
 
 function buildDemoSalaryRecords(employeeId: string, name: string, department: string): SalaryRecord[] {
@@ -195,8 +238,9 @@ function buildDemoSalaryRecords(employeeId: string, name: string, department: st
 }
 
 export function EmployeeSalary() {
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
-  const [records] = useState<SalaryRecord[]>(() => {
+  const numericEmployeeId = useMemo(() => getCurrentEmployeeId(), []);
+  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(numericEmployeeId), [numericEmployeeId]);
+  const [records, setRecords] = useState<SalaryRecord[]>(() => {
     const demo = buildDemoSalaryRecords(employeeIdentity.employeeId, employeeIdentity.employeeName, employeeIdentity.department);
     const synced = readSyncedRecords<SalaryRecord>(HRM_SYNC_KEYS.salaryRecords).filter(
       (record) => record.employeeId === employeeIdentity.employeeId,
@@ -207,6 +251,46 @@ export function EmployeeSalary() {
   });
   const [selectedMonth, setSelectedMonth] = useState(monthKey(0));
   const [selectedSalary, setSelectedSalary] = useState<SalaryRecord | null>(null);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [apiError, setApiError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    setIsLoadingApi(true);
+    setApiError('');
+
+    const months = [monthKey(0), monthKey(-1), monthKey(-2)];
+    Promise.all(
+      months.map(async (key) => {
+        const [year, month] = key.split('-').map(Number);
+        const rows = await fetchSalaryRows(month, year);
+        return rows
+          .filter((item) => item.employeeId === numericEmployeeId || item.employeeCode === employeeIdentity.employeeId)
+          .map((item) => mapApiSalaryRecord(item, key, employeeIdentity));
+      }),
+    )
+      .then((groups) => {
+        if (!mounted) return;
+        const apiRecords = groups.flat();
+        if (apiRecords.length > 0) {
+          setRecords(apiRecords);
+          if (!apiRecords.some((record) => record.month === selectedMonth)) {
+            setSelectedMonth(apiRecords[0].month);
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('fetch employee salary failed:', error);
+        if (mounted) setApiError('Đang hiển thị dữ liệu dự phòng vì API lương chưa phản hồi.');
+      })
+      .finally(() => {
+        if (mounted) setIsLoadingApi(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [employeeIdentity, numericEmployeeId, selectedMonth]);
 
   const currentRecord = records.find((record) => record.month === selectedMonth) || records[0];
   const paidRecords = records.filter((record) => record.status === 'paid');
@@ -247,6 +331,8 @@ export function EmployeeSalary() {
         <div>
           <h1 className="text-2xl font-bold text-slate-950">Lương của tôi</h1>
           <p className="mt-1 text-sm text-slate-500">Theo dõi bảng lương đã tính, duyệt và thanh toán từ HR.</p>
+          {isLoadingApi && <p className="mt-1 text-xs text-blue-600">Đang đồng bộ bảng lương từ Render API...</p>}
+          {apiError && <p className="mt-1 text-xs text-amber-600">{apiError}</p>}
         </div>
         <select
           value={selectedMonth}
