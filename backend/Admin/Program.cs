@@ -12,14 +12,14 @@ var builder = WebApplication.CreateBuilder(args);
 // =========================
 // DATABASE
 // =========================
-var connectionString =
-    builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? builder.Configuration.GetConnectionString("MySql");
+var connectionString = ResolveConnectionString(builder.Configuration);
 
 if (string.IsNullOrWhiteSpace(connectionString))
 {
-    throw new Exception("Missing connection string. Set ConnectionStrings:DefaultConnection (or MySql).");
+    throw new Exception("Missing connection string. Set ConnectionStrings:DefaultConnection, MYSQL_URL, MYSQL_PUBLIC_URL, or DATABASE_URL.");
 }
+
+connectionString = NormalizeMySqlConnectionString(connectionString);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
@@ -173,3 +173,47 @@ app.MapControllers();
 app.MapGet("/", () => "HRM API is running 🚀");
 
 app.Run();
+
+static string? ResolveConnectionString(IConfiguration configuration)
+{
+    return configuration.GetConnectionString("DefaultConnection")
+        ?? configuration.GetConnectionString("MySql")
+        ?? configuration["MYSQL_URL"]
+        ?? configuration["MYSQL_PUBLIC_URL"]
+        ?? configuration["DATABASE_URL"];
+}
+
+static string NormalizeMySqlConnectionString(string rawConnectionString)
+{
+    var connectionString = rawConnectionString.Trim();
+
+    if (connectionString.StartsWith("mysql://", StringComparison.OrdinalIgnoreCase))
+    {
+        var uri = new Uri(connectionString);
+        var userInfo = uri.UserInfo.Split(':', 2);
+
+        var builder = new MySqlConnector.MySqlConnectionStringBuilder
+        {
+            Server = uri.Host,
+            Port = (uint)(uri.Port > 0 ? uri.Port : 3306),
+            Database = uri.AbsolutePath.TrimStart('/'),
+            UserID = Uri.UnescapeDataString(userInfo.ElementAtOrDefault(0) ?? ""),
+            Password = Uri.UnescapeDataString(userInfo.ElementAtOrDefault(1) ?? "")
+        };
+
+        connectionString = builder.ConnectionString;
+    }
+
+    var csBuilder = new MySqlConnector.MySqlConnectionStringBuilder(connectionString)
+    {
+        ConnectionTimeout = 30,
+        DefaultCommandTimeout = 30,
+        Keepalive = 15,
+        ConnectionIdleTimeout = 60,
+        AllowPublicKeyRetrieval = true,
+        TreatTinyAsBoolean = false,
+        SslMode = MySqlConnector.MySqlSslMode.Preferred
+    };
+
+    return csBuilder.ConnectionString;
+}
