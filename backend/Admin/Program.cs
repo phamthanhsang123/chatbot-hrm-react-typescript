@@ -50,6 +50,7 @@ builder.Services.AddScoped<LeaveRequestService>();
 builder.Services.AddScoped<CompetencyService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<AgenticCompetencyService>();
+builder.Services.AddScoped<DemoDataSeeder>();
 
 // =========================
 // CORS

@@ -13,7 +13,7 @@ namespace Admin.Models
         [Column("employee_id")]
         public int EmployeeId { get; set; }
 
-        [NotMapped]
+        [Column("leave_type_id")]
         public int LeaveTypeId { get; set; }
 
         [Column("start_date")]
@@ -22,7 +22,7 @@ namespace Admin.Models
         [Column("end_date")]
         public DateTime EndDate { get; set; }
 
-        [NotMapped]
+        [Column("total_days")]
         public int TotalDays { get; set; }
 
         [Column("reason")]
@@ -31,7 +31,7 @@ namespace Admin.Models
         [Column("status")]
         public string Status { get; set; } = "Chờ duyệt";
 
-        [NotMapped]
+        [Column("created_at")]
         public DateTime CreatedAt { get; set; }
     }
 }
