@@ -189,6 +189,17 @@ function getInitials(name: string) {
   return initials.toUpperCase() || 'NV';
 }
 
+function getStoredManagerId() {
+  if (typeof window === 'undefined') return 0;
+
+  const parsed = Number(window.localStorage.getItem('hrm_employee_id'));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function canManageTasks(employee: EmployeeApiItem) {
+  return employee.role === 'MANAGER' || employee.role === 'ADMIN';
+}
+
 export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksProps) {
   const [manager, setManager] = useState<EmployeeApiItem | null>(null);
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
@@ -227,16 +238,18 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     try {
       const employeeList = await fetchEmployees();
       const email = getSessionEmail();
-      const currentManager = employeeList.find((item) => {
-        const sameEmail = item.email.toLowerCase() === email;
-        return sameEmail && (item.role === 'MANAGER' || item.role === 'ADMIN');
-      });
+      const storedManagerId = getStoredManagerId();
+      const currentManager =
+        employeeList.find((item) => item.id === storedManagerId && canManageTasks(item)) ||
+        employeeList.find((item) => item.email.toLowerCase() === email && canManageTasks(item)) ||
+        employeeList.find((item) => item.departmentName === departmentName && canManageTasks(item)) ||
+        employeeList.find(canManageTasks);
 
       if (!currentManager) {
         setManager(null);
         setEmployees(employeeList);
         setTasks([]);
-        toast.fire({ icon: 'warning', title: 'Không tìm thấy Manager từ tài khoản đăng nhập' });
+        toast.fire({ icon: 'warning', title: 'Không tìm thấy Manager từ API' });
         return;
       }
 
