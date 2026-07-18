@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { Clock3, DollarSign, Download, Eye, ShieldCheck, Wallet } from 'lucide-react';
+import { Clock3, DollarSign, Eye, ShieldCheck, Wallet } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -220,27 +220,6 @@ export function EmployeeSalary() {
     overtimeHours: records.reduce((sum, record) => sum + record.overtimeHours, 0),
   };
 
-  const handleDownload = (record: SalaryRecord) => {
-    if (record.status !== 'paid' && record.status !== 'approved') {
-      void Swal.fire({
-        icon: 'warning',
-        title: 'Phiếu lương chưa được chốt',
-        text: 'HR cần duyệt bảng lương trước khi nhân viên tải phiếu lương chính thức.',
-        confirmButtonText: 'Đã hiểu',
-        confirmButtonColor: '#2563eb',
-      });
-      return;
-    }
-
-    void Swal.fire({
-      icon: 'info',
-      title: 'Đang chuẩn bị phiếu lương',
-      text: `Phiếu lương ${formatMonth(record.month)} đang được chuẩn bị dưới dạng PDF.`,
-      confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#2563eb',
-    });
-  };
-
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -274,11 +253,7 @@ export function EmployeeSalary() {
             <Button variant="secondary" onClick={() => setSelectedSalary(currentRecord)}>
               <Eye className="mr-2 size-4" />
               Chi tiết
-            </Button>
-            <Button variant="secondary" onClick={() => handleDownload(currentRecord)}>
-              <Download className="mr-2 size-4" />
-              Phiếu lương
-            </Button>
+            </Button>
           </div>
         </div>
       </section>
@@ -315,10 +290,7 @@ export function EmployeeSalary() {
                 <Button variant="outline" size="sm" onClick={() => setSelectedSalary(record)}>
                   <Eye className="mr-1.5 size-4" />
                   Xem
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleDownload(record)} title="Tải phiếu lương">
-                  <Download className="size-4" />
-                </Button>
+                </Button>
               </div>
             </div>
           ))}
@@ -360,11 +332,7 @@ export function EmployeeSalary() {
                 <span className="text-xl font-bold text-emerald-700">{formatCurrency(netSalary(selectedSalary))}</span>
               </div>
 
-              <div className="flex justify-end">
-                <Button onClick={() => handleDownload(selectedSalary)}>
-                  <Download className="mr-2 size-4" />
-                  Tải phiếu lương
-                </Button>
+              <div className="flex justify-end">
               </div>
             </div>
           )}

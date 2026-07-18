@@ -20,8 +20,7 @@ interface DashboardProps {
 
 export function Dashboard({ onNavigate }: DashboardProps) {
   const [showAddEmployee, setShowAddEmployee] = useState(false);
-  const [showApproveLeave, setShowApproveLeave] = useState(false);
-  const [showExportReport, setShowExportReport] = useState(false);
+  const [showApproveLeave, setShowApproveLeave] = useState(false);
   const [showCalculateSalary, setShowCalculateSalary] = useState(false);
 
   return (
@@ -175,14 +174,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           >
             <Calendar className="mb-2 size-5 text-emerald-600" />
             <p className="text-sm font-medium">Duyệt nghỉ phép</p>
-          </button>
-          <button
-            onClick={() => (onNavigate ? onNavigate('reports') : setShowExportReport(true))}
-            className="rounded-lg border border-gray-200 bg-white p-4 text-left transition hover:border-violet-200 hover:bg-violet-50/50"
-          >
-            <TrendingUp className="mb-2 size-5 text-violet-600" />
-            <p className="text-sm font-medium">Xuất báo cáo</p>
-          </button>
+          </button>
           <button
             onClick={() => (onNavigate ? onNavigate('salary') : setShowCalculateSalary(true))}
             className="rounded-lg border border-gray-200 bg-white p-4 text-left transition hover:border-orange-200 hover:bg-orange-50/50"
@@ -281,44 +273,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             ))}
           </div>
         </DialogContent>
-      </Dialog>
-
-      {/* Export Report Dialog */}
-      <Dialog open={showExportReport} onOpenChange={setShowExportReport}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Xuất báo cáo</DialogTitle>
-            <DialogDescription>
-              Chọn loại báo cáo bạn muốn xuất
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-4">
-            {[
-              { title: 'Báo cáo nhân sự', desc: 'Tổng quan nhân sự công ty', icon: '👥' },
-              { title: 'Báo cáo lương', desc: 'Chi tiết lương thưởng', icon: '💰' },
-              { title: 'Báo cáo nghỉ phép', desc: 'Thống kê nghỉ phép', icon: '📅' },
-              { title: 'Báo cáo hiệu suất', desc: 'Đánh giá KPI', icon: '📊' },
-            ].map((report, index) => (
-              <button
-                key={index}
-                className="p-4 border rounded-lg hover:bg-gray-50 text-left transition-colors"
-                onClick={() => {
-                  alert(`Đang xuất ${report.title}...`);
-                  setShowExportReport(false);
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">{report.icon}</div>
-                  <div>
-                    <p className="font-semibold">{report.title}</p>
-                    <p className="text-sm text-gray-600">{report.desc}</p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+      </Dialog>
 
       {/* Calculate Salary Dialog */}
       <Dialog open={showCalculateSalary} onOpenChange={setShowCalculateSalary}>

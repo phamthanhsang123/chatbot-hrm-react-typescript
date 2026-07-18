@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Swal from 'sweetalert2';
 import { Calendar, FileText, DollarSign, MessageSquare, User, LogOut, Bell, Settings } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -81,10 +82,28 @@ export function EmployeePortal({ onLogout }: EmployeePortalProps) {
   };
 
   const handleLogout = () => {
-    if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
-      alert('👋 Đã đăng xuất! Hẹn gặp lại!');
-      onLogout();
-    }
+    void Swal.fire({
+      title: '??ng xu?t?',
+      text: 'B?n c? ch?c ch?n mu?n ??ng xu?t kh?i Employee Portal?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '??ng xu?t',
+      cancelButtonText: 'H?y',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true,
+    }).then((result) => {
+      if (result.isConfirmed) {
+        void Swal.fire({
+          title: '?? ??ng xu?t',
+          text: 'B?n ?? ??ng xu?t th?nh c?ng.',
+          icon: 'success',
+          timer: 900,
+          showConfirmButton: false,
+        });
+        onLogout();
+      }
+    });
   };
 
   const renderOverview = () => (
@@ -512,11 +531,7 @@ export function EmployeePortal({ onLogout }: EmployeePortalProps) {
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setShowPayslipDialog(false)}>
               Đóng
-            </Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600">
-              <FileText className="size-4 mr-2" />
-              Tải PDF
-            </Button>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

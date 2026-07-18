@@ -69,12 +69,34 @@ function validateProfile(profile: ProfileState) {
     nextErrors.phone = 'Số điện thoại phải bắt đầu bằng 0 hoặc +84 và có 10-11 chữ số.';
   }
 
+  if (!profile.dateOfBirth.trim()) {
+    nextErrors.dateOfBirth = 'Ngày sinh không được bỏ trống.';
+  }
+
   return nextErrors;
 }
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <p className="mt-1 text-xs font-medium text-red-600">{message}</p>;
+}
+
+function toDateInputValue(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return '';
+
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
+}
+
+function toDisplayDate(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year}`;
 }
 
 function toProfileState(profile: EmployeePortalProfile): ProfileState {
@@ -310,7 +332,20 @@ export function EmployeeProfile() {
 
               <div>
                 <Label>Ngày sinh</Label>
-                <p className="mt-2 text-gray-900 font-medium">{profile.dateOfBirth}</p>
+                {isEditing ? (
+                  <>
+                    <Input
+                      type="date"
+                      value={toDateInputValue(profile.dateOfBirth)}
+                      onChange={(e) => updateProfileField('dateOfBirth', toDisplayDate(e.target.value))}
+                      aria-invalid={Boolean(fieldErrors.dateOfBirth)}
+                      className={fieldErrors.dateOfBirth ? 'border-red-300 focus-visible:ring-red-200' : undefined}
+                    />
+                    <FieldError message={fieldErrors.dateOfBirth} />
+                  </>
+                ) : (
+                  <p className="mt-2 text-gray-900 font-medium">{profile.dateOfBirth}</p>
+                )}
               </div>
 
               <div>

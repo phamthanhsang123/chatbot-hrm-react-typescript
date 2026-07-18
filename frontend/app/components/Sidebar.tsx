@@ -3,8 +3,6 @@
 import {
   BrainCircuit,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -12,8 +10,6 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Button } from './ui/button';
 import type { ManagementRole } from '../types';
 
 interface SidebarProps {
@@ -23,7 +19,6 @@ interface SidebarProps {
   onNavigate: (page: string) => void;
   onOpenSettings?: () => void;
   userRole?: ManagementRole;
-  defaultCollapsed?: boolean;
 }
 
 interface MenuItem {
@@ -61,28 +56,17 @@ export function Sidebar({
   onNavigate,
   onOpenSettings,
   userRole = 'admin',
-  defaultCollapsed = false,
 }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
-  const [showSettings, setShowSettings] = useState(false);
   const menuItems = userRole === 'manager' ? managerMenuItems : adminMenuItems;
   const roleInfo = userRole === 'manager'
     ? {
         title: 'Manager Portal',
         subtitle: 'Phòng ban IT',
-        summary: '4 nhân viên IT',
-        summaryNote: 'Phạm vi quản lý',
       }
     : {
         title: 'HR Admin',
         subtitle: 'Toàn hệ thống',
-        summary: '125 nhân viên',
-        summaryNote: 'Đang hoạt động',
       };
-
-  useEffect(() => {
-    setIsCollapsed(defaultCollapsed);
-  }, [defaultCollapsed]);
 
   const handleNavigate = (pageId: string) => {
     onNavigate(pageId);
@@ -103,30 +87,20 @@ export function Sidebar({
           fixed left-0 top-0 z-50 h-screen w-72 border-r border-slate-800 bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 text-white shadow-2xl
           transition-all duration-300 ease-in-out lg:sticky
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          ${isCollapsed ? 'lg:w-20' : 'lg:w-72'}
+          lg:w-72
         `}
       >
         <div className="flex h-full flex-col">
           <div className="flex h-20 items-center justify-between border-b border-white/10 px-5">
-            {!isCollapsed && (
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-xl font-bold shadow-lg backdrop-blur-md">
-                  HR
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xl font-bold leading-tight">{roleInfo.title}</p>
-                  <p className="mt-1 truncate text-xs font-medium text-white/60">{roleInfo.subtitle}</p>
-                </div>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-xl font-bold shadow-lg backdrop-blur-md">
+                HR
               </div>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden text-slate-200 hover:bg-white/10 hover:text-white lg:flex"
-            >
-              {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
-            </Button>
+              <div className="min-w-0">
+                <p className="truncate text-xl font-bold leading-tight">{roleInfo.title}</p>
+                <p className="mt-1 truncate text-xs font-medium text-white/60">{roleInfo.subtitle}</p>
+              </div>
+            </div>
           </div>
 
           <nav className="flex-1 overflow-y-auto px-4 py-6">
@@ -142,7 +116,6 @@ export function Sidebar({
                         ? 'bg-white/95 text-slate-950 shadow-lg shadow-black/20'
                         : 'text-slate-300 hover:bg-white/10 hover:text-white'
                     }
-                    ${isCollapsed ? 'justify-center' : ''}
                   `}
                 >
                   <div
@@ -154,19 +127,15 @@ export function Sidebar({
                   >
                     {item.icon}
                   </div>
-                  {!isCollapsed && (
-                    <>
-                      <span className="flex-1 truncate text-left text-[15px] font-semibold leading-5">{item.label}</span>
-                      {item.badge && (
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
-                            currentPage === item.id ? 'bg-indigo-100 text-indigo-700' : 'bg-white/10 text-slate-200'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </>
+                  <span className="flex-1 truncate text-left text-[15px] font-semibold leading-5">{item.label}</span>
+                  {item.badge && (
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                        currentPage === item.id ? 'bg-indigo-100 text-indigo-700' : 'bg-white/10 text-slate-200'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
                   )}
                 </button>
               ))}
@@ -175,33 +144,16 @@ export function Sidebar({
 
           <div className="border-t border-white/10 p-4">
             <button
-              className={`group flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white ${
-                isCollapsed ? 'justify-center' : ''
-              }`}
+              className="group flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white"
               onClick={() => {
-                setShowSettings(!showSettings);
                 onOpenSettings?.();
               }}
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5">
                 <Settings className="size-5 transition-transform duration-300 group-hover:rotate-90" />
               </span>
-              {!isCollapsed && <span className="flex-1 text-left text-[15px] font-semibold">Cài đặt</span>}
+              <span className="flex-1 text-left text-[15px] font-semibold">Cài đặt</span>
             </button>
-
-            {showSettings && !isCollapsed && (
-              <div className="mt-4 rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur-md">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-indigo-500 shadow-md">
-                    <Users className="size-5" />
-                  </div>
-                  <div className="flex-1 text-sm">
-                    <p className="font-semibold">{roleInfo.summary}</p>
-                    <p className="text-xs text-white/70">{roleInfo.summaryNote}</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </aside>

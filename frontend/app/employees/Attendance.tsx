@@ -8,8 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  ClipboardCheck,
-  Download,
+  ClipboardCheck,
   Eye,
   FileText,
   GripHorizontal,
@@ -769,28 +768,6 @@ export function Attendance() {
     setCalendarDate(toIsoDate(nextDate));
   };
 
-  const exportReport = () => {
-    const rows = [
-      ['Date', 'Check In', 'Check Out', 'Hours', 'Status', 'Note'],
-      ...periodRecords.map((record) => [
-        formatDate(record.date),
-        record.checkIn || '',
-        record.checkOut || '',
-        String(record.hours),
-        statusMeta[record.status].label,
-        record.note,
-      ]),
-    ];
-    const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `employee-attendance-${period}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   const selectedCalendarRecord = history.find((record) => record.date === calendarDate);
 
   return (
@@ -818,11 +795,7 @@ export function Attendance() {
             onOpenRecord={(record) => openDetail(record)}
             onOpenRequest={(request) => openDetail(undefined, request)}
             onAdjustRecord={(record) => openRequestDialog(record.date, record.status === 'missing' ? 'supplement' : 'adjustment', record)}
-          />
-          <Button variant="outline" onClick={exportReport} disabled={periodRecords.length === 0}>
-            <Download className="mr-2 size-4" />
-            Xuất CSV
-          </Button>
+          />
           <Button onClick={() => openRequestDialog(calendarDate, selectedCalendarRecord ? 'adjustment' : 'supplement', selectedCalendarRecord)}>
             <Send className="mr-2 size-4" />
             Tạo yêu cầu
