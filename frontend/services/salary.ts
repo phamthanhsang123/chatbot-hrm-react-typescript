@@ -42,6 +42,22 @@ async function request<T>(path: string, init?: RequestInit) {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+let employeeSalaryRouteSupport: Promise<boolean> | null = null;
+
+async function hasEmployeeSalaryRoute() {
+  employeeSalaryRouteSupport ??= fetch(`${API_BASE}/swagger/v1/swagger.json`, {
+    headers: { Accept: 'application/json' },
+  })
+    .then(async (res) => {
+      if (!res.ok) return false;
+      const swagger = (await res.json()) as { paths?: Record<string, unknown> };
+      return Boolean(swagger.paths?.['/api/employee/salary']);
+    })
+    .catch(() => false);
+
+  return employeeSalaryRouteSupport;
+}
+
 export function fetchSalaryDashboard(month: number, year: number) {
   return request<SalaryDashboardApi>(`/api/admin/salary/dashboard?month=${month}&year=${year}`);
 }
@@ -51,7 +67,10 @@ export function fetchSalaryRows(month: number, year: number, status?: string) {
   return request<SalaryRowApiItem[]>(`/api/admin/salary?month=${month}&year=${year}${statusQuery}`);
 }
 
-export function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
+export async function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
+  const supported = await hasEmployeeSalaryRoute();
+  if (!supported) return [];
+
   return request<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
 }
 
