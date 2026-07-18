@@ -11,6 +11,8 @@ Tai lieu nay dung de cac thanh vien khac clone/pull code ve co the biet cach mo 
 | Swagger test API | http://localhost:5297/swagger |
 | Backend API public Railway | https://api-production-ffaa0.up.railway.app |
 | Swagger public Railway | https://api-production-ffaa0.up.railway.app/swagger |
+| Backend API public Render | https://hrm-backend-api-hzgh.onrender.com |
+| Swagger public Render | https://hrm-backend-api-hzgh.onrender.com/swagger |
 
 ## 2. Lenh chay du an
 
@@ -31,6 +33,12 @@ Backend da deploy public tren Railway:
 
 ```text
 https://api-production-ffaa0.up.railway.app
+```
+
+Backend da deploy public tren Render:
+
+```text
+https://hrm-backend-api-hzgh.onrender.com
 ```
 
 Backend co the deploy sang Render bang file `render.yaml` o thu muc goc repo.
@@ -104,7 +112,7 @@ Ung dung hien tai dung mot man hinh chinh `http://localhost:3000`, sau do nguoi 
 Base URL public dang duoc frontend su dung:
 
 ```text
-https://api-production-ffaa0.up.railway.app
+https://hrm-backend-api-hzgh.onrender.com
 ```
 
 Base URL local khi chay backend tren may:
