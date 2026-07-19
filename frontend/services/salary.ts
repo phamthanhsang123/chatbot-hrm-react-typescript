@@ -89,7 +89,7 @@ export function fetchSalaryRows(month: number, year: number, status?: string) {
 
 export function fetchManagerSalaryRows(managerId: number, month: number, year: number, status?: string) {
   const statusQuery = status && status !== 'all' ? `&status=${encodeURIComponent(status)}` : '';
-  return request<SalaryRowApiItem[]>(`/api/manager/salary?managerId=${managerId}&month=${month}&year=${year}${statusQuery}`);
+  return localRequest<SalaryRowApiItem[]>(`/api/manager/salary?managerId=${managerId}&month=${month}&year=${year}${statusQuery}`);
 }
 
 export async function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {

@@ -589,6 +589,10 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
                 ? await fetchManagerSalaryRows(managerId, month, year)
                 : await fetchSalaryRows(month, year);
             const mapped = rows.map((row) => mapSalaryRow(row, selectedMonth));
+            if (mapped.length === 0) {
+                setApiError("Đang hiển thị dữ liệu dự phòng vì API lương chưa có dữ liệu cho kỳ này.");
+                return;
+            }
             setSalaryData((current) => [
                 ...current.filter((item) => item.month !== selectedMonth),
                 ...mapped,
