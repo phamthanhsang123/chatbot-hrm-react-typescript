@@ -200,6 +200,12 @@ function canManageTasks(employee: EmployeeApiItem) {
   return employee.role === 'MANAGER' || employee.role === 'ADMIN';
 }
 
+function canManageDepartment(employee: EmployeeApiItem, departmentName: string) {
+  if (!canManageTasks(employee)) return false;
+  if (employee.role === 'ADMIN') return true;
+  return employee.departmentName === departmentName;
+}
+
 export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksProps) {
   const [manager, setManager] = useState<EmployeeApiItem | null>(null);
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
@@ -240,9 +246,9 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
       const email = getSessionEmail();
       const storedManagerId = getStoredManagerId();
       const currentManager =
-        employeeList.find((item) => item.id === storedManagerId && canManageTasks(item)) ||
-        employeeList.find((item) => item.email.toLowerCase() === email && canManageTasks(item)) ||
-        employeeList.find((item) => item.departmentName === departmentName && canManageTasks(item)) ||
+        employeeList.find((item) => item.email.toLowerCase() === email && canManageDepartment(item, departmentName)) ||
+        employeeList.find((item) => item.id === storedManagerId && canManageDepartment(item, departmentName)) ||
+        employeeList.find((item) => canManageDepartment(item, departmentName)) ||
         employeeList.find(canManageTasks);
 
       if (!currentManager) {
