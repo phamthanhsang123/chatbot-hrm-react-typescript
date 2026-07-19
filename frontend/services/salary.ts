@@ -75,7 +75,8 @@ export function fetchManagerSalaryRows(managerId: number, month: number, year: n
 
 export async function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
   try {
-    return await request<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
+    const rows = await fetchSalaryRows(month, year);
+    return rows.filter((row) => Number(row.employeeId) === Number(employeeId));
   } catch {
     return [];
   }
