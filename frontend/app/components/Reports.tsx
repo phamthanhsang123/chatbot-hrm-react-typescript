@@ -105,7 +105,7 @@ export function Reports() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Báo cáo</h1>
-          <p className="text-gray-500 mt-1">Qu?n l? v? xem chi ti?t c?c b?o c?o</p>
+          <p className="text-gray-500 mt-1">Quản lý và xem chi tiết các báo cáo</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={() => setShowFilterDialog(true)}>
@@ -257,7 +257,7 @@ export function Reports() {
       {/* Stats */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCard title="Tổng báo cáo" value={reports.length} description="Tất cả báo cáo đã tạo" icon={<FileText className="size-5" />} tone="blue" />
-        <MetricCard title="?? ho?n t?t" value={reports.filter(r => r.status === 'ready').length} description="C? th? xem chi ti?t" icon={<FileText className="size-5" />} tone="emerald" />
+        <MetricCard title="Đã hoàn tất" value={reports.filter(r => r.status === 'ready').length} description="Có thể xem chi tiết" icon={<FileText className="size-5" />} tone="emerald" />
         <MetricCard title="Đang xử lý" value={reports.filter(r => r.status === 'processing').length} description="Đang tạo hoặc chờ hoàn tất" icon={<TrendingUp className="size-5" />} tone="orange" />
       </div>
 
@@ -280,7 +280,7 @@ export function Reports() {
               <FileText className="size-6 text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">?? ho?n t?t</p>
+              <p className="text-sm text-gray-600">Đã hoàn tất</p>
               <p className="text-2xl font-bold text-gray-900">{reports.filter(r => r.status === 'ready').length}</p>
             </div>
           </div>

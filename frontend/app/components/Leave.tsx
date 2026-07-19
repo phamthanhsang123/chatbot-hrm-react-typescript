@@ -405,10 +405,10 @@ export function Leave() {
     try {
       await approveLeaveRequest(selectedRequest.id);
       await loadLeaveData();
-      alert(`? ?? duy?t ??n ngh? ph?p cho ${selectedRequest.name}!`);
+      alert(`Đã duyệt đơn nghỉ phép cho ${selectedRequest.name}!`);
     } catch (error) {
       console.error('Approve leave API failed:', error);
-      alert('Kh?ng duy?t ???c ??n ngh? ph?p t? Render API.');
+      alert('Không duyệt được đơn nghỉ phép từ Render API.');
     } finally {
       setShowApproveDialog(false);
     }
@@ -418,17 +418,17 @@ export function Leave() {
     if (!selectedRequest) return;
 
     if (!rejectNote.trim()) {
-      alert('Vui l?ng nh?p l? do t? ch?i!');
+      alert('Vui lòng nhập lý do từ chối!');
       return;
     }
 
     try {
       await rejectLeaveRequest(selectedRequest.id);
       await loadLeaveData();
-      alert(`?? t? ch?i ??n ngh? ph?p c?a ${selectedRequest.name}.`);
+      alert(`Đã từ chối đơn nghỉ phép của ${selectedRequest.name}.`);
     } catch (error) {
       console.error('Reject leave API failed:', error);
-      alert('Kh?ng t? ch?i ???c ??n ngh? ph?p t? Render API.');
+      alert('Không từ chối được đơn nghỉ phép từ Render API.');
     } finally {
       setShowRejectDialog(false);
     }
@@ -436,7 +436,7 @@ export function Leave() {
 
   const handleCreateLeave = async () => {
     if (!newLeave.employeeId || !newLeave.from || !newLeave.to || !newLeave.reason) {
-      alert('Vui l?ng ?i?n ??y ?? th?ng tin!');
+      alert('Vui lòng điền đầy đủ thông tin!');
       return;
     }
 
@@ -459,7 +459,7 @@ export function Leave() {
         reason: newLeave.reason,
       });
       await loadLeaveData();
-      alert(`? ?? t?o ??n ngh? ph?p cho ${selectedEmployee?.fullName || 'nh?n vi?n'}!`);
+      alert(`Đã tạo đơn nghỉ phép cho ${selectedEmployee?.fullName || 'nhân viên'}!`);
       setShowCreateDialog(false);
       setNewLeave({
         employeeId: '',
@@ -471,7 +471,7 @@ export function Leave() {
       });
     } catch (error) {
       console.error('Create leave API failed:', error);
-      alert('Kh?ng t?o ???c ??n ngh? ph?p t? Render API.');
+      alert('Không tạo được đơn nghỉ phép từ Render API.');
     }
   };
 
@@ -833,10 +833,10 @@ export function Leave() {
                   });
                 }}
               >
-                <option value="">Ch?n nh?n vi?n t? API</option>
+                <option value="">Chọn nhân viên từ API</option>
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
-                    {employee.fullName} - {employee.departmentName || 'Ch?a ph?n ph?ng'}
+                    {employee.fullName} - {employee.departmentName || 'Chưa phân phòng'}
                   </option>
                 ))}
               </select>

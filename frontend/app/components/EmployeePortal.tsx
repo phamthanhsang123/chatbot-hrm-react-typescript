@@ -83,20 +83,20 @@ export function EmployeePortal({ onLogout }: EmployeePortalProps) {
 
   const handleLogout = () => {
     void Swal.fire({
-      title: '??ng xu?t?',
-      text: 'B?n c? ch?c ch?n mu?n ??ng xu?t kh?i Employee Portal?',
+      title: 'Đăng xuất?',
+      text: 'Bạn có chắc chắn muốn đăng xuất khỏi Employee Portal?',
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: '??ng xu?t',
-      cancelButtonText: 'H?y',
+      confirmButtonText: 'Đăng xuất',
+      cancelButtonText: 'Hủy',
       confirmButtonColor: '#dc2626',
       cancelButtonColor: '#64748b',
       reverseButtons: true,
     }).then((result) => {
       if (result.isConfirmed) {
         void Swal.fire({
-          title: '?? ??ng xu?t',
-          text: 'B?n ?? ??ng xu?t th?nh c?ng.',
+          title: 'Đã đăng xuất',
+          text: 'Bạn đã đăng xuất thành công.',
           icon: 'success',
           timer: 900,
           showConfirmButton: false,
