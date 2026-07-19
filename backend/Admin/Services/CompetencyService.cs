@@ -1,6 +1,6 @@
 using Admin.Data;
 using Admin.DTOs;
-using Admin.Models;
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Admin.Services
@@ -20,13 +20,13 @@ namespace Admin.Services
                 .Include(e => e.Department)
                 .Include(e => e.Position)
                 .AsNoTracking()
-                .Where(e => e.Status == "Đang làm việc")
+                .Where(e => e.Status != "Đã nghỉ việc" && e.Status != "inactive")
                 .ToList();
 
-            var attendanceByEmployee = _db.Attendances
-                .AsNoTracking()
-                .Where(a => a.Date.Year == year && a.Date.Month == month)
-                .ToList()
+            var startDate = new DateTime(year, month, 1);
+            var endDate = startDate.AddMonths(1);
+
+            var attendanceByEmployee = LoadAttendanceSignals(year, month)
                 .GroupBy(a => a.EmployeeId)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -34,7 +34,7 @@ namespace Admin.Services
                 .Select(e =>
                 {
                     attendanceByEmployee.TryGetValue(e.Id, out var attendance);
-                    attendance ??= new List<Attendance>();
+                    attendance ??= new List<AttendanceSignal>();
 
                     var attendanceScore = CalculateAttendanceScore(attendance);
                     var performanceScore = CalculatePerformanceScore(e.Id, attendanceScore);
@@ -94,15 +94,15 @@ namespace Admin.Services
             return GetAll(year, month).FirstOrDefault(x => x.EmployeeId == employeeId);
         }
 
-        private static int CalculateAttendanceScore(List<Attendance> attendance)
+        private static int CalculateAttendanceScore(List<AttendanceSignal> attendance)
         {
             if (attendance.Count == 0) return 75;
 
-            var latePenalty = attendance.Count(x => x.IsLate) * 4;
-            var earlyPenalty = attendance.Count(x => x.IsEarlyLeave) * 3;
-            var incompletePenalty = attendance.Count(x => x.Status != "Completed") * 2;
+            var validWorkDays = attendance.Count(x => x.TotalHours >= 7.5m);
+            var shortWorkDays = attendance.Count - validWorkDays;
+            var consistencyBonus = Math.Min(10, validWorkDays * 2);
 
-            return Clamp(100 - latePenalty - earlyPenalty - incompletePenalty);
+            return Clamp(82 + consistencyBonus - shortWorkDays * 4);
         }
 
         private static int CalculatePerformanceScore(int employeeId, int attendanceScore)
@@ -126,12 +126,14 @@ namespace Admin.Services
             return Clamp(score);
         }
 
-        private static int CalculateDisciplineScore(List<Attendance> attendance)
+        private static int CalculateDisciplineScore(List<AttendanceSignal> attendance)
         {
             if (attendance.Count == 0) return 80;
 
-            var issueCount = attendance.Count(x => x.IsLate || x.IsEarlyLeave || x.Status != "Completed");
-            return Clamp(96 - issueCount * 5);
+            var shortWorkDays = attendance.Count(x => x.TotalHours > 0 && x.TotalHours < 7.5m);
+            var missingWorkDays = attendance.Count(x => x.TotalHours <= 0);
+
+            return Clamp(96 - shortWorkDays * 4 - missingWorkDays * 7);
         }
 
         private static string GetRating(int totalScore)
@@ -151,19 +153,23 @@ namespace Admin.Services
             if (skill >= 85) strengths.Add("nền tảng kỹ năng phù hợp");
             if (discipline >= 85) strengths.Add("kỷ luật làm việc tốt");
 
-            return strengths.Count == 0 ? "Có nền tảng làm việc cơ bản, cần thêm dữ liệu để đánh giá sâu hơn." : string.Join(", ", strengths) + ".";
+            return strengths.Count == 0
+                ? "Có nền tảng làm việc cơ bản, cần thêm dữ liệu để đánh giá sâu hơn."
+                : string.Join(", ", strengths) + ".";
         }
 
         private static string BuildImprovements(int attendance, int performance, int skill, int discipline)
         {
             var improvements = new List<string>();
 
-            if (attendance < 80) improvements.Add("cải thiện chuyên cần và đúng giờ");
+            if (attendance < 80) improvements.Add("cải thiện chuyên cần và đủ công");
             if (performance < 80) improvements.Add("nâng hiệu suất xử lý công việc");
             if (skill < 80) improvements.Add("bổ sung kỹ năng chuyên môn");
-            if (discipline < 80) improvements.Add("giảm vi phạm chấm công");
+            if (discipline < 80) improvements.Add("giảm các ngày thiếu công");
 
-            return improvements.Count == 0 ? "Duy trì phong độ hiện tại và chuẩn bị mục tiêu phát triển cao hơn." : string.Join(", ", improvements) + ".";
+            return improvements.Count == 0
+                ? "Duy trì phong độ hiện tại và chuẩn bị mục tiêu phát triển cao hơn."
+                : string.Join(", ", improvements) + ".";
         }
 
         private static string BuildRecommendation(string employeeName, string rating, int attendance, int performance, int skill, int discipline)
@@ -194,6 +200,106 @@ namespace Admin.Services
         private static int Clamp(int value)
         {
             return Math.Max(0, Math.Min(100, value));
+        }
+
+        private List<AttendanceSignal> LoadAttendanceSignals(int year, int month)
+        {
+            try
+            {
+                return LoadAttendanceSignalsFromSql("work_date", year, month);
+            }
+            catch
+            {
+                try
+                {
+                    return LoadAttendanceSignalsFromSql("date", year, month);
+                }
+                catch
+                {
+                    return new List<AttendanceSignal>();
+                }
+            }
+        }
+
+        private List<AttendanceSignal> LoadAttendanceSignalsFromSql(string dateColumn, int year, int month)
+        {
+            var result = new List<AttendanceSignal>();
+            var connection = _db.Database.GetDbConnection();
+            var shouldClose = connection.State != ConnectionState.Open;
+
+            if (shouldClose)
+            {
+                connection.Open();
+            }
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = $"SELECT employee_id, `{dateColumn}` AS work_date, total_hours FROM attendance";
+
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    var workDate = TryReadDate(reader["work_date"]);
+                    if (!workDate.HasValue || workDate.Value.Year != year || workDate.Value.Month != month)
+                    {
+                        continue;
+                    }
+
+                    result.Add(new AttendanceSignal
+                    {
+                        EmployeeId = Convert.ToInt32(reader["employee_id"]),
+                        Date = workDate.Value,
+                        TotalHours = TryReadDecimal(reader["total_hours"])
+                    });
+                }
+            }
+            finally
+            {
+                if (shouldClose)
+                {
+                    connection.Close();
+                }
+            }
+
+            return result;
+        }
+
+        private static DateTime? TryReadDate(object value)
+        {
+            if (value == DBNull.Value || value == null)
+            {
+                return null;
+            }
+
+            if (value is DateTime dateTime)
+            {
+                return dateTime.Date;
+            }
+
+            if (DateTime.TryParse(Convert.ToString(value), out var parsed))
+            {
+                return parsed.Date;
+            }
+
+            return null;
+        }
+
+        private static decimal TryReadDecimal(object value)
+        {
+            if (value == DBNull.Value || value == null)
+            {
+                return 0;
+            }
+
+            return decimal.TryParse(Convert.ToString(value), out var parsed) ? parsed : 0;
+        }
+
+        private sealed class AttendanceSignal
+        {
+            public int EmployeeId { get; set; }
+            public DateTime Date { get; set; }
+            public decimal TotalHours { get; set; }
         }
     }
 }
