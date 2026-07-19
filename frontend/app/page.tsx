@@ -193,11 +193,8 @@ export default function App() {
           return <ManagerTasks departmentName={MANAGER_DEPARTMENT} />;
         case 'task-review':
           return <ManagerTasks departmentName={MANAGER_DEPARTMENT} mode="review" />;
-        case 'salary': {
-          const storedManagerId = Number(window.localStorage.getItem('hrm_employee_id') || 0);
-          const managerId = Number.isFinite(storedManagerId) && storedManagerId > 0 ? storedManagerId : 5;
-          return <Salary scope="manager" managerId={managerId} departmentScope={MANAGER_DEPARTMENT} />;
-        }
+        case 'salary':
+          return <Salary />;
         case 'leave':
           return <Leave />;
         case 'attendance-approval':
