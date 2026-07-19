@@ -405,10 +405,20 @@ export function Leave() {
     try {
       await approveLeaveRequest(selectedRequest.id);
       await loadLeaveData();
-      alert(`Đã duyệt đơn nghỉ phép cho ${selectedRequest.name}!`);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Đã duyệt',
+        text: `Đã duyệt đơn nghỉ phép cho ${selectedRequest.name}.`,
+        confirmButtonText: 'Đóng',
+      });
     } catch (error) {
       console.error('Approve leave API failed:', error);
-      alert('Không duyệt được đơn nghỉ phép từ Render API.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Không duyệt được đơn',
+        text: 'Kiểm tra API hoặc trạng thái đơn nghỉ phép.',
+        confirmButtonText: 'Đóng',
+      });
     } finally {
       setShowApproveDialog(false);
     }
@@ -418,17 +428,32 @@ export function Leave() {
     if (!selectedRequest) return;
 
     if (!rejectNote.trim()) {
-      alert('Vui lòng nhập lý do từ chối!');
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Thiếu lý do',
+        text: 'Vui lòng nhập lý do từ chối.',
+        confirmButtonText: 'Đóng',
+      });
       return;
     }
 
     try {
       await rejectLeaveRequest(selectedRequest.id);
       await loadLeaveData();
-      alert(`Đã từ chối đơn nghỉ phép của ${selectedRequest.name}.`);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Đã từ chối',
+        text: `Đã từ chối đơn nghỉ phép của ${selectedRequest.name}.`,
+        confirmButtonText: 'Đóng',
+      });
     } catch (error) {
       console.error('Reject leave API failed:', error);
-      alert('Không từ chối được đơn nghỉ phép từ Render API.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Không từ chối được đơn',
+        text: 'Kiểm tra API hoặc trạng thái đơn nghỉ phép.',
+        confirmButtonText: 'Đóng',
+      });
     } finally {
       setShowRejectDialog(false);
     }
@@ -436,7 +461,12 @@ export function Leave() {
 
   const handleCreateLeave = async () => {
     if (!newLeave.employeeId || !newLeave.from || !newLeave.to || !newLeave.reason) {
-      alert('Vui lòng điền đầy đủ thông tin!');
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Thiếu thông tin',
+        text: 'Vui lòng điền đầy đủ thông tin đơn nghỉ phép.',
+        confirmButtonText: 'Đóng',
+      });
       return;
     }
 
@@ -459,7 +489,12 @@ export function Leave() {
         reason: newLeave.reason,
       });
       await loadLeaveData();
-      alert(`Đã tạo đơn nghỉ phép cho ${selectedEmployee?.fullName || 'nhân viên'}!`);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Đã tạo đơn',
+        text: `Đã tạo đơn nghỉ phép cho ${selectedEmployee?.fullName || 'nhân viên'}.`,
+        confirmButtonText: 'Đóng',
+      });
       setShowCreateDialog(false);
       setNewLeave({
         employeeId: '',
@@ -471,7 +506,12 @@ export function Leave() {
       });
     } catch (error) {
       console.error('Create leave API failed:', error);
-      alert('Không tạo được đơn nghỉ phép từ Render API.');
+      await Swal.fire({
+        icon: 'error',
+        title: 'Không tạo được đơn',
+        text: 'Kiểm tra dữ liệu hoặc kết nối API.',
+        confirmButtonText: 'Đóng',
+      });
     }
   };
 
