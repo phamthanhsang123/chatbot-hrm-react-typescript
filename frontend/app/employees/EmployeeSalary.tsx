@@ -285,8 +285,8 @@ export function EmployeeSalary() {
           }
         }
       })
-      .catch((error) => {
-        console.error('fetch employee salary failed:', error);
+      .catch(() => {
+        console.info('Employee salary API unavailable, using fallback data.');
         if (mounted) setApiError('Đang hiển thị dữ liệu dự phòng vì API lương chưa phản hồi.');
       })
       .finally(() => {
