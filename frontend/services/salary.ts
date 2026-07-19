@@ -59,6 +59,25 @@ async function request<T>(path: string, init?: RequestInit) {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+async function localRequest<T>(path: string, init?: RequestInit) {
+  const token = getStoredToken();
+  const res = await fetch(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    return [] as T;
+  }
+
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 export function fetchSalaryDashboard(month: number, year: number) {
   return request<SalaryDashboardApi>(`/api/admin/salary/dashboard?month=${month}&year=${year}`);
 }
@@ -75,7 +94,7 @@ export function fetchManagerSalaryRows(managerId: number, month: number, year: n
 
 export async function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
   try {
-    return await request<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
+    return await localRequest<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
   } catch {
     return [];
   }
