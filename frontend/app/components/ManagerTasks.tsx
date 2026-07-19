@@ -187,6 +187,35 @@ function getInitials(name: string) {
   return initials.toUpperCase() || 'NV';
 }
 
+function isActiveEmployee(employee: EmployeeApiItem) {
+  return employee.status !== 'Đã nghỉ việc' && employee.status !== 'inactive';
+}
+
+function canManageDepartment(manager: EmployeeApiItem, departmentName: string) {
+  if (manager.role === 'ADMIN') return true;
+  return manager.role === 'MANAGER' && manager.departmentName === departmentName;
+}
+
+function resolveManagerForDepartment(employeeList: EmployeeApiItem[], email: string, departmentName: string) {
+  const loggedInManager = employeeList.find((item) => {
+    const sameEmail = item.email.toLowerCase() === email.toLowerCase();
+    return sameEmail && isActiveEmployee(item) && (item.role === 'MANAGER' || item.role === 'ADMIN');
+  });
+
+  if (loggedInManager && canManageDepartment(loggedInManager, departmentName)) {
+    return loggedInManager;
+  }
+
+  return (
+    employeeList.find(
+      (item) => isActiveEmployee(item) && item.role === 'MANAGER' && item.departmentName === departmentName,
+    ) ||
+    employeeList.find((item) => isActiveEmployee(item) && item.role === 'ADMIN') ||
+    loggedInManager ||
+    null
+  );
+}
+
 export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksProps) {
   const [manager, setManager] = useState<EmployeeApiItem | null>(null);
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
@@ -223,16 +252,13 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     try {
       const employeeList = await fetchEmployees();
       const email = getSessionEmail();
-      const currentManager = employeeList.find((item) => {
-        const sameEmail = item.email.toLowerCase() === email;
-        return sameEmail && (item.role === 'MANAGER' || item.role === 'ADMIN');
-      });
+      const currentManager = resolveManagerForDepartment(employeeList, email, departmentName);
 
-      if (!currentManager) {
+      if (!currentManager || !canManageDepartment(currentManager, departmentName)) {
         setManager(null);
         setEmployees(employeeList);
         setTasks([]);
-        toast.fire({ icon: 'warning', title: 'Không tìm thấy Manager từ tài khoản đăng nhập' });
+        toast.fire({ icon: 'warning', title: `Không tìm thấy Manager/Admin quản lý phòng ${departmentName}` });
         return;
       }
 
