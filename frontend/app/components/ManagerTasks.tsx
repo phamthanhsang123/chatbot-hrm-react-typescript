@@ -8,13 +8,11 @@ import {
   BrainCircuit,
   CalendarDays,
   CheckCircle2,
-  ClipboardList,
-  Download,
+  ClipboardList,
   Edit3,
   FileCheck2,
   Plus,
   RefreshCcw,
-  Search,
   TimerReset,
   UserRound,
   XCircle,
@@ -116,13 +114,13 @@ function buildPeriodOptions() {
   const start = new Date();
   start.setDate(1);
 
-  for (let offset = -5; offset <= 2; offset += 1) {
+  for (let offset = 0; offset > -12; offset -= 1) {
     const date = new Date(start);
     date.setMonth(start.getMonth() + offset);
     options.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
   }
 
-  return options.reverse();
+  return options;
 }
 
 const periodOptions = buildPeriodOptions();
@@ -189,23 +187,6 @@ function getInitials(name: string) {
   return initials.toUpperCase() || 'NV';
 }
 
-function getStoredManagerId() {
-  if (typeof window === 'undefined') return 0;
-
-  const parsed = Number(window.localStorage.getItem('hrm_employee_id'));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-}
-
-function canManageTasks(employee: EmployeeApiItem) {
-  return employee.role === 'MANAGER' || employee.role === 'ADMIN';
-}
-
-function canManageDepartment(employee: EmployeeApiItem, departmentName: string) {
-  if (!canManageTasks(employee)) return false;
-  if (employee.role === 'ADMIN') return true;
-  return employee.departmentName === departmentName;
-}
-
 export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksProps) {
   const [manager, setManager] = useState<EmployeeApiItem | null>(null);
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
@@ -214,9 +195,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   const [detailOpen, setDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(mode === 'review' ? 'need-review' : 'all');
-  const [search, setSearch] = useState('');
-  const [employeeFilter, setEmployeeFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
+  const [employeeFilter, setEmployeeFilter] = useState('all');
   const [period, setPeriod] = useState(currentPeriodValue());
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskApiItem | null>(null);
@@ -244,18 +223,16 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     try {
       const employeeList = await fetchEmployees();
       const email = getSessionEmail();
-      const storedManagerId = getStoredManagerId();
-      const currentManager =
-        employeeList.find((item) => item.email.toLowerCase() === email && canManageDepartment(item, departmentName)) ||
-        employeeList.find((item) => item.id === storedManagerId && canManageDepartment(item, departmentName)) ||
-        employeeList.find((item) => canManageDepartment(item, departmentName)) ||
-        employeeList.find(canManageTasks);
+      const currentManager = employeeList.find((item) => {
+        const sameEmail = item.email.toLowerCase() === email;
+        return sameEmail && (item.role === 'MANAGER' || item.role === 'ADMIN');
+      });
 
       if (!currentManager) {
         setManager(null);
         setEmployees(employeeList);
         setTasks([]);
-        toast.fire({ icon: 'warning', title: 'Không tìm thấy Manager từ API' });
+        toast.fire({ icon: 'warning', title: 'Không tìm thấy Manager từ tài khoản đăng nhập' });
         return;
       }
 
@@ -300,12 +277,8 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   }, [departmentName, period, tasks]);
 
   const filteredTasks = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
     return scopedTasks.filter((task) => {
-      const matchesSearch = !keyword || `${task.title} ${task.description || ''} ${task.employeeName}`.toLowerCase().includes(keyword);
       const matchesEmployee = employeeFilter === 'all' || String(task.employeeId) === employeeFilter;
-      const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
       const matchesQuick =
         quickFilter === 'all' ||
         (quickFilter === 'need-review' && task.status === 'SUBMITTED') ||
@@ -313,9 +286,9 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
         (quickFilter === 'done' && task.status === 'APPROVED') ||
         (quickFilter === 'issue' && (isTaskOverdue(task) || task.status === 'REVISION_REQUIRED' || task.status === 'REJECTED'));
 
-      return matchesSearch && matchesEmployee && matchesStatus && matchesQuick;
+      return matchesEmployee && matchesQuick;
     });
-  }, [employeeFilter, quickFilter, scopedTasks, search, statusFilter]);
+  }, [employeeFilter, quickFilter, scopedTasks]);
 
   const kpis = useMemo(() => {
     const total = scopedTasks.length;
@@ -452,29 +425,6 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     }
   };
 
-  const exportReport = () => {
-    const rows = [
-      ['Nhan vien', 'Task', 'Trang thai', 'Uu tien', 'Deadline', 'Tien do', 'Diem ky vong'],
-      ...filteredTasks.map((task) => [
-        task.employeeName,
-        task.title,
-        statusMeta[task.status].label,
-        task.priority,
-        formatDate(task.deadline),
-        `${task.progressPercent}%`,
-        String(task.expectedScore),
-      ]),
-    ];
-    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `manager-task-report-${period}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -489,7 +439,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
               <CalendarDays className="mr-2 size-4 text-blue-600" />
               <SelectValue placeholder="Kỳ đánh giá" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-72 overflow-y-auto">
               {periodOptions.map((item) => (
                 <SelectItem key={item} value={item}>
                   {formatPeriod(item)}
@@ -505,17 +455,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
           )}
           <Button variant="outline" size="icon" className="h-10 w-10 rounded-full bg-white shadow-sm" onClick={loadData} disabled={loading} aria-label="Làm mới">
             <RefreshCcw className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-10 w-10 rounded-full bg-white shadow-sm"
-            onClick={exportReport}
-            disabled={filteredTasks.length === 0}
-            aria-label="Xuất báo cáo"
-          >
-            <Download className="size-4" />
-          </Button>
+          </Button>
         </div>
       </div>
 
@@ -544,16 +484,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
             ))}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Tìm theo tên task hoặc nhân viên..."
-                className="h-10 rounded-2xl border-slate-200 bg-slate-50 pl-9"
-              />
-            </div>
+          <div className="grid gap-3 lg:grid-cols-[220px]">
             <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
               <SelectTrigger className="h-10 rounded-2xl bg-white">
                 <SelectValue placeholder="Nhân viên" />
@@ -566,20 +497,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as TaskStatus | 'all')}>
-              <SelectTrigger className="h-10 rounded-2xl bg-white">
-                <SelectValue placeholder="Trạng thái" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                {Object.entries(statusMeta).map(([status, meta]) => (
-                  <SelectItem key={status} value={status}>
-                    {meta.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            </Select>
           </div>
         </div>
       </Card>

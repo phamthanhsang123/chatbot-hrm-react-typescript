@@ -1,6 +1,6 @@
 'use client';
-import { Calculator, ChevronDown, ChevronRight, CreditCard, DollarSign, Download, Pencil, Search, TrendingUp, Users, Wallet } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Calculator, ChevronDown, ChevronRight, CreditCard, DollarSign, Pencil, Search, TrendingUp, Users, Wallet } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -13,14 +13,6 @@ import {
 } from "./ui/dialog";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
-import {
-    approveSalary,
-    calculateMonthlySalary,
-    fetchManagerSalaryRows,
-    fetchSalaryRows,
-    paySalary,
-    type SalaryRowApiItem,
-} from "@/services/salary";
 
 type SalaryStatus = "pending" | "calculated" | "approved" | "paid";
 
@@ -82,69 +74,7 @@ const getRelativeMonthKey = (offset: number) => {
     return formatMonthKey(date);
 };
 
-function parseMonthKey(value: string) {
-    const [year, month] = value.split("-").map(Number);
-    return { month, year };
-}
-
-function normalizeApiSalaryStatus(status: string): SalaryStatus {
-    const value = status.trim().toLowerCase();
-    if (value.includes("đã thanh toán") || value.includes("paid")) return "paid";
-    if (value.includes("chờ thanh toán") || value.includes("approved")) return "approved";
-    if (value.includes("chờ duyệt") || value.includes("calculated")) return "calculated";
-    return "pending";
-}
-
-function mapSalaryRow(row: SalaryRowApiItem, month: string): SalaryItem {
-    const baseSalary = Number(row.salaryBase || 0);
-    const bonus = Number(row.bonus || 0);
-    const totalIncome = Number(row.totalIncome || baseSalary + bonus);
-    const netPay = Number(row.netPay || totalIncome);
-    const totalDeduction = Number(row.totalDeduction ?? Math.max(0, totalIncome - netPay));
-    const insuranceDeduction = Number(row.insuranceDeduction || 0);
-    const taxDeduction = Number(row.taxDeduction || 0);
-    const penaltyDeduction = Number(row.penaltyDeduction || 0);
-    const salaryDeduction = Number(row.salaryDeduction || 0);
-    const fallbackDeduction = Math.max(0, totalDeduction - insuranceDeduction - taxDeduction - penaltyDeduction - salaryDeduction);
-
-    return {
-        id: row.id,
-        employeeId: row.employeeCode || `NV${String(row.employeeId).padStart(3, "0")}`,
-        name: row.employeeName,
-        department: row.department || "Chưa phân phòng",
-        position: row.position || "Chưa có chức vụ",
-        month,
-        baseSalary,
-        mealAllowance: Number(row.allowance || 0),
-        transportAllowance: 0,
-        phoneAllowance: 0,
-        housingAllowance: 0,
-        standardDays: Number(row.standardDays || 22),
-        workDays: Number(row.workDays || 0),
-        overtimeHours: Number(row.overtimeHours || 0),
-        overtimeRate: 1.5,
-        kpiBonus: bonus,
-        projectBonus: 0,
-        holidayBonus: 0,
-        socialInsurance: insuranceDeduction + fallbackDeduction,
-        healthInsurance: 0,
-        unemploymentInsurance: 0,
-        personalIncomeTax: taxDeduction,
-        advancePayment: 0,
-        penalties: penaltyDeduction,
-        salaryDeduction,
-        status: normalizeApiSalaryStatus(row.status),
-    };
-}
-
-interface SalaryProps {
-    scope?: "admin" | "manager";
-    managerId?: number;
-    departmentScope?: string;
-}
-
-export function Salary({ scope = "admin", managerId, departmentScope }: SalaryProps) {
-    const canManagePayroll = scope === "admin";
+export function Salary() {
     const todayISO = () => new Date().toISOString().slice(0, 10);
 
     const formatCurrency = (amount: number) =>
@@ -576,45 +506,10 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
             status: "pending",
         },
     ]);
-    const [apiError, setApiError] = useState("");
-    const [apiLoading, setApiLoading] = useState(false);
-    const [apiLoadedMonths, setApiLoadedMonths] = useState<string[]>([]);
-
-    const loadSalaryFromApi = async () => {
-        const { month, year } = parseMonthKey(selectedMonth);
-        setApiLoading(true);
-        setApiError("");
-
-        try {
-            const rows = scope === "manager" && managerId
-                ? await fetchManagerSalaryRows(managerId, month, year)
-                : await fetchSalaryRows(month, year);
-            const mapped = rows.map((row) => mapSalaryRow(row, selectedMonth));
-            if (mapped.length === 0) {
-                setApiLoadedMonths((current) => current.filter((item) => item !== selectedMonth));
-                setApiError("Chưa có dữ liệu lương từ API cho kỳ này. Hãy seed database hoặc bấm tính lương bằng tài khoản Admin.");
-                return;
-            }
-            setApiLoadedMonths((current) => current.includes(selectedMonth) ? current : [...current, selectedMonth]);
-            setSalaryData((current) => [
-                ...current.filter((item) => item.month !== selectedMonth),
-                ...mapped,
-            ]);
-        } catch (error) {
-            console.error("Load salary API failed:", error);
-            setApiError("Không tải được bảng lương từ Render API. Hãy kiểm tra backend hoặc quyền tài khoản.");
-        } finally {
-            setApiLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        void loadSalaryFromApi();
-    }, [selectedMonth, scope, managerId]);
 
     const monthData = useMemo(
-        () => apiLoadedMonths.includes(selectedMonth) ? salaryData.filter((x) => x.month === selectedMonth) : [],
-        [apiLoadedMonths, salaryData, selectedMonth]
+        () => salaryData.filter((x) => x.month === selectedMonth),
+        [salaryData, selectedMonth]
     );
 
     const filteredData = useMemo(() => {
@@ -714,19 +609,27 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
         setShowEditDialog(false);
     };
 
-    const handleConfirmCalculate = async () => {
-        const { month, year } = parseMonthKey(selectedMonth);
+    const handleConfirmCalculate = () => {
+        // Chỉ chuyển những nhân viên status pending của tháng đang chọn sang calculated
+        const pendingInMonth = monthData.filter((x) => x.status === "pending");
+        setSalaryData((prev) =>
+            prev.map((x) => {
+                if (x.month !== selectedMonth) return x;
+                if (x.status !== "pending") return x;
+                return { ...x, status: "calculated", calculatedDate: todayISO() };
+            })
+        );
 
-        try {
-            const result = await calculateMonthlySalary(month, year);
-            await loadSalaryFromApi();
-            alert(`? ${result.message}\n\nTh?ng: ${selectedMonth}`);
-        } catch (error) {
-            console.error("Calculate salary API failed:", error);
-            alert("Kh?ng t?nh ???c l??ng t? Render API. H?y ??ng nh?p Admin v? ki?m tra backend.");
-        } finally {
-            setShowCalculateDialog(false);
-        }
+        const totalNetAfter = monthData.reduce((sum, x) => sum + calcNet(x), 0);
+
+        alert(
+            `✅ Đã tính lương thành công!\n\n` +
+            `Tháng: ${selectedMonth}\n` +
+            `Số lượng: ${pendingInMonth.length} nhân viên\n` +
+            `Tổng chi (Net): ${formatCurrency(totalNetAfter)}`
+        );
+
+        setShowCalculateDialog(false);
     };
 
     const handleApproveSalary = (employee: SalaryItem) => {
@@ -734,38 +637,49 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
         setShowApproveDialog(true);
     };
 
-    const handleConfirmApprove = async () => {
+    const handleConfirmApprove = () => {
         if (!selectedEmployee) return;
 
-        try {
-            await approveSalary(selectedEmployee.id);
-            await loadSalaryFromApi();
-            alert(`? ?? duy?t l??ng cho ${selectedEmployee.name}!`);
-        } catch (error) {
-            console.error("Approve salary API failed:", error);
-            alert("Kh?ng duy?t ???c l??ng t? Render API. B?ng l??ng ph?i ? tr?ng th?i Ch? duy?t.");
-        } finally {
-            setShowApproveDialog(false);
-        }
+        setSalaryData((prev) =>
+            prev.map((x) => {
+                if (x.id !== selectedEmployee.id) return x;
+                if (x.status !== "calculated") return x;
+                return { ...x, status: "approved", approvedDate: todayISO() };
+            })
+        );
+
+        alert(
+            `✅ Đã duyệt lương cho ${selectedEmployee.name}!\n\n` +
+            `Số tiền (Net): ${formatCurrency(calcNet(selectedEmployee))}\n` +
+            `Trạng thái: Chờ thanh toán`
+        );
+
+        setShowApproveDialog(false);
     };
 
-    const handlePaySalary = async (employee: SalaryItem) => {
+    const handlePaySalary = (employee: SalaryItem) => {
         if (
             !confirm(
-                `X?c nh?n thanh to?n l??ng cho ${employee.name}?\n\nS? ti?n (Net): ${formatCurrency(calcNet(employee))}`
+                `Xác nhận thanh toán lương cho ${employee.name}?\n\nSố tiền (Net): ${formatCurrency(
+                    calcNet(employee)
+                )}`
             )
-        ) {
+        )
             return;
-        }
 
-        try {
-            await paySalary(employee.id);
-            await loadSalaryFromApi();
-            alert(`? ?? thanh to?n l??ng cho ${employee.name}!`);
-        } catch (error) {
-            console.error("Pay salary API failed:", error);
-            alert("Kh?ng thanh to?n ???c l??ng t? Render API. B?ng l??ng ph?i ? tr?ng th?i Ch? thanh to?n.");
-        }
+        setSalaryData((prev) =>
+            prev.map((x) => {
+                if (x.id !== employee.id) return x;
+                if (x.status !== "approved") return x;
+                return { ...x, status: "paid", paidDate: todayISO() };
+            })
+        );
+
+        alert(
+            `✅ Đã thanh toán lương cho ${employee.name}!\n\n` +
+            `Số tiền (Net): ${formatCurrency(calcNet(employee))}\n` +
+            `Trạng thái: Đã thanh toán`
+        );
     };
 
     const handleSendPayslip = (employee: SalaryItem) => {
@@ -781,34 +695,17 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
         <div className="space-y-5 text-[13px]">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{scope === "manager" ? "Lương thưởng team" : "Quản lý lương thưởng"}</h1>
-                    <p className="mt-1 text-gray-500">
-                        {scope === "manager"
-                            ? `Theo dõi bảng lương nhân viên trong phạm vi ${departmentScope || "phòng ban"}.`
-                            : "Theo dõi bảng lương, duyệt và thanh toán theo từng tháng."}
-                    </p>
-                    <p className="mt-1 text-xs text-blue-600">{apiLoading ? "Đang tải bảng lương từ Render API..." : "Dữ liệu lương được đồng bộ từ Render API"}</p>
+                    <h1 className="text-3xl font-bold text-gray-900">Quản lý lương thưởng</h1>
+                    <p className="mt-1 text-gray-500">Theo dõi bảng lương, duyệt và thanh toán theo từng tháng.</p>
                 </div>
 
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                    <Button variant="outline" className="gap-2" onClick={handleExportReport}>
-                        <Download className="size-4" />
-                        Xuất báo cáo
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <Button className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCalculateSalary}>
+                        <Calculator className="size-4" />
+                        Tính lương
                     </Button>
-                    {canManagePayroll && (
-                        <Button className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCalculateSalary}>
-                            <Calculator className="size-4" />
-                            Tính lương
-                        </Button>
-                    )}
                 </div>
             </div>
-
-            {apiError && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    {apiError}
-                </div>
-            )}
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <Card className="!gap-2 border-gray-200 !p-4">
@@ -968,18 +865,16 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
                                                 <Button size="sm" variant="outline" onClick={() => handleViewDetail(item)}>
                                                     Chi tiết
                                                 </Button>
-                                                {canManagePayroll && (
-                                                    <Button size="sm" variant="outline" className="gap-1" onClick={() => handleEditSalary(item)}>
-                                                        <Pencil className="size-3" />
-                                                        Sửa
-                                                    </Button>
-                                                )}
-                                                {canManagePayroll && item.status === "calculated" && (
+                                                <Button size="sm" variant="outline" className="gap-1" onClick={() => handleEditSalary(item)}>
+                                                    <Pencil className="size-3" />
+                                                    Sửa
+                                                </Button>
+                                                {item.status === "calculated" && (
                                                     <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleApproveSalary(item)}>
                                                         Duyệt
                                                     </Button>
                                                 )}
-                                                {canManagePayroll && item.status === "approved" && (
+                                                {item.status === "approved" && (
                                                     <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handlePaySalary(item)}>
                                                         Thanh toán
                                                     </Button>

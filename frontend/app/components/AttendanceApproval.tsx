@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { CheckCircle, XCircle, Clock, Calendar, User, FileText, Eye, MessageSquare, ArrowRight, Search, Filter, ListChecks, Target, AlertTriangle, ChevronLeft, ChevronRight, Download, Users } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Calendar, User, FileText, Eye, MessageSquare, ArrowRight, Search, Filter, ListChecks, Target, AlertTriangle, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -17,16 +17,6 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { MetricCard } from './MetricCard';
 import { HRM_SYNC_KEYS, readSyncedRecords } from '../employees/hrmSync';
-import {
-  approveAttendanceRequest,
-  fetchAttendanceByDate,
-  fetchAttendanceMonthlyReport,
-  fetchAttendanceRequests,
-  rejectAttendanceRequest,
-  type AttendanceApiItem,
-  type AttendanceMonthlyReportItem,
-  type AttendanceRequestApiItem,
-} from '@/services/attendance';
 
 // Helper function to get day of week in Vietnamese
 const getDayOfWeek = (dateStr: string): string => {
@@ -55,76 +45,6 @@ const getRelativeDateLabel = (daysAgo: number): string => {
   date.setDate(date.getDate() - daysAgo);
   return formatDate(date);
 };
-
-const toApiDate = (date: Date): string => formatDateInputValue(date);
-
-const formatApiTime = (value?: string | null): string => {
-  if (!value) return '';
-  if (/^\d{2}:\d{2}/.test(value)) return value.slice(0, 5);
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-};
-
-const normalizeRequestStatus = (status: string): AttendanceRequest['status'] => {
-  const value = status.toLowerCase();
-  if (value.includes('approved') || value.includes('duyệt')) return 'approved';
-  if (value.includes('rejected') || value.includes('từ chối')) return 'rejected';
-  return 'pending';
-};
-
-const normalizeRequestType = (type: string): AttendanceRequest['type'] => {
-  return type.toLowerCase().includes('adjust') || type.toLowerCase().includes('điều')
-    ? 'adjustment'
-    : 'supplement';
-};
-
-const mapAttendanceRequestFromApi = (item: AttendanceRequestApiItem): AttendanceRequest => ({
-  id: item.id,
-  employeeName: item.employeeName,
-  employeeId: item.employeeId,
-  department: item.department,
-  date: normalizeAttendanceDate(item.date),
-  checkIn: item.checkIn,
-  checkOut: item.checkOut,
-  reason: item.reason,
-  status: normalizeRequestStatus(item.status),
-  submittedAt: item.submittedAt,
-  reviewedAt: item.reviewedAt || undefined,
-  reviewedBy: item.reviewedBy || undefined,
-  reviewNote: item.reviewNote || undefined,
-  type: normalizeRequestType(item.type),
-  originalCheckIn: item.originalCheckIn || undefined,
-  originalCheckOut: item.originalCheckOut || undefined,
-});
-
-const mapAttendanceFromApi = (item: AttendanceApiItem): EmployeeAttendance => {
-  const checkIn = formatApiTime(item.checkInTime);
-  const checkOut = formatApiTime(item.checkOutTime);
-  return {
-    employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
-    employeeName: item.employeeName || `NV${item.employeeId}`,
-    department: item.department || 'Chưa phân phòng',
-    date: normalizeAttendanceDate(item.date),
-    checkIn: checkIn || '-',
-    checkOut: checkOut || '-',
-    hours: item.totalHours ? `${Number(item.totalHours).toFixed(2)}h` : minutesToHoursLabel(checkIn, checkOut),
-    status: !checkIn ? 'missing' : item.isLate ? 'late' : item.isEarlyLeave ? 'early-leave' : 'ontime',
-    note: item.note || item.status || 'Dữ liệu từ Render API',
-  };
-};
-
-const mapMonthlyReportToAttendance = (item: AttendanceMonthlyReportItem, date: Date): EmployeeAttendance => ({
-  employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
-  employeeName: item.employeeName,
-  department: item.department,
-  date: formatDate(date),
-  checkIn: '-',
-  checkOut: '-',
-  hours: `${Number(item.totalHours || 0).toFixed(2)}h`,
-  status: item.lateDays > 0 ? 'late' : item.completedDays > 0 ? 'ontime' : 'missing',
-  note: `Báo cáo tháng từ Render API: ${item.completedDays}/${item.totalDays} ngày công, đi trễ ${item.lateDays}, về sớm ${item.earlyLeaveDays}`,
-});
 
 // Helper to parse DD/MM/YYYY to Date
 const parseDate = (dateStr: string): Date | null => {
@@ -321,8 +241,6 @@ export function AttendanceApproval() {
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarAttendanceEvent | null>(null);
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [reviewNote, setReviewNote] = useState('');
-  const [apiLoading, setApiLoading] = useState(false);
-  const [apiError, setApiError] = useState('');
   
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -761,68 +679,6 @@ export function AttendanceApproval() {
     };
   }, []);
 
-  useEffect(() => {
-    const loadRenderAttendance = async () => {
-      setApiLoading(true);
-      setApiError('');
-
-      try {
-        const apiDate = toApiDate(selectedDate);
-        const [apiRequests, apiDailyRows, monthlyReport] = await Promise.all([
-          fetchAttendanceRequests(),
-          fetchAttendanceByDate(apiDate).catch(() => []),
-          fetchAttendanceMonthlyReport(selectedDate.getFullYear(), selectedDate.getMonth() + 1).catch(() => []),
-        ]);
-
-        const mappedRequests = apiRequests.map(mapAttendanceRequestFromApi);
-        setRequests((current) => {
-          const synced = current.filter((request) => request.syncKey);
-          const syncedKeys = new Set(synced.map((request) => request.syncKey));
-          return [
-            ...synced,
-            ...mappedRequests.filter((request) => !request.syncKey || !syncedKeys.has(request.syncKey)),
-          ];
-        });
-
-        const mappedDailyRows = apiDailyRows.map(mapAttendanceFromApi);
-        if (mappedDailyRows.length > 0) {
-          const selectedDateLabel = formatDate(selectedDate);
-          setAllAttendance((current) => [
-            ...current.filter((record) => record.date !== selectedDateLabel),
-            ...mappedDailyRows,
-          ]);
-          setLiveAttendance((current) => [
-            ...current.filter((record) => record.date !== selectedDateLabel),
-            ...mappedDailyRows.map<LiveAttendanceStatus>((record) => ({
-              employeeId: record.employeeId,
-              employeeName: record.employeeName,
-              department: record.department,
-              date: record.date,
-              checkIn: record.checkIn === '-' ? '' : record.checkIn,
-              checkOut: record.checkOut === '-' ? undefined : record.checkOut,
-              status: record.checkOut && record.checkOut !== '-' ? 'offline' : 'online',
-              lastUpdated: record.checkOut && record.checkOut !== '-' ? record.checkOut : record.checkIn,
-            })),
-          ]);
-        } else if (monthlyReport.length > 0) {
-          const monthlyRows = monthlyReport.map((item) => mapMonthlyReportToAttendance(item, selectedDate));
-          const selectedDateLabel = formatDate(selectedDate);
-          setAllAttendance((current) => [
-            ...current.filter((record) => record.date !== selectedDateLabel),
-            ...monthlyRows,
-          ]);
-        }
-      } catch (error) {
-        console.error('Load attendance Render API failed:', error);
-        setApiError('Không tải được dữ liệu chấm công từ Render API. Đang giữ dữ liệu hiện có trên giao diện.');
-      } finally {
-        setApiLoading(false);
-      }
-    };
-
-    void loadRenderAttendance();
-  }, [selectedDate]);
-
   const supplementRequests = requests.filter(r => r.type === 'supplement');
   const adjustmentRequests = requests.filter(r => r.type === 'adjustment');
 
@@ -1181,27 +1037,8 @@ export function AttendanceApproval() {
     }
   };
 
-  const handleSubmitReview = async () => {
+  const handleSubmitReview = () => {
     if (!selectedRequest) return;
-
-    try {
-      if (!selectedRequest.syncKey) {
-        const reviewed = actionType === 'approve'
-          ? await approveAttendanceRequest(selectedRequest.id, reviewNote)
-          : await rejectAttendanceRequest(selectedRequest.id, reviewNote);
-        const mapped = mapAttendanceRequestFromApi(reviewed);
-        setRequests((current) => current.map((request) => (request.id === mapped.id ? mapped : request)));
-        setShowActionDialog(false);
-        setShowDetailDialog(false);
-        setReviewNote('');
-        alert(actionType === 'approve' ? '✅ Đã phê duyệt đơn chấm công từ Render API!' : 'Đã từ chối đơn chấm công từ Render API!');
-        return;
-      }
-    } catch (error) {
-      console.error('Review attendance Render API failed:', error);
-      alert('Không cập nhật được đơn chấm công từ Render API.');
-      return;
-    }
 
     let reviewedRequest: AttendanceRequest | null = null;
     const updatedRequests = requests.map(req => {
@@ -1845,15 +1682,7 @@ export function AttendanceApproval() {
                 {departmentFilter !== 'all' ? ` • Phòng ${departmentFilter}` : ''}
                 {searchQuery ? ` • Từ khóa "${searchQuery}"` : ''}
               </p>
-            </div>
-            <Button
-              variant="outline"
-              className="w-fit gap-2 bg-white text-blue-600 hover:bg-blue-50"
-              onClick={() => alert(`Xuất báo cáo chấm công ngày ${selectedDateLabel}`)}
-            >
-              <Download className="size-4" />
-              Xuất báo cáo
-            </Button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1997,16 +1826,7 @@ export function AttendanceApproval() {
               </Button>
               <Button size="sm" onClick={handleToday} className="bg-blue-600 hover:bg-blue-700">
                 Hôm nay
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2 bg-white text-blue-600 hover:bg-blue-50"
-                onClick={() => alert(`Xuất báo cáo chấm công ngày ${selectedDateLabel}`)}
-              >
-                <Download className="size-4" />
-                Xuất
-              </Button>
+              </Button>
             </div>
           </div>
 
@@ -2125,9 +1945,6 @@ export function AttendanceApproval() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Quản lý chấm công</h1>
           <p className="text-gray-500 mt-1">Xem lịch sử chấm công từng ngày và xét duyệt đơn bổ sung/điều chỉnh</p>
-          <p className="mt-1 text-xs text-blue-600">
-            {apiLoading ? 'Đang đồng bộ chấm công từ Render API...' : 'Dữ liệu chấm công được đồng bộ từ Render API'}
-          </p>
         </div>
 
         <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -2174,12 +1991,6 @@ export function AttendanceApproval() {
           </Button>
         </div>
       </div>
-
-      {apiError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {apiError}
-        </div>
-      )}
 
       {/* Filters */}
       <Card className="border border-gray-200 p-4 shadow-sm">
@@ -2706,15 +2517,7 @@ export function AttendanceApproval() {
                 <p className="text-gray-500">
                   Có {dateStats.total} nhân viên chấm công trong ngày này
                 </p>
-              </div>
-              <Button
-                variant="outline"
-                className="border-gray-200 bg-white text-blue-600 hover:bg-blue-50"
-                onClick={() => alert('Xuất báo cáo Excel')}
-              >
-                <Download className="size-4 mr-2" />
-                Xuất báo cáo
-              </Button>
+              </div>
             </div>
           </Card>
 

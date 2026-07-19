@@ -8,8 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  ClipboardCheck,
-  Download,
+  ClipboardCheck,
   Eye,
   FileText,
   GripHorizontal,
@@ -563,8 +562,8 @@ export function Attendance() {
       const todayAttendance = todayData.find((item) => Number(item.employeeId) === employeeId);
       if (todayAttendance) mergeRecord(mapApiAttendance(todayAttendance));
       setUsingDemoData(false);
-    } catch {
-      console.info('Attendance API unavailable, using demo data.');
+    } catch (error) {
+      console.warn('Attendance API unavailable, using demo data:', error);
       setMonthlySummary(null);
       setUsingDemoData(true);
     } finally {
@@ -598,8 +597,8 @@ export function Attendance() {
       }
       setMessage(result.message || (result.success ? 'Check-in thành công.' : 'Không check-in được.'));
       setUsingDemoData(false);
-    } catch {
-      console.info('Check-in API unavailable, using demo data.');
+    } catch (error) {
+      console.warn('Check-in API unavailable, using demo data:', error);
       mergeRecord({
         date: currentDate,
         checkIn: fallbackCheckIn,
@@ -644,8 +643,8 @@ export function Attendance() {
       }
       setMessage(result.message || (result.success ? 'Check-out thành công.' : 'Không check-out được.'));
       setUsingDemoData(false);
-    } catch {
-      console.info('Check-out API unavailable, using demo data.');
+    } catch (error) {
+      console.warn('Check-out API unavailable, using demo data:', error);
       mergeRecord({
         date: currentDate,
         checkIn: fallbackCheckIn,
@@ -769,28 +768,6 @@ export function Attendance() {
     setCalendarDate(toIsoDate(nextDate));
   };
 
-  const exportReport = () => {
-    const rows = [
-      ['Date', 'Check In', 'Check Out', 'Hours', 'Status', 'Note'],
-      ...periodRecords.map((record) => [
-        formatDate(record.date),
-        record.checkIn || '',
-        record.checkOut || '',
-        String(record.hours),
-        statusMeta[record.status].label,
-        record.note,
-      ]),
-    ];
-    const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `employee-attendance-${period}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   const selectedCalendarRecord = history.find((record) => record.date === calendarDate);
 
   return (
@@ -818,11 +795,7 @@ export function Attendance() {
             onOpenRecord={(record) => openDetail(record)}
             onOpenRequest={(request) => openDetail(undefined, request)}
             onAdjustRecord={(record) => openRequestDialog(record.date, record.status === 'missing' ? 'supplement' : 'adjustment', record)}
-          />
-          <Button variant="outline" onClick={exportReport} disabled={periodRecords.length === 0}>
-            <Download className="mr-2 size-4" />
-            Xuất CSV
-          </Button>
+          />
           <Button onClick={() => openRequestDialog(calendarDate, selectedCalendarRecord ? 'adjustment' : 'supplement', selectedCalendarRecord)}>
             <Send className="mr-2 size-4" />
             Tạo yêu cầu

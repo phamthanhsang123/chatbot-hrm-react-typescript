@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Clock3, DollarSign, Download, Eye, ShieldCheck, Wallet } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Clock3, DollarSign, Eye, ShieldCheck, Wallet } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { fetchEmployeeSalaryRows, type SalaryRowApiItem } from '@/services/salary';
 import { getCurrentEmployeeId } from '@/services/tasks';
 import { HRM_SYNC_KEYS, getEmployeePortalIdentity, readSyncedRecords } from './hrmSync';
 
@@ -99,54 +98,6 @@ function totalDeductions(record: SalaryRecord) {
 
 function netSalary(record: SalaryRecord) {
   return Math.round(totalIncome(record) - totalDeductions(record));
-}
-
-function normalizeSalaryStatus(status?: string): SalaryStatus {
-  const normalized = (status || '').toLowerCase();
-  if (normalized.includes('paid') || normalized.includes('thanh')) return 'paid';
-  if (normalized.includes('approved') || normalized.includes('duy')) return 'approved';
-  if (normalized.includes('calculated') || normalized.includes('tính') || normalized.includes('tinh')) return 'calculated';
-  return 'pending';
-}
-
-function mapApiSalaryRecord(item: SalaryRowApiItem, month: string, fallback: ReturnType<typeof getEmployeePortalIdentity>): SalaryRecord {
-  const totalDeduction = Number(item.totalDeduction ?? Math.max(0, Number(item.totalIncome || 0) - Number(item.netPay || 0)));
-  const insuranceDeduction = Number(item.insuranceDeduction || 0);
-  const taxDeduction = Number(item.taxDeduction || 0);
-  const penaltyDeduction = Number(item.penaltyDeduction || 0);
-  const salaryDeduction = Number(item.salaryDeduction || 0);
-  const fallbackDeduction = Math.max(0, totalDeduction - insuranceDeduction - taxDeduction - penaltyDeduction - salaryDeduction);
-  return {
-    id: item.id,
-    employeeId: item.employeeCode || `NV${String(item.employeeId).padStart(3, '0')}`,
-    name: item.employeeName || fallback.employeeName,
-    department: item.department || fallback.department,
-    position: item.position || 'Nhân viên',
-    month,
-    baseSalary: Number(item.salaryBase) || 0,
-    mealAllowance: Number(item.allowance || 0),
-    transportAllowance: 0,
-    phoneAllowance: 0,
-    housingAllowance: 0,
-    standardDays: Number(item.standardDays || 22),
-    workDays: Number(item.workDays || 0),
-    overtimeHours: Number(item.overtimeHours || 0),
-    overtimeRate: 1.5,
-    kpiBonus: Number(item.bonus) || 0,
-    projectBonus: 0,
-    holidayBonus: 0,
-    socialInsurance: insuranceDeduction + fallbackDeduction,
-    healthInsurance: 0,
-    unemploymentInsurance: 0,
-    personalIncomeTax: taxDeduction,
-    advancePayment: 0,
-    penalties: penaltyDeduction,
-    salaryDeduction,
-    status: normalizeSalaryStatus(item.status),
-    calculatedDate: `${month}-24`,
-    approvedDate: normalizeSalaryStatus(item.status) === 'approved' || normalizeSalaryStatus(item.status) === 'paid' ? `${month}-26` : undefined,
-    paidDate: normalizeSalaryStatus(item.status) === 'paid' ? `${month}-28` : undefined,
-  };
 }
 
 function buildDemoSalaryRecords(employeeId: string, name: string, department: string): SalaryRecord[] {
@@ -244,9 +195,8 @@ function buildDemoSalaryRecords(employeeId: string, name: string, department: st
 }
 
 export function EmployeeSalary() {
-  const numericEmployeeId = useMemo(() => getCurrentEmployeeId(), []);
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(numericEmployeeId), [numericEmployeeId]);
-  const [records, setRecords] = useState<SalaryRecord[]>(() => {
+  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
+  const [records] = useState<SalaryRecord[]>(() => {
     const demo = buildDemoSalaryRecords(employeeIdentity.employeeId, employeeIdentity.employeeName, employeeIdentity.department);
     const synced = readSyncedRecords<SalaryRecord>(HRM_SYNC_KEYS.salaryRecords).filter(
       (record) => record.employeeId === employeeIdentity.employeeId,
@@ -257,46 +207,6 @@ export function EmployeeSalary() {
   });
   const [selectedMonth, setSelectedMonth] = useState(monthKey(0));
   const [selectedSalary, setSelectedSalary] = useState<SalaryRecord | null>(null);
-  const [isLoadingApi, setIsLoadingApi] = useState(false);
-  const [apiError, setApiError] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-    setIsLoadingApi(true);
-    setApiError('');
-
-    const months = [monthKey(0), monthKey(-1), monthKey(-2)];
-    Promise.all(
-      months.map(async (key) => {
-        const [year, month] = key.split('-').map(Number);
-        const rows = await fetchEmployeeSalaryRows(numericEmployeeId, month, year);
-        return rows
-          .filter((item) => item.employeeId === numericEmployeeId || item.employeeCode === employeeIdentity.employeeId)
-          .map((item) => mapApiSalaryRecord(item, key, employeeIdentity));
-      }),
-    )
-      .then((groups) => {
-        if (!mounted) return;
-        const apiRecords = groups.flat();
-        if (apiRecords.length > 0) {
-          setRecords(apiRecords);
-          if (!apiRecords.some((record) => record.month === selectedMonth)) {
-            setSelectedMonth(apiRecords[0].month);
-          }
-        }
-      })
-      .catch(() => {
-        console.info('Employee salary API unavailable, using fallback data.');
-        if (mounted) setApiError('Đang hiển thị dữ liệu dự phòng vì API lương chưa phản hồi.');
-      })
-      .finally(() => {
-        if (mounted) setIsLoadingApi(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [employeeIdentity, numericEmployeeId, selectedMonth]);
 
   const currentRecord = records.find((record) => record.month === selectedMonth) || records[0];
   const paidRecords = records.filter((record) => record.status === 'paid');
@@ -310,35 +220,12 @@ export function EmployeeSalary() {
     overtimeHours: records.reduce((sum, record) => sum + record.overtimeHours, 0),
   };
 
-  const handleDownload = (record: SalaryRecord) => {
-    if (record.status !== 'paid' && record.status !== 'approved') {
-      void Swal.fire({
-        icon: 'warning',
-        title: 'Phiếu lương chưa được chốt',
-        text: 'HR cần duyệt bảng lương trước khi nhân viên tải phiếu lương chính thức.',
-        confirmButtonText: 'Đã hiểu',
-        confirmButtonColor: '#2563eb',
-      });
-      return;
-    }
-
-    void Swal.fire({
-      icon: 'info',
-      title: 'Đang chuẩn bị phiếu lương',
-      text: `Phiếu lương ${formatMonth(record.month)} đang được chuẩn bị dưới dạng PDF.`,
-      confirmButtonText: 'Đã hiểu',
-      confirmButtonColor: '#2563eb',
-    });
-  };
-
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-950">Lương của tôi</h1>
           <p className="mt-1 text-sm text-slate-500">Theo dõi bảng lương đã tính, duyệt và thanh toán từ HR.</p>
-          {isLoadingApi && <p className="mt-1 text-xs text-blue-600">Đang đồng bộ bảng lương từ Render API...</p>}
-          {apiError && <p className="mt-1 text-xs text-amber-600">{apiError}</p>}
         </div>
         <select
           value={selectedMonth}
@@ -366,11 +253,7 @@ export function EmployeeSalary() {
             <Button variant="secondary" onClick={() => setSelectedSalary(currentRecord)}>
               <Eye className="mr-2 size-4" />
               Chi tiết
-            </Button>
-            <Button variant="secondary" onClick={() => handleDownload(currentRecord)}>
-              <Download className="mr-2 size-4" />
-              Phiếu lương
-            </Button>
+            </Button>
           </div>
         </div>
       </section>
@@ -407,10 +290,7 @@ export function EmployeeSalary() {
                 <Button variant="outline" size="sm" onClick={() => setSelectedSalary(record)}>
                   <Eye className="mr-1.5 size-4" />
                   Xem
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleDownload(record)} title="Tải phiếu lương">
-                  <Download className="size-4" />
-                </Button>
+                </Button>
               </div>
             </div>
           ))}
@@ -452,11 +332,7 @@ export function EmployeeSalary() {
                 <span className="text-xl font-bold text-emerald-700">{formatCurrency(netSalary(selectedSalary))}</span>
               </div>
 
-              <div className="flex justify-end">
-                <Button onClick={() => handleDownload(selectedSalary)}>
-                  <Download className="mr-2 size-4" />
-                  Tải phiếu lương
-                </Button>
+              <div className="flex justify-end">
               </div>
             </div>
           )}

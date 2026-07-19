@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, BriefcaseBusiness, Check, LogOut, Menu, Search, Settings, User } from 'lucide-react';
+import { Bell, BriefcaseBusiness, Check, LogOut, Search, User } from 'lucide-react';
 import { useState } from 'react';
+import Swal from 'sweetalert2';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -24,8 +25,9 @@ import { Switch } from '../components/ui/switch';
 import { useEmployeePortalProfile } from './useEmployeePortalProfile';
 
 interface EmployeeNavbarProps {
-  onToggleSidebar: () => void;
   onLogout: () => void;
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
 }
 
 interface Notification {
@@ -60,11 +62,13 @@ const initialNotifications: Notification[] = [
   },
 ];
 
-export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProps) {
+export function EmployeeNavbar({ onLogout, settingsOpen, onSettingsOpenChange }: EmployeeNavbarProps) {
   const { profile } = useEmployeePortalProfile();
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
-  const [showSettings, setShowSettings] = useState(false);
+  const [internalShowSettings, setInternalShowSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const showSettings = settingsOpen ?? internalShowSettings;
+  const setShowSettings = onSettingsOpenChange ?? setInternalShowSettings;
 
   const unreadCount = notifications.filter((notification) => !notification.read).length;
 
@@ -83,14 +87,35 @@ export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProp
     setSearchQuery('');
   };
 
+  const handleLogout = () => {
+    void Swal.fire({
+      title: 'Đăng xuất?',
+      text: 'Bạn có chắc chắn muốn đăng xuất khỏi Employee Portal?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Đăng xuất',
+      cancelButtonText: 'Hủy',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true,
+    }).then((result) => {
+      if (result.isConfirmed) {
+        void Swal.fire({
+          title: 'Đã đăng xuất',
+          text: 'Bạn đã đăng xuất thành công.',
+          icon: 'success',
+          timer: 900,
+          showConfirmButton: false,
+        });
+        onLogout();
+      }
+    });
+  };
+
   return (
     <nav className="sticky top-0 z-50 h-16 border-b border-gray-200 bg-white shadow-sm">
       <div className="flex h-full items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onToggleSidebar} className="hover:bg-gray-100 lg:hidden">
-            <Menu className="size-5" />
-          </Button>
-
           <div className="hidden items-center gap-2 text-2xl font-bold text-blue-700 lg:flex">
             <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-200">
               <BriefcaseBusiness className="size-5" />
@@ -158,10 +183,6 @@ export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProp
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" size="icon" className="hidden hover:bg-gray-100 md:flex" onClick={() => setShowSettings(true)}>
-            <Settings className="size-5" />
-          </Button>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 hover:bg-gray-100">
@@ -177,12 +198,7 @@ export function EmployeeNavbar({ onToggleSidebar, onLogout }: EmployeeNavbarProp
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Tài khoản</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setShowSettings(true)}>
-                <Settings className="mr-2 size-4" />
-                Cài đặt
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600" onClick={onLogout}>
+              <DropdownMenuItem className="text-red-600" onClick={handleLogout}>
                 <LogOut className="mr-2 size-4" />
                 Đăng xuất
               </DropdownMenuItem>

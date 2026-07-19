@@ -1,5 +1,5 @@
 'use client';
-import { FileText, Download, Calendar, TrendingUp, Plus, Filter, Eye } from 'lucide-react';
+import { FileText, Calendar, TrendingUp, Plus, Filter, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from './ui/card';
 import { MetricCard } from './MetricCard';
@@ -49,12 +49,6 @@ export function Reports() {
   const filteredReports = filterType === 'all' 
     ? reports 
     : reports.filter(r => r.type === filterType);
-
-  const handleDownload = (report: Report) => {
-    if (report.status === 'ready') {
-      alert(`📥 Đang tải xuống "${report.name}"...\n\nLoại: ${report.type}\nKích thước: ${report.size}`);
-    }
-  };
 
   const handleViewDetail = (report: Report) => {
     setSelectedReport(report);
@@ -111,7 +105,7 @@ export function Reports() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Báo cáo</h1>
-          <p className="text-gray-500 mt-1">Quản lý và tải xuống các báo cáo</p>
+          <p className="text-gray-500 mt-1">Qu?n l? v? xem chi ti?t c?c b?o c?o</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={() => setShowFilterDialog(true)}>
@@ -149,7 +143,7 @@ export function Reports() {
         >
           <div className="flex flex-col items-center text-center text-gray-900">
             <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <Download className="size-5" />
+              <FileText className="size-5" />
             </div>
             <h3 className="font-semibold text-lg">Báo cáo lương</h3>
             <p className="mt-1 text-sm text-gray-500">Chi tiết lương thưởng</p>
@@ -244,16 +238,7 @@ export function Reports() {
                           >
                             <Eye className="size-4" />
                             Xem
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="gap-2"
-                            onClick={() => handleDownload(report)}
-                          >
-                            <Download className="size-4" />
-                            Tải
-                          </Button>
+                          </Button>
                         </>
                       ) : (
                         <Button size="sm" variant="outline" disabled>
@@ -272,7 +257,7 @@ export function Reports() {
       {/* Stats */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCard title="Tổng báo cáo" value={reports.length} description="Tất cả báo cáo đã tạo" icon={<FileText className="size-5" />} tone="blue" />
-        <MetricCard title="Sẵn sàng tải" value={reports.filter(r => r.status === 'ready').length} description="Có thể tải xuống ngay" icon={<Download className="size-5" />} tone="emerald" />
+        <MetricCard title="?? ho?n t?t" value={reports.filter(r => r.status === 'ready').length} description="C? th? xem chi ti?t" icon={<FileText className="size-5" />} tone="emerald" />
         <MetricCard title="Đang xử lý" value={reports.filter(r => r.status === 'processing').length} description="Đang tạo hoặc chờ hoàn tất" icon={<TrendingUp className="size-5" />} tone="orange" />
       </div>
 
@@ -292,10 +277,10 @@ export function Reports() {
         <Card className="p-6">
           <div className="flex items-center gap-4">
             <div className="size-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <Download className="size-6 text-green-600" />
+              <FileText className="size-6 text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">Sẵn sàng tải</p>
+              <p className="text-sm text-gray-600">?? ho?n t?t</p>
               <p className="text-2xl font-bold text-gray-900">{reports.filter(r => r.status === 'ready').length}</p>
             </div>
           </div>
@@ -453,17 +438,7 @@ export function Reports() {
                     <p className="font-medium">{selectedReport.type}</p>
                   </div>
                 </div>
-              </div>
-
-              {selectedReport.status === 'ready' && (
-                <Button
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                  onClick={() => handleDownload(selectedReport)}
-                >
-                  <Download className="size-4 mr-2" />
-                  Tải xuống báo cáo
-                </Button>
-              )}
+              </div>
             </div>
           )}
 
