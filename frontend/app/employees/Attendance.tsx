@@ -563,8 +563,8 @@ export function Attendance() {
       const todayAttendance = todayData.find((item) => Number(item.employeeId) === employeeId);
       if (todayAttendance) mergeRecord(mapApiAttendance(todayAttendance));
       setUsingDemoData(false);
-    } catch (error) {
-      console.warn('Attendance API unavailable, using demo data:', error);
+    } catch {
+      console.info('Attendance API unavailable, using demo data.');
       setMonthlySummary(null);
       setUsingDemoData(true);
     } finally {
@@ -598,8 +598,8 @@ export function Attendance() {
       }
       setMessage(result.message || (result.success ? 'Check-in thành công.' : 'Không check-in được.'));
       setUsingDemoData(false);
-    } catch (error) {
-      console.warn('Check-in API unavailable, using demo data:', error);
+    } catch {
+      console.info('Check-in API unavailable, using demo data.');
       mergeRecord({
         date: currentDate,
         checkIn: fallbackCheckIn,
@@ -644,8 +644,8 @@ export function Attendance() {
       }
       setMessage(result.message || (result.success ? 'Check-out thành công.' : 'Không check-out được.'));
       setUsingDemoData(false);
-    } catch (error) {
-      console.warn('Check-out API unavailable, using demo data:', error);
+    } catch {
+      console.info('Check-out API unavailable, using demo data.');
       mergeRecord({
         date: currentDate,
         checkIn: fallbackCheckIn,

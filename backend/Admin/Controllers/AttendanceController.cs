@@ -69,20 +69,50 @@ namespace Admin.Controllers
         [HttpPost("checkin/{empId}")]
         public IActionResult CheckIn(int empId)
         {
-            var result = _service.CheckIn(empId);
-            return Ok(result);
+            try
+            {
+                var result = _service.CheckIn(empId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return Ok(new
+                {
+                    success = false,
+                    message = "Chưa ghi nhận được check-in trên database. Frontend có thể dùng dữ liệu tạm thời.",
+                    error = ex.Message
+                });
+            }
         }
 
         // CHECK-OUT
         [HttpPost("checkout/{empId}")]
         public IActionResult CheckOut(int empId)
         {
-            var result = _service.CheckOut(empId);
+            try
+            {
+                var result = _service.CheckOut(empId);
 
-            if (result == null)
-                return BadRequest("Chưa check-in hoặc đã check-out");
+                if (result == null)
+                {
+                    return Ok(new
+                    {
+                        success = false,
+                        message = "Chưa check-in hoặc đã check-out"
+                    });
+                }
 
-            return Ok(result);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return Ok(new
+                {
+                    success = false,
+                    message = "Chưa ghi nhận được check-out trên database. Frontend có thể dùng dữ liệu tạm thời.",
+                    error = ex.Message
+                });
+            }
         }
 
         // DAILY LIST - GIỮ PHẦN MỚI
