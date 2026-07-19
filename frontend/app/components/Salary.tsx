@@ -578,6 +578,7 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
     ]);
     const [apiError, setApiError] = useState("");
     const [apiLoading, setApiLoading] = useState(false);
+    const [apiLoadedMonths, setApiLoadedMonths] = useState<string[]>([]);
 
     const loadSalaryFromApi = async () => {
         const { month, year } = parseMonthKey(selectedMonth);
@@ -590,9 +591,11 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
                 : await fetchSalaryRows(month, year);
             const mapped = rows.map((row) => mapSalaryRow(row, selectedMonth));
             if (mapped.length === 0) {
-                setApiError("Đang hiển thị dữ liệu dự phòng vì API lương chưa có dữ liệu cho kỳ này.");
+                setApiLoadedMonths((current) => current.filter((item) => item !== selectedMonth));
+                setApiError("Chưa có dữ liệu lương từ API cho kỳ này. Hãy seed database hoặc bấm tính lương bằng tài khoản Admin.");
                 return;
             }
+            setApiLoadedMonths((current) => current.includes(selectedMonth) ? current : [...current, selectedMonth]);
             setSalaryData((current) => [
                 ...current.filter((item) => item.month !== selectedMonth),
                 ...mapped,
@@ -610,8 +613,8 @@ export function Salary({ scope = "admin", managerId, departmentScope }: SalaryPr
     }, [selectedMonth, scope, managerId]);
 
     const monthData = useMemo(
-        () => salaryData.filter((x) => x.month === selectedMonth),
-        [salaryData, selectedMonth]
+        () => apiLoadedMonths.includes(selectedMonth) ? salaryData.filter((x) => x.month === selectedMonth) : [],
+        [apiLoadedMonths, salaryData, selectedMonth]
     );
 
     const filteredData = useMemo(() => {
