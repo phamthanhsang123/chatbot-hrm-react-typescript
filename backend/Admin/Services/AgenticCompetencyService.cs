@@ -59,7 +59,7 @@ namespace Admin.Services
                 .Include(t => t.Reviews)
                 .AsNoTracking()
                 .Where(t => t.EmployeeId == employeeId)
-                .Where(t => t.CreatedAt <= to && t.Deadline >= from)
+                .Where(t => t.Deadline >= from && t.Deadline <= to)
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
 

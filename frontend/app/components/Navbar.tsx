@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, Check, LogOut, Menu, Search, Settings } from 'lucide-react';
+import { Bell, Check, LogOut, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import Swal from 'sweetalert2';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -30,12 +31,9 @@ export interface ManagementSettings {
   emailNotifications: boolean;
   leaveNotifications: boolean;
   salaryNotifications: boolean;
-  darkMode: boolean;
-  sidebarCollapsed: boolean;
 }
 
 interface NavbarProps {
-  onToggleSidebar: () => void;
   onLogout?: () => void;
   settings: ManagementSettings;
   onSettingsSave: (settings: ManagementSettings) => void;
@@ -54,18 +52,30 @@ interface Notification {
 }
 
 export const defaultManagementSettings: ManagementSettings = {
-  fullName: 'Nguyễn Văn A',
-  email: 'nguyenvana@company.com',
+  fullName: 'Quản trị viên HRM',
+  email: 'admin.hr@company.com',
   phone: '0123456789',
   emailNotifications: true,
   leaveNotifications: true,
   salaryNotifications: true,
-  darkMode: false,
-  sidebarCollapsed: false,
+};
+
+export const getDefaultManagementSettings = (role: ManagementRole = 'admin'): ManagementSettings => {
+  if (role === 'manager') {
+    return {
+      fullName: 'Nguyễn Văn A',
+      email: 'manager.it@company.com',
+      phone: '0123456789',
+      emailNotifications: true,
+      leaveNotifications: true,
+      salaryNotifications: true,
+    };
+  }
+
+  return defaultManagementSettings;
 };
 
 export function Navbar({
-  onToggleSidebar,
   onLogout,
   settings,
   onSettingsSave,
@@ -82,14 +92,14 @@ export function Navbar({
         searchPlaceholder: 'Tìm nhân viên, task, phòng ban...',
       }
     : {
-        fullName: 'Admin HR',
+        fullName: 'Quản trị viên HRM',
         email: 'admin.hr@company.com',
         title: 'HR Admin',
         scope: 'Quản trị toàn hệ thống',
         searchPlaceholder: 'Tìm nhân viên, phòng ban, chức vụ...',
       };
-  const displayName = settings.fullName === defaultManagementSettings.fullName ? roleProfile.fullName : settings.fullName;
-  const displayEmail = settings.email === defaultManagementSettings.email ? roleProfile.email : settings.email;
+  const displayName = settings.fullName || roleProfile.fullName;
+  const displayEmail = settings.email || roleProfile.email;
 
   const [notifications, setNotifications] = useState<Notification[]>([
     {
@@ -162,10 +172,28 @@ export function Navbar({
   };
 
   const handleLogout = () => {
-    if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
-      alert('Đã đăng xuất thành công!');
-      onLogout?.();
-    }
+    void Swal.fire({
+      title: 'Đăng xuất?',
+      text: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Đăng xuất',
+      cancelButtonText: 'Hủy',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true,
+    }).then((result) => {
+      if (result.isConfirmed) {
+        void Swal.fire({
+          title: 'Đã đăng xuất',
+          text: 'Bạn đã đăng xuất thành công.',
+          icon: 'success',
+          timer: 900,
+          showConfirmButton: false,
+        });
+        onLogout?.();
+      }
+    });
   };
 
   const handleSaveSettings = () => {
@@ -194,22 +222,9 @@ export function Navbar({
   };
 
   return (
-    <nav
-      className={`sticky top-0 z-50 h-16 border-b shadow-sm transition-colors ${
-        settings.darkMode ? 'border-slate-800 bg-slate-950 text-slate-100' : 'border-slate-200 bg-white/95 text-slate-900 backdrop-blur'
-      }`}
-    >
+    <nav className="sticky top-0 z-50 h-16 border-b border-slate-200 bg-white/95 text-slate-900 shadow-sm backdrop-blur transition-colors">
       <div className="flex h-full items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleSidebar}
-            className={settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}
-          >
-            <Menu className="size-5" />
-          </Button>
-
           <div className="hidden items-center gap-2 text-2xl font-bold text-slate-900 lg:flex">
             <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-900 to-indigo-700 text-lg text-white shadow-lg shadow-slate-200">
               HR
@@ -224,11 +239,7 @@ export function Navbar({
             <input
               type="text"
               placeholder={roleProfile.searchPlaceholder}
-              className={`w-full rounded-lg border py-2 pl-10 pr-4 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                settings.darkMode
-                  ? 'border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500'
-                  : 'border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400'
-              }`}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-slate-900 placeholder:text-slate-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -241,7 +252,7 @@ export function Navbar({
               <Button
                 variant="ghost"
                 size="icon"
-                className={`relative ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+                className="relative text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               >
                 <Bell className="size-5" />
                 {unreadCount > 0 && (
@@ -288,27 +299,18 @@ export function Navbar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`hidden md:flex ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
-            onClick={() => setShowSettings(true)}
-          >
-            <Settings className="size-5" />
-          </Button>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className={`flex items-center gap-2 ${settings.darkMode ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-slate-100'}`}
+                className="flex items-center gap-2 hover:bg-slate-100"
               >
                 <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-800 to-indigo-700 text-sm font-bold text-white shadow-md">
                   {initials}
                 </div>
                 <div className="hidden text-left lg:block">
                   <p className="text-sm font-medium">{displayName}</p>
-                  <p className={`text-xs ${settings.darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{roleProfile.title}</p>
+                  <p className="text-xs text-gray-500">{roleProfile.title}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -319,11 +321,6 @@ export function Navbar({
                   <p className="text-xs font-normal text-gray-500">{displayEmail}</p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setShowSettings(true)}>
-                <Settings className="mr-2 size-4" />
-                Cài đặt
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-red-600" onClick={handleLogout}>
                 <LogOut className="mr-2 size-4" />
@@ -406,23 +403,6 @@ export function Navbar({
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900">Giao diện</h3>
-              <div className="space-y-2">
-                <SettingSwitch
-                  title="Chế độ tối"
-                  description="Đổi thanh điều hướng sang giao diện tối"
-                  checked={draftSettings.darkMode}
-                  onCheckedChange={(checked) => setDraftSettings({ ...draftSettings, darkMode: checked })}
-                />
-                <SettingSwitch
-                  title="Sidebar thu gọn"
-                  description="Thu gọn mặc định sau khi lưu"
-                  checked={draftSettings.sidebarCollapsed}
-                  onCheckedChange={(checked) => setDraftSettings({ ...draftSettings, sidebarCollapsed: checked })}
-                />
-              </div>
-            </div>
           </div>
 
           <div className="flex justify-end gap-2">

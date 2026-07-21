@@ -26,6 +26,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Slider } from '../components/ui/slider';
 import { Textarea } from '../components/ui/textarea';
 import {
   EmployeeTaskApiItem,
@@ -526,7 +527,7 @@ export function EmployeeTasks() {
                       <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-2 2xl:grid-cols-4">
                         <InfoLine icon={<UserCheck className="size-4" />} label="Manager" subLabel={task.managerName || 'Chưa gán'} />
                         <InfoLine icon={<CalendarDays className="size-4" />} label="Deadline" subLabel={formatDate(task.deadline)} />
-                        <InfoLine icon={<Star className="size-4" />} label="Điểm kỳ vọng" subLabel={`${task.expectedScore}/100`} />
+                        <InfoLine icon={<Star className="size-4" />} label="Điểm task" subLabel={`${task.expectedScore} điểm`} />
                         <InfoLine
                           icon={<Clock3 className="size-4" />}
                           label="Thời hạn"
@@ -598,14 +599,14 @@ export function EmployeeTasks() {
       </div>
 
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-[28px] border border-slate-200 p-0 shadow-2xl sm:max-w-2xl">
+          <DialogHeader className="border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-blue-50 p-6">
             <DialogTitle>Chi tiết task</DialogTitle>
             <DialogDescription>Thông tin task do Manager giao và trạng thái review hiện tại.</DialogDescription>
           </DialogHeader>
 
           {selectedTask && (
-            <div className="space-y-4">
+            <div className="space-y-4 p-6">
               <div>
                 <Label>Tên task</Label>
                 <p className="mt-1 font-medium text-slate-950">{selectedTask.title}</p>
@@ -620,7 +621,7 @@ export function EmployeeTasks() {
                 <DetailItem label="Deadline" value={formatDate(selectedTask.deadline)} />
                 <DetailItem label="Độ ưu tiên" value={priorityConfig[selectedTask.priority].label} />
                 <DetailItem label="Trạng thái" value={statusConfig[getDisplayStatus(selectedTask)].label} />
-                <DetailItem label="Điểm kỳ vọng" value={`${selectedTask.expectedScore}/100`} />
+                <DetailItem label="Điểm task" value={`${selectedTask.expectedScore} điểm`} />
               </div>
             </div>
           )}
@@ -628,34 +629,47 @@ export function EmployeeTasks() {
       </Dialog>
 
       <Dialog open={showProgressDialog} onOpenChange={setShowProgressDialog}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-[28px] border border-slate-200 p-0 shadow-2xl sm:max-w-xl">
+          <DialogHeader className="border-b border-slate-100 bg-gradient-to-br from-slate-50 via-white to-blue-50 p-6">
             <DialogTitle>Cập nhật tiến độ task</DialogTitle>
             <DialogDescription>Ghi nhận tiến độ và ghi chú để Manager có dữ liệu review.</DialogDescription>
           </DialogHeader>
 
           {selectedTask && (
-            <div className="space-y-4">
+            <div className="space-y-5 p-6">
               <div>
                 <Label>Task</Label>
                 <p className="mt-1 font-medium text-slate-950">{selectedTask.title}</p>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="progressPercent">Tiến độ hoàn thành (%)</Label>
-                <Input
-                  id="progressPercent"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={progressPercent}
-                  onChange={(event) => setProgressPercent(clampProgress(Number(event.target.value)))}
-                />
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm text-slate-500">Kéo để cập nhật tiến độ</span>
+                    <span className="text-lg font-bold text-slate-950">{progressPercent}%</span>
+                  </div>
+                  <Slider
+                    id="progressPercent"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[progressPercent]}
+                    onValueChange={(value) => setProgressPercent(clampProgress(value[0] ?? 0))}
+                    className="py-2"
+                  />
+                  <div className="mt-3 flex justify-between text-xs text-slate-400">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="progressNote">Ghi chú cập nhật</Label>
                 <Textarea
                   id="progressNote"
                   rows={4}
+                  className="rounded-2xl"
                   value={progressNote}
                   onChange={(event) => setProgressNote(event.target.value)}
                   placeholder="Nội dung đã làm, khó khăn, phần cần Manager hỗ trợ..."

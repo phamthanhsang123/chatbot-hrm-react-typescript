@@ -1,68 +1,39 @@
 "use client";
 
-import { useState } from "react";
-import { API_BASE } from "@/services/chatbot";
+import { useEffect, useState } from "react";
+import { API_BASE } from "@/services/apiBase";
+import { fetchEmployees, type EmployeeApiItem } from "@/services/employees";
 
-export default function Home() {
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<
-    { user: string; bot: string }[]
-  >([]);
+export default function ApiSmokeTest() {
+  const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
+  const [message, setMessage] = useState("Đang kiểm tra Render API...");
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
-
-    const sessionRes = await fetch(`${API_BASE}/chat/session?user_id=3`, {
-      method: "POST",
-    });
-    const session = await sessionRes.json();
-
-    const res = await fetch(`${API_BASE}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input, session_id: session.session_id }),
-    });
-
-    const data = await res.json();
-
-    setMessages([
-      ...messages,
-      { user: input, bot: data.reply },
-    ]);
-    setInput("");
-  };
+  useEffect(() => {
+    fetchEmployees()
+      .then((data) => {
+        setEmployees(data);
+        setMessage(`Kết nối thành công ${API_BASE}`);
+      })
+      .catch((error) => {
+        setMessage(error instanceof Error ? error.message : "Không kết nối được Render API.");
+      });
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center p-6">
-      <h1 className="text-2xl font-bold mb-4">
-        HRM Chatbot
-      </h1>
+    <div className="min-h-screen bg-gray-100 p-6">
+      <div className="mx-auto max-w-3xl rounded-lg bg-white p-6 shadow">
+        <h1 className="mb-2 text-2xl font-bold">HRM API Smoke Test</h1>
+        <p className="mb-4 text-sm text-gray-600">{message}</p>
 
-      <div className="w-full max-w-xl bg-white p-4 rounded shadow">
-        <div className="space-y-3 mb-4">
-          {messages.map((m, i) => (
-            <div key={i}>
-              <p><b>Bạn:</b> {m.user}</p>
-              <p className="text-blue-600">
-                <b>Bot:</b> {m.bot}
+        <div className="space-y-2">
+          {employees.slice(0, 10).map((employee) => (
+            <div key={employee.id} className="rounded border p-3">
+              <p className="font-semibold">{employee.fullName}</p>
+              <p className="text-sm text-gray-500">
+                {employee.email} - {employee.departmentName || "Chưa có phòng ban"}
               </p>
             </div>
           ))}
-        </div>
-
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="flex-1 border p-2 rounded"
-            placeholder="Nhập câu hỏi..."
-          />
-          <button
-            onClick={sendMessage}
-            className="bg-blue-500 text-white px-4 rounded"
-          >
-            Gửi
-          </button>
         </div>
       </div>
     </div>

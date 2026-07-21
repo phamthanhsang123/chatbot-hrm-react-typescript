@@ -114,6 +114,12 @@ function getRoleLabel(role: string) {
   return normalizeRole(role) === 'MANAGER' ? 'Quản lý' : 'Nhân viên';
 }
 
+function isSystemAdminAccount(employee: EmployeeView) {
+  const email = employee.email.trim().toLowerCase();
+  const name = employee.fullName.trim().toLowerCase();
+  return email === 'admin@hrm.local' || name === 'quản trị viên hrm';
+}
+
 function toForm(employee: EmployeeView): EmployeeFormState {
   return {
     fullName: employee.fullName,
@@ -247,7 +253,7 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
       setEmployees([]);
       setDepartments([]);
       setPositions([]);
-      setError('Không tải được danh sách nhân viên từ API. Hãy kiểm tra backend http://localhost:5297 và database.');
+      setError('Không tải được danh sách nhân viên từ API. Hãy kiểm tra backend https://hrm-backend-api-hzgh.onrender.com và database.');
       toast.fire({
         icon: 'error',
         title: 'Không kết nối được API nhân viên',
@@ -297,8 +303,9 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
   const isManagerView = userRole === 'manager';
   const canManageEmployees = userRole === 'admin' && !readOnly;
   const scopedEmployees = useMemo(() => {
-    if (!departmentScope) return employees;
-    return employees.filter((employee) => employee.departmentName === departmentScope);
+    const visibleEmployees = employees.filter((employee) => !isSystemAdminAccount(employee));
+    if (!departmentScope) return visibleEmployees;
+    return visibleEmployees.filter((employee) => employee.departmentName === departmentScope);
   }, [departmentScope, employees]);
 
   const inactiveEmployees = scopedEmployees.filter((employee) => employee.status === INACTIVE_STATUS);
@@ -627,14 +634,12 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] flex-col gap-5 pb-24">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{isManagerView ? 'Nhân viên phòng ban' : 'Quản lý nhân viên'}</h1>
-          <p className="mt-1 text-gray-500">
-            {isManagerView
-              ? `Manager chỉ xem nhân viên thuộc phòng ban ${departmentScope || 'được phân quyền'} và dùng dữ liệu này để theo dõi năng lực team.`
-              : 'Danh sách nhân viên đang làm việc, phòng ban, chức vụ và lương cơ bản'}
-          </p>
-        </div>
+        {!isManagerView && (
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Quản lý nhân viên</h1>
+            <p className="mt-1 text-gray-500">Danh sách nhân viên đang làm việc, phòng ban, chức vụ và lương cơ bản</p>
+          </div>
+        )}
         <div className="flex gap-2">
           {!isManagerView && (
             <Button variant="outline" className="gap-2" onClick={() => setShowInactiveDialog(true)}>
@@ -719,11 +724,13 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
               ))}
             </select>
           )}
+          {!isManagerView && (
           <select className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
             <option value="all">Tất cả vai trò</option>
             <option value="EMPLOYEE">Nhân viên</option>
             <option value="MANAGER">Quản lý</option>
           </select>
+          )}
         </div>
       </Card>
 
@@ -811,7 +818,7 @@ export function EmployeeTable({ userRole = 'admin', departmentScope, readOnly = 
         </div>
       </Card>
 
-      <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col gap-3 border border-gray-200 bg-white/95 px-5 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:flex-row md:items-center md:justify-between lg:left-64">
+      <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col gap-3 border border-gray-200 bg-white/95 px-5 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:flex-row md:items-center md:justify-between lg:left-72">
         <p className="text-sm text-gray-600">
           Hiển thị <span className="font-medium">{filteredEmployees.length === 0 ? 0 : startIndex + 1}-{Math.min(endIndex, filteredEmployees.length)}</span> trong tổng số{' '}
           <span className="font-medium">{filteredEmployees.length}</span> nhân viên

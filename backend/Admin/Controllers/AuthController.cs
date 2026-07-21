@@ -1,8 +1,6 @@
 ﻿using Admin.DTOs;
 using Admin.Services;
 using Microsoft.AspNetCore.Mvc;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 
 namespace Admin.Controllers
 {
@@ -23,20 +21,19 @@ namespace Admin.Controllers
         {
             try
             {
-                var token = _auth.Login(dto.Username, dto.Password);
-
-                // ✅ ĐỌC ROLE TỪ TOKEN
-                var handler = new JwtSecurityTokenHandler();
-                var jwtToken = handler.ReadJwtToken(token);
-
-                var role = jwtToken.Claims
-                    .FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value;
+                var result = _auth.Login(dto.Username, dto.Password);
 
                 return Ok(new
                 {
                     success = true,
-                    token,
-                    role
+                    token = result.Token,
+                    role = result.Role,
+                    employeeId = result.EmployeeId,
+                    email = result.Email,
+                    fullName = result.FullName,
+                    departmentId = result.DepartmentId,
+                    departmentName = result.DepartmentName,
+                    status = result.Status
                 });
             }
             catch (Exception ex)

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { CheckCircle, XCircle, Clock, Calendar, User, FileText, Eye, MessageSquare, ArrowRight, Search, Filter, ListChecks, Target, AlertTriangle, ChevronLeft, ChevronRight, Download, Users } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Calendar, User, FileText, Eye, MessageSquare, ArrowRight, Search, Filter, ListChecks, Target, AlertTriangle, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -1682,15 +1682,7 @@ export function AttendanceApproval() {
                 {departmentFilter !== 'all' ? ` • Phòng ${departmentFilter}` : ''}
                 {searchQuery ? ` • Từ khóa "${searchQuery}"` : ''}
               </p>
-            </div>
-            <Button
-              variant="outline"
-              className="w-fit gap-2 bg-white text-blue-600 hover:bg-blue-50"
-              onClick={() => alert(`Xuất báo cáo chấm công ngày ${selectedDateLabel}`)}
-            >
-              <Download className="size-4" />
-              Xuất báo cáo
-            </Button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1834,16 +1826,7 @@ export function AttendanceApproval() {
               </Button>
               <Button size="sm" onClick={handleToday} className="bg-blue-600 hover:bg-blue-700">
                 Hôm nay
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2 bg-white text-blue-600 hover:bg-blue-50"
-                onClick={() => alert(`Xuất báo cáo chấm công ngày ${selectedDateLabel}`)}
-              >
-                <Download className="size-4" />
-                Xuất
-              </Button>
+              </Button>
             </div>
           </div>
 
@@ -2534,15 +2517,7 @@ export function AttendanceApproval() {
                 <p className="text-gray-500">
                   Có {dateStats.total} nhân viên chấm công trong ngày này
                 </p>
-              </div>
-              <Button
-                variant="outline"
-                className="border-gray-200 bg-white text-blue-600 hover:bg-blue-50"
-                onClick={() => alert('Xuất báo cáo Excel')}
-              >
-                <Download className="size-4 mr-2" />
-                Xuất báo cáo
-              </Button>
+              </div>
             </div>
           </Card>
 

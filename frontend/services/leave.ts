@@ -1,4 +1,4 @@
-import { API_BASE } from './chatbot';
+import { API_BASE } from './apiBase';
 
 export interface LeaveRequestApiItem {
   id: number;

@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card } from './ui/card';
 import type { UserRole } from '../types';
-import { API_BASE } from '@/services/chatbot';
+import { API_BASE } from '@/services/apiBase';
 
 interface LoginProps {
   onLogin: (role: UserRole) => void;
@@ -84,9 +84,23 @@ export function Login({ onLogin }: LoginProps) {
         localStorage.setItem('hrm_token', data.token);
       }
       localStorage.setItem('hrm_role', data.role || '');
-      const employeeId = data.employeeId || data.user?.employeeId || data.id;
-      if (employeeId) {
+      const employeeId = Number(data.employeeId || data.user?.employeeId || data.id);
+      if (Number.isFinite(employeeId) && employeeId > 0) {
         localStorage.setItem('hrm_employee_id', String(employeeId));
+      } else {
+        localStorage.removeItem('hrm_employee_id');
+      }
+
+      if (typeof data.fullName === 'string' && data.fullName.trim()) {
+        localStorage.setItem('hrm_employee_name', data.fullName.trim());
+      } else {
+        localStorage.removeItem('hrm_employee_name');
+      }
+
+      if (typeof data.departmentName === 'string' && data.departmentName.trim()) {
+        localStorage.setItem('hrm_employee_department', data.departmentName.trim());
+      } else {
+        localStorage.removeItem('hrm_employee_department');
       }
 
       onLogin(mapApiRole(data.role));

@@ -1,5 +1,5 @@
 'use client';
-import { Calculator, ChevronDown, ChevronRight, CreditCard, DollarSign, Download, Pencil, Search, TrendingUp, Users, Wallet } from "lucide-react";
+import { Calculator, ChevronDown, ChevronRight, CreditCard, DollarSign, Pencil, Search, TrendingUp, Users, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
@@ -699,11 +699,7 @@ export function Salary() {
                     <p className="mt-1 text-gray-500">Theo dõi bảng lương, duyệt và thanh toán theo từng tháng.</p>
                 </div>
 
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                    <Button variant="outline" className="gap-2" onClick={handleExportReport}>
-                        <Download className="size-4" />
-                        Xuất báo cáo
-                    </Button>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
                     <Button className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCalculateSalary}>
                         <Calculator className="size-4" />
                         Tính lương

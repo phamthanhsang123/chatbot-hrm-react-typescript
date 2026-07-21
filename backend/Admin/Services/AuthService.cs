@@ -1,4 +1,5 @@
 ﻿using Admin.Data;
+using Admin.DTOs;
 using Admin.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -20,34 +21,52 @@ namespace Admin.Services
         }
 
         // LOGIN (BY EMAIL)
-        public string Login(string email, string password)
+        public LoginResultDto Login(string email, string password)
         {
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
                 throw new Exception("Thiếu email hoặc mật khẩu");
 
-            // ⚠️ SELECT CỤ THỂ – KHÔNG LẤY FullName
+            var normalizedEmail = email.Trim().ToLower();
+
             var emp = _db.Employees
                 .AsNoTracking()
-                .Where(e => e.Email == email)
-                .Select(e => new Employee
+                .Where(e => e.Email.ToLower() == normalizedEmail)
+                .Select(e => new
                 {
-                    Id = e.Id,
-                    Email = e.Email,
-                    Password = e.Password,
-                    Role = e.Role
+                    Employee = new Employee
+                    {
+                        Id = e.Id,
+                        Email = e.Email,
+                        Password = e.Password,
+                        Role = e.Role,
+                        FullName = e.FullName,
+                        DepartmentId = e.DepartmentId,
+                        Status = e.Status
+                    },
+                    DepartmentName = e.Department != null ? e.Department.Name : null
                 })
                 .FirstOrDefault();
 
             if (emp == null)
                 throw new Exception("Tài khoản không tồn tại");
 
-            if (string.IsNullOrWhiteSpace(emp.Password))
+            if (string.IsNullOrWhiteSpace(emp.Employee.Password))
                 throw new Exception("Tài khoản chưa có mật khẩu hợp lệ");
 
-            if (!BCrypt.Net.BCrypt.Verify(password, emp.Password))
+            if (!BCrypt.Net.BCrypt.Verify(password, emp.Employee.Password))
                 throw new Exception("Mật khẩu không đúng");
 
-            return GenerateJwtToken(emp);
+            return new LoginResultDto
+            {
+                Token = GenerateJwtToken(emp.Employee),
+                Role = emp.Employee.Role ?? "EMPLOYEE",
+                EmployeeId = emp.Employee.Id,
+                Email = emp.Employee.Email,
+                FullName = emp.Employee.FullName,
+                DepartmentId = emp.Employee.DepartmentId,
+                DepartmentName = emp.DepartmentName,
+                Status = emp.Employee.Status
+            };
         }
 
         // RESET PASSWORD
@@ -67,13 +86,8 @@ namespace Admin.Services
         // JWT TOKEN
         private string GenerateJwtToken(Employee emp)
         {
-            var jwtKey = _config["Jwt:Key"];
-            var jwtIssuer = _config["Jwt:Issuer"];
-
-            if (string.IsNullOrWhiteSpace(jwtKey))
-                throw new Exception("Thiếu cấu hình Jwt:Key");
-            if (string.IsNullOrWhiteSpace(jwtIssuer))
-                throw new Exception("Thiếu cấu hình Jwt:Issuer");
+            var jwtKey = _config["Jwt:Key"] ?? "LOCAL_DEV_SECRET_KEY_FOR_HRM_ADMIN_API_32_CHARS";
+            var jwtIssuer = _config["Jwt:Issuer"] ?? "HRM.Admin.API";
 
             var claims = new List<Claim>
             {

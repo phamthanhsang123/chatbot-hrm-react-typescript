@@ -1,5 +1,6 @@
 ﻿using Admin.Data;
 using Admin.Services;
+using Admin.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -12,18 +13,30 @@ var builder = WebApplication.CreateBuilder(args);
 // =========================
 // DATABASE
 // =========================
-var connectionString =
-    builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? builder.Configuration.GetConnectionString("MySql");
+var connectionString = ResolveConnectionString(builder.Configuration);
 
 if (string.IsNullOrWhiteSpace(connectionString))
 {
-    throw new Exception("Missing connection string. Set ConnectionStrings:DefaultConnection (or MySql).");
+    throw new Exception("Missing connection string. Set ConnectionStrings:DefaultConnection, MYSQL_URL, MYSQL_PUBLIC_URL, or DATABASE_URL.");
 }
+
+connectionString = NormalizeMySqlConnectionString(connectionString);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseMySql(connectionString, ServerVersion.Parse("8.0.36-mysql"));
+    options.UseMySql(
+        connectionString,
+        ServerVersion.Parse("8.0.36-mysql"),
+        mySqlOptions =>
+        {
+            mySqlOptions.CommandTimeout(30);
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null
+            );
+        }
+    );
 });
 
 // =========================
@@ -130,6 +143,12 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    app.Urls.Add($"http://0.0.0.0:{port}");
+}
+
 // =========================
 // PROXY / RAILWAY
 // =========================
@@ -151,7 +170,103 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
+await SeedAdminFromEnvironmentAsync(app);
+
 app.MapControllers();
 app.MapGet("/", () => "HRM API is running 🚀");
 
 app.Run();
+
+static string? ResolveConnectionString(IConfiguration configuration)
+{
+    return configuration.GetConnectionString("DefaultConnection")
+        ?? configuration.GetConnectionString("MySql")
+        ?? configuration["MYSQL_URL"]
+        ?? configuration["MYSQL_PUBLIC_URL"]
+        ?? configuration["DATABASE_URL"];
+}
+
+static string NormalizeMySqlConnectionString(string rawConnectionString)
+{
+    var connectionString = rawConnectionString.Trim();
+
+    if (connectionString.StartsWith("mysql://", StringComparison.OrdinalIgnoreCase))
+    {
+        var uri = new Uri(connectionString);
+        var userInfo = uri.UserInfo.Split(':', 2);
+
+        var builder = new MySqlConnector.MySqlConnectionStringBuilder
+        {
+            Server = uri.Host,
+            Port = (uint)(uri.Port > 0 ? uri.Port : 3306),
+            Database = uri.AbsolutePath.TrimStart('/'),
+            UserID = Uri.UnescapeDataString(userInfo.ElementAtOrDefault(0) ?? ""),
+            Password = Uri.UnescapeDataString(userInfo.ElementAtOrDefault(1) ?? "")
+        };
+
+        connectionString = builder.ConnectionString;
+    }
+
+    var csBuilder = new MySqlConnector.MySqlConnectionStringBuilder(connectionString)
+    {
+        ConnectionTimeout = 30,
+        DefaultCommandTimeout = 30,
+        Keepalive = 15,
+        ConnectionIdleTimeout = 60,
+        AllowPublicKeyRetrieval = true,
+        TreatTinyAsBoolean = false,
+        SslMode = MySqlConnector.MySqlSslMode.Preferred
+    };
+
+    return csBuilder.ConnectionString;
+}
+
+static async Task SeedAdminFromEnvironmentAsync(WebApplication app)
+{
+    var adminEmail = app.Configuration["SEED_ADMIN_EMAIL"];
+    var adminPassword = app.Configuration["SEED_ADMIN_PASSWORD"];
+
+    if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+    {
+        return;
+    }
+
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    var normalizedEmail = adminEmail.Trim().ToLowerInvariant();
+    var admin = await db.Employees.FirstOrDefaultAsync(e => e.Email.ToLower() == normalizedEmail);
+
+    if (admin == null)
+    {
+        var departmentId = await db.Departments
+            .OrderBy(d => d.Id)
+            .Select(d => (int?)d.Id)
+            .FirstOrDefaultAsync();
+
+        var positionId = await db.Positions
+            .Where(p => !departmentId.HasValue || p.DepartmentId == departmentId)
+            .OrderBy(p => p.Id)
+            .Select(p => (int?)p.Id)
+            .FirstOrDefaultAsync();
+
+        admin = new Employee
+        {
+            Email = normalizedEmail,
+            FullName = app.Configuration["SEED_ADMIN_NAME"] ?? "Admin HR",
+            Role = "ADMIN",
+            Status = "active",
+            Phone = app.Configuration["SEED_ADMIN_PHONE"],
+            Cccd = app.Configuration["SEED_ADMIN_CCCD"],
+            DepartmentId = departmentId,
+            PositionId = positionId,
+            SalaryBase = 0
+        };
+
+        db.Employees.Add(admin);
+    }
+
+    admin.Role = "ADMIN";
+    admin.Password = BCrypt.Net.BCrypt.HashPassword(adminPassword);
+    await db.SaveChangesAsync();
+}
