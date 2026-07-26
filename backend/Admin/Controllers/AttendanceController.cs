@@ -133,10 +133,8 @@ namespace Admin.Controllers
         [HttpGet("summary")]
         public IActionResult GetSummary([FromQuery] string? date)
         {
-            if (string.IsNullOrWhiteSpace(date))
-                return BadRequest("Thiếu date");
-
-            if (!DateTime.TryParse(date, out var parsedDate))
+            var parsedDate = DateTime.Today;
+            if (!string.IsNullOrWhiteSpace(date) && !DateTime.TryParse(date, out parsedDate))
                 return BadRequest("Date không hợp lệ");
 
             var result = _service.GetSummary(parsedDate);

@@ -83,18 +83,46 @@ function toDateInputValue(value: string) {
   return value ? value.slice(0, 10) : '';
 }
 
+function normalizeVietnamese(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
+function normalizeApiLeaveStatus(status: string): LeaveStatus {
+  const value = normalizeVietnamese(status);
+  if (value.includes('tu choi') || value.includes('rejected') || value.includes('reject')) return 'rejected';
+  if (value.includes('cho') || value.includes('pending')) return 'pending';
+  if (value.includes('da duyet') || value.includes('duyet') || value.includes('approved')) return 'approved';
+  return 'pending';
+}
+
+function normalizeApiLeaveType(type: string): LeaveType {
+  const value = normalizeVietnamese(type);
+  if (value.includes('om') || value.includes('sick')) return 'sick';
+  if (value.includes('khong luong') || value.includes('unpaid')) return 'unpaid';
+  if (value.includes('thai') || value.includes('maternity')) return 'maternity';
+  if (value.includes('cuoi') || value.includes('marriage')) return 'marriage';
+  if (value.includes('tang') || value.includes('funeral')) return 'funeral';
+  return 'annual';
+}
+
 function mapLeaveRequest(item: LeaveRequestApiItem): LeaveRequest {
   return {
     id: item.id,
     employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
     name: item.employeeName || `NV${item.employeeId}`,
     department: 'API',
-    type: normalizeLeaveType(item.leaveType),
+    type: normalizeApiLeaveType(item.leaveType),
     from: toDateInputValue(item.startDate),
     to: toDateInputValue(item.endDate),
     days: Number(item.totalDays || 0),
     reason: item.reason || '',
-    status: normalizeLeaveStatus(item.status),
+    status: normalizeApiLeaveStatus(item.status),
     appliedDate: toDateInputValue(item.startDate),
   };
 }

@@ -143,13 +143,15 @@ namespace Admin.Services
         private SalaryRowDto BuildSalaryRow(Employee employee, int month, int year)
         {
             var baseSalary = employee.SalaryBase ?? 0;
+            var periodStart = new DateTime(year, month, 1);
+            var periodEnd = periodStart.AddMonths(1);
             var payroll = _context.Payrolls.AsNoTracking().FirstOrDefault(x =>
                 x.EmployeeId == employee.Id &&
                 x.Month == month &&
                 x.Year == year);
 
             var attendance = _context.Attendances.AsNoTracking()
-                .Where(x => x.EmployeeId == employee.Id && x.Date.Month == month && x.Date.Year == year)
+                .Where(x => x.EmployeeId == employee.Id && x.Date >= periodStart && x.Date < periodEnd)
                 .ToList();
 
             var leaveRequests = _context.LeaveRequests.AsNoTracking()
@@ -157,7 +159,7 @@ namespace Admin.Services
                 .ToList();
 
             var tasks = _context.Tasks.AsNoTracking()
-                .Where(x => x.EmployeeId == employee.Id && x.Deadline.Month == month && x.Deadline.Year == year)
+                .Where(x => x.EmployeeId == employee.Id && x.Deadline >= periodStart && x.Deadline < periodEnd)
                 .ToList();
 
             var workDays = attendance.Count(x => x.CheckInTime.HasValue);

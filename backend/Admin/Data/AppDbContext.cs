@@ -100,6 +100,25 @@ namespace Admin.Data
                 .HasForeignKey(e => e.PositionId);
 
             // =========================
+            // PAYROLL
+            // =========================
+            modelBuilder.Entity<Payroll>(entity =>
+            {
+                entity.ToTable("payroll");
+                entity.HasKey(p => p.Id);
+
+                entity.Property(p => p.Id).HasColumnName("payroll_id");
+                entity.Property(p => p.EmployeeId).HasColumnName("employee_id");
+                entity.Property(p => p.Month).HasColumnName("month");
+                entity.Property(p => p.Year).HasColumnName("year");
+                entity.Property(p => p.SalaryBase).HasColumnName("salary_base");
+                entity.Property(p => p.Bonus).HasColumnName("bonus");
+                entity.Property(p => p.Deductions).HasColumnName("deductions");
+                entity.Property(p => p.TotalSalary).HasColumnName("total_salary");
+                entity.Property(p => p.Status).HasColumnName("status");
+            });
+
+            // =========================
             // ATTENDANCE (giữ nguyên)
             // =========================
             modelBuilder.Entity<Attendance>(entity =>

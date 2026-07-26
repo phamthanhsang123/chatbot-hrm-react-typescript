@@ -34,6 +34,11 @@ const getDefaultPageForRole = (role: UserRole | null) => {
   return 'dashboard';
 };
 
+const getStoredManagerDepartment = () => {
+  if (typeof window === 'undefined') return MANAGER_DEPARTMENT;
+  return window.localStorage.getItem('hrm_employee_department')?.trim() || MANAGER_DEPARTMENT;
+};
+
 const escapeAlertHtml = (value: string) =>
   value
     .replace(/&/g, '&amp;')
@@ -88,6 +93,7 @@ export default function App() {
   const [managementSettings, setManagementSettings] = useState<ManagementSettings>(() => loadManagementSettings('admin'));
   const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
   const [employeeSettingsOpen, setEmployeeSettingsOpen] = useState(false);
+  const [managerDepartment, setManagerDepartment] = useState(MANAGER_DEPARTMENT);
 
   useEffect(() => {
     const nativeAlert = window.alert;
@@ -122,6 +128,9 @@ export default function App() {
     setCurrentPage(getDefaultPageForRole(role));
     if (role === 'admin' || role === 'manager') {
       setManagementSettings(loadManagementSettings(role));
+    }
+    if (role === 'manager') {
+      setManagerDepartment(getStoredManagerDepartment());
     }
   };
 
@@ -193,13 +202,13 @@ export default function App() {
     if (userRole === 'manager') {
       switch (currentPage) {
         case 'dashboard':
-          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
+          return <ManagerDashboard departmentName={managerDepartment} onNavigate={setCurrentPage} />;
         case 'employees':
-          return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
+          return <EmployeeTable userRole="manager" departmentScope={managerDepartment} readOnly />;
         case 'manager-tasks':
-          return <ManagerTasks departmentName={MANAGER_DEPARTMENT} />;
+          return <ManagerTasks departmentName={managerDepartment} />;
         case 'task-review':
-          return <ManagerTasks departmentName={MANAGER_DEPARTMENT} mode="review" />;
+          return <ManagerTasks departmentName={managerDepartment} mode="review" />;
         case 'salary':
           return <Salary />;
         case 'leave':
@@ -207,13 +216,13 @@ export default function App() {
         case 'attendance-approval':
           return <AttendanceApproval />;
         case 'competency':
-          return <CompetencyEvaluation userRole="manager" departmentScope={MANAGER_DEPARTMENT} />;
+          return <CompetencyEvaluation userRole="manager" departmentScope={managerDepartment} />;
         case 'ai-assistant':
           return <Chatbot />;
         case 'reports':
           return <Reports />;
         default:
-          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
+          return <ManagerDashboard departmentName={managerDepartment} onNavigate={setCurrentPage} />;
       }
     }
 
