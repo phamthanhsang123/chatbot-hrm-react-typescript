@@ -39,15 +39,29 @@ namespace Admin.Controllers
         [HttpPost("{id}/approve")]
         public IActionResult Approve(int id)
         {
-            if (!_service.Approve(id)) return NotFound();
-            return Ok();
+            try
+            {
+                var updated = _service.Approve(id);
+                return updated == null ? NotFound(new { message = "Không tìm thấy đơn nghỉ phép" }) : Ok(updated);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpPost("{id}/reject")]
         public IActionResult Reject(int id)
         {
-            if (!_service.Reject(id)) return NotFound();
-            return Ok();
+            try
+            {
+                var updated = _service.Reject(id);
+                return updated == null ? NotFound(new { message = "Không tìm thấy đơn nghỉ phép" }) : Ok(updated);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpGet("dashboard")]

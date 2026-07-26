@@ -136,40 +136,40 @@ namespace Admin.Services
         // =========================
         // APPROVE
         // =========================
-        public bool Approve(int id)
+        public LeaveRequestDto? Approve(int id)
         {
             try
             {
                 var leave = _db.Set<LeaveRequest>().Find(id);
-                if (leave == null) return UpdateDemoStatus(id, "Đã duyệt");
+                if (leave == null) return null;
 
                 leave.Status = "Đã duyệt";
                 _db.SaveChanges();
-                return true;
+                return GetAll(null).FirstOrDefault(x => x.Id == id);
             }
-            catch
+            catch (Exception ex)
             {
-                return UpdateDemoStatus(id, "Đã duyệt");
+                throw new InvalidOperationException("Không lưu được trạng thái duyệt vào database.", ex);
             }
         }
 
         // =========================
         // REJECT
         // =========================
-        public bool Reject(int id)
+        public LeaveRequestDto? Reject(int id)
         {
             try
             {
                 var leave = _db.Set<LeaveRequest>().Find(id);
-                if (leave == null) return UpdateDemoStatus(id, "Từ chối");
+                if (leave == null) return null;
 
                 leave.Status = "Từ chối";
                 _db.SaveChanges();
-                return true;
+                return GetAll(null).FirstOrDefault(x => x.Id == id);
             }
-            catch
+            catch (Exception ex)
             {
-                return UpdateDemoStatus(id, "Từ chối");
+                throw new InvalidOperationException("Không lưu được trạng thái từ chối vào database.", ex);
             }
         }
 

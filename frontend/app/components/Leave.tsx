@@ -63,8 +63,9 @@ interface LeaveRequest {
 
 function normalizeLeaveStatus(status: string): LeaveStatus {
   const value = status.trim().toLowerCase();
-  if (value.includes('duyệt') && !value.includes('chờ')) return 'approved';
-  if (value.includes('từ chối') || value.includes('rejected')) return 'rejected';
+  if (value.includes('từ chối') || value.includes('rejected') || value.includes('reject')) return 'rejected';
+  if (value.includes('chờ') || value.includes('pending')) return 'pending';
+  if (value.includes('đã duyệt') || value.includes('approved') || value === 'duyet' || value === 'duyệt') return 'approved';
   return 'pending';
 }
 
@@ -404,7 +405,18 @@ export function Leave() {
 
     try {
       await approveLeaveRequest(selectedRequest.id);
-      await loadLeaveData();
+      setLeaveRequests((current) =>
+        current.map((request) =>
+          request.id === selectedRequest.id
+            ? {
+                ...request,
+                status: 'approved',
+                reviewedDate: formatDateKey(new Date()),
+                reviewedBy: 'HR Admin',
+              }
+            : request,
+        ),
+      );
       await Swal.fire({
         icon: 'success',
         title: 'Đã duyệt',
@@ -439,7 +451,19 @@ export function Leave() {
 
     try {
       await rejectLeaveRequest(selectedRequest.id);
-      await loadLeaveData();
+      setLeaveRequests((current) =>
+        current.map((request) =>
+          request.id === selectedRequest.id
+            ? {
+                ...request,
+                status: 'rejected',
+                reviewedDate: formatDateKey(new Date()),
+                reviewedBy: 'HR Admin',
+                reviewNote: rejectNote.trim(),
+              }
+            : request,
+        ),
+      );
       await Swal.fire({
         icon: 'success',
         title: 'Đã từ chối',
