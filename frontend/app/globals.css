@@ -70,3 +70,27 @@ body.swal2-shown {
 .swal2-backdrop-show {
   pointer-events: auto !important;
 }
+
+/* Four attendance lanes stay visible; additional employees scroll within the day. */
+.attendance-day-scroll {
+  scrollbar-color: #94a3b8 #e2e8f0;
+  scrollbar-width: thin;
+}
+
+.attendance-day-scroll::-webkit-scrollbar {
+  height: 7px;
+}
+
+.attendance-day-scroll::-webkit-scrollbar-track {
+  border-radius: 9999px;
+  background: #e2e8f0;
+}
+
+.attendance-day-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: #94a3b8;
+}
+
+.attendance-day-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}

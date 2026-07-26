@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "updatedAt": "2026-07-18",
+  "rules": [
+    {
+      "code": "DATA_REQUIRED",
+      "name": "Điều kiện dữ liệu tối thiểu",
+      "description": "Không được đề xuất thưởng, phạt, tăng lương hoặc thăng chức khi thiếu task, review chất lượng/deadline hoặc dữ liệu chấm công trong kỳ.",
+      "threshold": 85,
+      "active": true
+    },
+    {
+      "code": "REWARD_90",
+      "name": "Đề xuất ghi nhận hoặc khen thưởng",
+      "description": "Nhân viên có thể được đề xuất ghi nhận khi tổng điểm đạt tối thiểu 90 và không có tín hiệu rủi ro cao.",
+      "threshold": 90,
+      "active": true
+    },
+    {
+      "code": "GROWTH_85",
+      "name": "Cơ hội phát triển",
+      "description": "Nhân viên có thể được giao nhiệm vụ khó hơn hoặc cân nhắc rà soát lương khi tổng điểm đạt tối thiểu 85.",
+      "threshold": 85,
+      "active": true
+    },
+    {
+      "code": "MAINTAIN_65",
+      "name": "Duy trì và theo dõi",
+      "description": "Nhân viên đạt từ 65 điểm được duy trì khối lượng công việc và theo dõi ở kỳ tiếp theo.",
+      "threshold": 65,
+      "active": true
+    },
+    {
+      "code": "IMPROVE_65",
+      "name": "Kế hoạch cải thiện",
+      "description": "Nhân viên dưới 65 điểm hoặc có rủi ro cao cần kế hoạch hỗ trợ và theo dõi hằng tuần.",
+      "threshold": 65,
+      "active": true
+    }
+  ]
+}

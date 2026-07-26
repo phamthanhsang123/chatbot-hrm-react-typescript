@@ -94,8 +94,14 @@ namespace Admin.Services
                 new Claim(JwtRegisteredClaimNames.Sub, emp.Email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(ClaimTypes.Name, emp.Email),
-                new Claim(ClaimTypes.Role, emp.Role ?? "EMPLOYEE")
+                new Claim(ClaimTypes.Role, emp.Role ?? "EMPLOYEE"),
+                new Claim("employee_id", emp.Id.ToString())
             };
+
+            if (emp.DepartmentId.HasValue)
+            {
+                claims.Add(new Claim("department_id", emp.DepartmentId.Value.ToString()));
+            }
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

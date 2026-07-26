@@ -1,6 +1,17 @@
 'use client';
 import { Calculator, ChevronDown, ChevronRight, CreditCard, DollarSign, Pencil, Search, TrendingUp, Users, Wallet } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Swal from "sweetalert2";
+import {
+    approveSalary,
+    calculateMonthlySalary,
+    fetchManagerSalaryRows,
+    fetchSalaryRows,
+    paySalary,
+    type SalaryRowApiItem,
+} from "@/services/salary";
+import { getCurrentEmployeeId } from "@/services/tasks";
+import type { ManagementRole } from "../types";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -62,6 +73,52 @@ interface SalaryItem {
     paidDate?: string;
 }
 
+interface SalaryProps {
+    userRole?: ManagementRole;
+}
+
+function normalizeSalaryStatus(status: string): SalaryStatus {
+    const normalized = status.trim().toLowerCase();
+    if (normalized.includes("đã thanh toán") || normalized.includes("paid")) return "paid";
+    if (normalized.includes("chờ thanh toán") || normalized.includes("approved")) return "approved";
+    if (normalized.includes("chờ duyệt") || normalized.includes("calculated")) return "calculated";
+    return "pending";
+}
+
+function mapApiSalaryRow(row: SalaryRowApiItem, month: string): SalaryItem {
+    const totalDeduction = Number(row.totalDeduction ?? Math.max(0, row.totalIncome - row.netPay));
+    const allowance = Number(row.allowance ?? Math.max(0, row.totalIncome - row.salaryBase - row.bonus));
+
+    return {
+        id: row.id,
+        employeeId: row.employeeCode || `NV${String(row.employeeId).padStart(3, "0")}`,
+        name: row.employeeName,
+        department: row.department || "Chưa phân phòng",
+        position: row.position || "Chưa có chức vụ",
+        month,
+        baseSalary: Number(row.salaryBase) || 0,
+        mealAllowance: allowance,
+        transportAllowance: 0,
+        phoneAllowance: 0,
+        housingAllowance: 0,
+        standardDays: Number(row.standardDays) || 22,
+        workDays: Number(row.workDays) || 0,
+        overtimeHours: Number(row.overtimeHours) || 0,
+        overtimeRate: 1.5,
+        kpiBonus: Number(row.bonus) || 0,
+        projectBonus: 0,
+        holidayBonus: 0,
+        socialInsurance: totalDeduction,
+        healthInsurance: 0,
+        unemploymentInsurance: 0,
+        personalIncomeTax: 0,
+        advancePayment: 0,
+        penalties: 0,
+        salaryDeduction: 0,
+        status: normalizeSalaryStatus(row.status),
+    };
+}
+
 const formatMonthKey = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -74,7 +131,7 @@ const getRelativeMonthKey = (offset: number) => {
     return formatMonthKey(date);
 };
 
-export function Salary() {
+export function Salary({ userRole = "admin" }: SalaryProps) {
     const todayISO = () => new Date().toISOString().slice(0, 10);
 
     const formatCurrency = (amount: number) =>
@@ -138,6 +195,7 @@ export function Salary() {
     const [showCalculateDialog, setShowCalculateDialog] = useState(false);
     const [showDetailDialog, setShowDetailDialog] = useState(false);
     const [showApproveDialog, setShowApproveDialog] = useState(false);
+    const [isApproveSubmitting, setIsApproveSubmitting] = useState(false);
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [showIncomeDetail, setShowIncomeDetail] = useState(false);
     const [showDeductionDetail, setShowDeductionDetail] = useState(false);
@@ -507,9 +565,34 @@ export function Salary() {
         },
     ]);
 
+    const [apiStatus, setApiStatus] = useState("Đang tải dữ liệu lương...");
+
+    const loadSalaryData = useCallback(async () => {
+        const [year, month] = selectedMonth.split("-").map(Number);
+        if (!year || !month) return;
+
+        setApiStatus("Đang tải dữ liệu lương...");
+        try {
+            const rows = userRole === "manager"
+                ? await fetchManagerSalaryRows(getCurrentEmployeeId(), month, year)
+                : await fetchSalaryRows(month, year);
+            setSalaryData(rows.map((row) => mapApiSalaryRow(row, selectedMonth)));
+            setApiStatus("");
+        } catch (error) {
+            console.error("Không tải được bảng lương:", error);
+            setSalaryData([]);
+            setApiStatus("Không tải được dữ liệu lương từ hệ thống.");
+        }
+    }, [selectedMonth, userRole]);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => void loadSalaryData(), 0);
+        return () => window.clearTimeout(timeoutId);
+    }, [loadSalaryData]);
+
     const monthData = useMemo(
-        () => salaryData.filter((x) => x.month === selectedMonth),
-        [salaryData, selectedMonth]
+        () => apiStatus ? [] : salaryData.filter((x) => x.month === selectedMonth),
+        [apiStatus, salaryData, selectedMonth]
     );
 
     const filteredData = useMemo(() => {
@@ -527,7 +610,7 @@ export function Salary() {
         });
     }, [monthData, filterStatus, searchQuery]);
 
-    const stats = useMemo(() => {
+    const stats = (() => {
         const list = monthData;
         const totalNet = list.reduce((sum, x) => sum + calcNet(x), 0);
         const avgNet = list.length ? totalNet / list.length : 0;
@@ -549,25 +632,13 @@ export function Salary() {
             approvedCount,
             pendingCount,
         };
-    }, [monthData]);
+    })();
 
     const handleViewDetail = (employee: SalaryItem) => {
         setSelectedEmployee(employee);
         setShowIncomeDetail(false);
         setShowDeductionDetail(false);
         setShowDetailDialog(true);
-    };
-
-    const handleExportReport = () => {
-        const totalNet = filteredData.reduce((sum, x) => sum + calcNet(x), 0);
-        const avgNet = filteredData.length ? totalNet / filteredData.length : 0;
-
-        alert(
-            `Đang xuất báo cáo lương tháng ${selectedMonth}...\n\n` +
-            `Tổng: ${filteredData.length} nhân viên\n` +
-            `Tổng chi (Net): ${formatCurrency(totalNet)}\n` +
-            `Lương TB (Net): ${formatCurrency(avgNet)}`
-        );
     };
 
     const handleCalculateSalary = () => setShowCalculateDialog(true);
@@ -609,27 +680,16 @@ export function Salary() {
         setShowEditDialog(false);
     };
 
-    const handleConfirmCalculate = () => {
-        // Chỉ chuyển những nhân viên status pending của tháng đang chọn sang calculated
-        const pendingInMonth = monthData.filter((x) => x.status === "pending");
-        setSalaryData((prev) =>
-            prev.map((x) => {
-                if (x.month !== selectedMonth) return x;
-                if (x.status !== "pending") return x;
-                return { ...x, status: "calculated", calculatedDate: todayISO() };
-            })
-        );
-
-        const totalNetAfter = monthData.reduce((sum, x) => sum + calcNet(x), 0);
-
-        alert(
-            `✅ Đã tính lương thành công!\n\n` +
-            `Tháng: ${selectedMonth}\n` +
-            `Số lượng: ${pendingInMonth.length} nhân viên\n` +
-            `Tổng chi (Net): ${formatCurrency(totalNetAfter)}`
-        );
-
-        setShowCalculateDialog(false);
+    const handleConfirmCalculate = async () => {
+        const [year, month] = selectedMonth.split("-").map(Number);
+        try {
+            await calculateMonthlySalary(month, year);
+            await loadSalaryData();
+            alert(`Đã tính lương tháng ${selectedMonth} thành công.`);
+            setShowCalculateDialog(false);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Không thể tính lương.");
+        }
     };
 
     const handleApproveSalary = (employee: SalaryItem) => {
@@ -637,27 +697,36 @@ export function Salary() {
         setShowApproveDialog(true);
     };
 
-    const handleConfirmApprove = () => {
-        if (!selectedEmployee) return;
+    const handleConfirmApprove = async () => {
+        if (!selectedEmployee || isApproveSubmitting) return;
 
-        setSalaryData((prev) =>
-            prev.map((x) => {
-                if (x.id !== selectedEmployee.id) return x;
-                if (x.status !== "calculated") return x;
-                return { ...x, status: "approved", approvedDate: todayISO() };
-            })
-        );
-
-        alert(
-            `✅ Đã duyệt lương cho ${selectedEmployee.name}!\n\n` +
-            `Số tiền (Net): ${formatCurrency(calcNet(selectedEmployee))}\n` +
-            `Trạng thái: Chờ thanh toán`
-        );
-
-        setShowApproveDialog(false);
+        setIsApproveSubmitting(true);
+        try {
+            await approveSalary(selectedEmployee.id);
+            const employeeName = selectedEmployee.name;
+            setShowApproveDialog(false);
+            await loadSalaryData();
+            await Swal.fire({
+                icon: "success",
+                title: "Duyệt lương thành công",
+                text: `Bảng lương của ${employeeName} đã chuyển sang chờ thanh toán.`,
+                confirmButtonText: "Đã hiểu",
+                confirmButtonColor: "#2563eb",
+            });
+        } catch (error) {
+            await Swal.fire({
+                icon: "error",
+                title: "Không thể duyệt lương",
+                text: error instanceof Error ? error.message : "Vui lòng kiểm tra lại trạng thái bảng lương.",
+                confirmButtonText: "Đóng",
+                confirmButtonColor: "#dc2626",
+            });
+        } finally {
+            setIsApproveSubmitting(false);
+        }
     };
 
-    const handlePaySalary = (employee: SalaryItem) => {
+    const handlePaySalary = async (employee: SalaryItem) => {
         if (
             !confirm(
                 `Xác nhận thanh toán lương cho ${employee.name}?\n\nSố tiền (Net): ${formatCurrency(
@@ -667,19 +736,13 @@ export function Salary() {
         )
             return;
 
-        setSalaryData((prev) =>
-            prev.map((x) => {
-                if (x.id !== employee.id) return x;
-                if (x.status !== "approved") return x;
-                return { ...x, status: "paid", paidDate: todayISO() };
-            })
-        );
-
-        alert(
-            `✅ Đã thanh toán lương cho ${employee.name}!\n\n` +
-            `Số tiền (Net): ${formatCurrency(calcNet(employee))}\n` +
-            `Trạng thái: Đã thanh toán`
-        );
+        try {
+            await paySalary(employee.id);
+            await loadSalaryData();
+            alert(`Đã thanh toán lương cho ${employee.name}.`);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Không thể thanh toán lương.");
+        }
     };
 
     const handleSendPayslip = (employee: SalaryItem) => {
@@ -697,13 +760,16 @@ export function Salary() {
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Quản lý lương thưởng</h1>
                     <p className="mt-1 text-gray-500">Theo dõi bảng lương, duyệt và thanh toán theo từng tháng.</p>
+                    {apiStatus && <p className="mt-2 text-sm text-amber-700">{apiStatus}</p>}
                 </div>
 
                 <div className="flex flex-wrap gap-2 lg:justify-end">
-                    <Button className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCalculateSalary}>
-                        <Calculator className="size-4" />
-                        Tính lương
-                    </Button>
+                    {userRole === "admin" && (
+                        <Button className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCalculateSalary}>
+                            <Calculator className="size-4" />
+                            Tính lương
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -865,16 +931,18 @@ export function Salary() {
                                                 <Button size="sm" variant="outline" onClick={() => handleViewDetail(item)}>
                                                     Chi tiết
                                                 </Button>
-                                                <Button size="sm" variant="outline" className="gap-1" onClick={() => handleEditSalary(item)}>
-                                                    <Pencil className="size-3" />
-                                                    Sửa
-                                                </Button>
-                                                {item.status === "calculated" && (
+                                                {userRole === "admin" && (
+                                                    <Button size="sm" variant="outline" className="gap-1" onClick={() => handleEditSalary(item)}>
+                                                        <Pencil className="size-3" />
+                                                        Sửa
+                                                    </Button>
+                                                )}
+                                                {userRole === "admin" && item.status === "calculated" && (
                                                     <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleApproveSalary(item)}>
                                                         Duyệt
                                                     </Button>
                                                 )}
-                                                {item.status === "approved" && (
+                                                {userRole === "admin" && item.status === "approved" && (
                                                     <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handlePaySalary(item)}>
                                                         Thanh toán
                                                     </Button>
@@ -1210,14 +1278,19 @@ export function Salary() {
                     )}
 
                     <div className="flex justify-end gap-3">
-                        <Button variant="outline" onClick={() => setShowApproveDialog(false)}>
+                        <Button
+                            variant="outline"
+                            disabled={isApproveSubmitting}
+                            onClick={() => setShowApproveDialog(false)}
+                        >
                             Hủy bỏ
                         </Button>
                         <Button
                             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                            disabled={isApproveSubmitting}
                             onClick={handleConfirmApprove}
                         >
-                            Duyệt lương
+                            {isApproveSubmitting ? "Đang duyệt..." : "Duyệt lương"}
                         </Button>
                     </div>
                 </DialogContent>

@@ -22,7 +22,14 @@ namespace Admin.Services
 
             if (!IsAdmin(manager))
             {
-                query = query.Where(r => r.DepartmentId == manager.DepartmentId || r.ManagerId == manager.Id);
+                query = query.Where(r =>
+                    r.DepartmentId == manager.DepartmentId
+                    && r.EmployeeId != manager.Id
+                    && r.Employee != null
+                    && r.Employee.Role == "EMPLOYEE"
+                    && r.Employee.Status != "inactive"
+                    && r.Employee.Status != "da nghi viec"
+                    && r.Employee.Status != "Đã nghỉ việc");
             }
 
             var reviews = await query
@@ -110,60 +117,53 @@ namespace Admin.Services
             };
         }
 
-        public async Task<AgenticCompetencyReviewDto> GenerateReview(int managerId, int employeeId, int month, int year)
+        public async Task<AgenticCompetencyReviewDto> PersistWorkflowReview(
+            int managerId,
+            CompetencyInputDataDto input,
+            AgenticEmployeeAnalysisDto analysis,
+            AgenticRecommendationDto? recommendation)
         {
-            NormalizePeriod(ref month, ref year);
-
-            var input = await GetInputData(managerId, employeeId, month, year);
+            var manager = await GetManagerOrThrow(managerId);
             var employee = await _db.Employees
                 .AsNoTracking()
-                .FirstAsync(e => e.Id == employeeId);
+                .FirstOrDefaultAsync(e => e.Id == input.EmployeeId);
 
-            var attendanceScore = CalculateAttendanceScore(input);
-            var taskPerformanceScore = CalculateTaskPerformanceScore(input);
-            var qualitySkillScore = CalculateQualitySkillScore(input);
-            var disciplineScore = CalculateDisciplineResponsibilityScore(input);
-            var totalScore = Math.Round(
-                attendanceScore * 0.20m
-                + taskPerformanceScore * 0.40m
-                + qualitySkillScore * 0.25m
-                + disciplineScore * 0.15m,
-                2
-            );
+            if (employee == null)
+                throw new InvalidOperationException("Không tìm thấy nhân viên cần lưu đánh giá.");
 
-            var rating = GetRating(totalScore);
-            var summary = BuildSummary(input, attendanceScore, taskPerformanceScore, qualitySkillScore, disciplineScore, totalScore, rating);
-            var recommendation = BuildRecommendation(input, rating, attendanceScore, taskPerformanceScore, qualitySkillScore, disciplineScore);
+            EnsureManagerCanAccessEmployee(manager, employee);
 
             var review = await _db.CompetencyReviews
-                .FirstOrDefaultAsync(r => r.EmployeeId == employeeId && r.ReviewMonth == month && r.ReviewYear == year);
+                .FirstOrDefaultAsync(r =>
+                    r.EmployeeId == input.EmployeeId
+                    && r.ReviewMonth == input.Month
+                    && r.ReviewYear == input.Year);
 
             var now = DateTime.Now;
             if (review == null)
             {
                 review = new CompetencyReview
                 {
-                    EmployeeId = employeeId,
-                    ManagerId = managerId,
-                    DepartmentId = employee.DepartmentId,
-                    ReviewMonth = month,
-                    ReviewYear = year,
+                    EmployeeId = input.EmployeeId,
+                    ReviewMonth = input.Month,
+                    ReviewYear = input.Year,
                     CreatedAt = now
                 };
-
                 _db.CompetencyReviews.Add(review);
             }
 
             review.ManagerId = managerId;
             review.DepartmentId = employee.DepartmentId;
-            review.AttendanceScore = attendanceScore;
-            review.TaskPerformanceScore = taskPerformanceScore;
-            review.QualitySkillScore = qualitySkillScore;
-            review.DisciplineResponsibilityScore = disciplineScore;
-            review.TotalScore = totalScore;
-            review.Rating = rating;
-            review.AiSummary = summary;
-            review.AiRecommendation = recommendation;
+            review.AttendanceScore = analysis.AttendanceScore;
+            review.TaskPerformanceScore = analysis.TaskPerformanceScore;
+            review.QualitySkillScore = analysis.QualitySkillScore;
+            review.DisciplineResponsibilityScore = analysis.DisciplineResponsibilityScore;
+            review.TotalScore = analysis.TotalScore;
+            review.Rating = analysis.Rating;
+            review.AiSummary = BuildWorkflowSummary(input, analysis);
+            review.AiRecommendation = recommendation == null
+                ? "Reflection Agent chưa xác nhận được khuyến nghị phù hợp."
+                : $"{recommendation.Action}. {recommendation.Reason} Policy: {recommendation.PolicyReference}.";
             review.Status = "PENDING_APPROVAL";
             review.UpdatedAt = now;
 
@@ -233,6 +233,15 @@ namespace Admin.Services
 
             if (manager.DepartmentId == null || manager.DepartmentId != employee.DepartmentId)
                 throw new InvalidOperationException("Manager chỉ được đánh giá nhân viên cùng phòng ban.");
+
+            if (manager.Id == employee.Id)
+                throw new InvalidOperationException("Manager không được tự đánh giá chính mình.");
+
+            if (!IsEmployee(employee))
+                throw new InvalidOperationException("Manager chỉ được đánh giá nhân viên cấp dưới.");
+
+            if (IsInactive(employee))
+                throw new InvalidOperationException("Nhân viên đã nghỉ việc không nằm trong danh sách đánh giá team hiện tại.");
         }
 
         private async Task<int> GetApprovedLeaveDays(int employeeId, DateTime from, DateTime to)
@@ -251,116 +260,19 @@ namespace Admin.Services
             });
         }
 
-        private static decimal CalculateAttendanceScore(CompetencyInputDataDto input)
-        {
-            if (input.AttendanceDays == 0)
-                return input.ApprovedLeaveDays > 0 ? 85 : 75;
-
-            var penalty = input.LateDays * 4
-                + input.EarlyLeaveDays * 3
-                + input.IncompleteAttendanceDays * 5;
-
-            var leaveAdjustment = Math.Min(input.ApprovedLeaveDays * 1.5m, 8);
-            return ClampScore(100 - penalty + leaveAdjustment);
-        }
-
-        private static decimal CalculateTaskPerformanceScore(CompetencyInputDataDto input)
-        {
-            if (input.TotalTasks == 0) return 70;
-
-            var approvedRatio = (decimal)input.ApprovedTasks / input.TotalTasks;
-            var submittedOrApproved = input.Tasks.Count(t => t.Status is "SUBMITTED" or "APPROVED");
-            var submittedRatio = (decimal)submittedOrApproved / input.TotalTasks;
-            var overduePenalty = input.OverdueTasks * 7;
-            var rejectedPenalty = input.RejectedTasks * 8;
-
-            var score = input.AverageProgress * 0.35m
-                + approvedRatio * 45
-                + submittedRatio * 20
-                - overduePenalty
-                - rejectedPenalty;
-
-            return ClampScore(score);
-        }
-
-        private static decimal CalculateQualitySkillScore(CompetencyInputDataDto input)
-        {
-            if (input.AverageQualityScore <= 0) return input.TotalTasks == 0 ? 75 : 70;
-
-            var score = input.AverageQualityScore * 0.75m
-                + input.AverageDeadlineScore * 0.25m
-                - input.RevisionTasks * 4
-                - input.RejectedTasks * 8;
-
-            return ClampScore(score);
-        }
-
-        private static decimal CalculateDisciplineResponsibilityScore(CompetencyInputDataDto input)
-        {
-            var noProgressTasks = input.Tasks.Count(t => t.ProgressPercent == 0 && t.Status != "NEW");
-            var updateBonus = input.TotalTasks == 0
-                ? 0
-                : Math.Min((decimal)input.ProgressUpdateCount / input.TotalTasks * 8, 8);
-
-            var penalty = input.OverdueTasks * 8
-                + noProgressTasks * 5
-                + input.IncompleteAttendanceDays * 4
-                + input.LateDays * 2;
-
-            return ClampScore(92 + updateBonus - penalty);
-        }
-
-        private static string BuildSummary(
+        private static string BuildWorkflowSummary(
             CompetencyInputDataDto input,
-            decimal attendance,
-            decimal taskPerformance,
-            decimal qualitySkill,
-            decimal discipline,
-            decimal total,
-            string rating)
+            AgenticEmployeeAnalysisDto analysis)
         {
-            return $"{input.EmployeeName} được xếp loại {rating} với tổng điểm {total}. "
-                + $"Dữ liệu tháng {input.Month}/{input.Year} gồm {input.TotalTasks} task, "
-                + $"{input.ApprovedTasks} task đã duyệt, {input.OverdueTasks} task quá hạn, "
-                + $"{input.ProgressUpdateCount} lần cập nhật tiến độ. "
-                + $"Điểm thành phần: chuyên cần {attendance}, hiệu suất task {taskPerformance}, "
-                + $"chất lượng/kỹ năng {qualitySkill}, kỷ luật/trách nhiệm {discipline}.";
-        }
+            var findings = analysis.Findings.Count > 0
+                ? string.Join(" ", analysis.Findings)
+                : "Chưa có phát hiện chi tiết.";
+            var causes = analysis.RootCauses.Count > 0
+                ? $" Điểm cần lưu ý: {string.Join(" ", analysis.RootCauses)}"
+                : "";
 
-        private static string BuildRecommendation(
-            CompetencyInputDataDto input,
-            string rating,
-            decimal attendance,
-            decimal taskPerformance,
-            decimal qualitySkill,
-            decimal discipline)
-        {
-            if (rating == "Xuất sắc")
-            {
-                return "Đề xuất giao task có độ khó cao hơn, cân nhắc khen thưởng hoặc đưa vào nhóm nhân sự nòng cốt.";
-            }
-
-            if (taskPerformance < 70)
-            {
-                return "Đề xuất Manager chia nhỏ task, theo dõi tiến độ hằng tuần và hỗ trợ xử lý các điểm nghẽn.";
-            }
-
-            if (qualitySkill < 70)
-            {
-                return "Đề xuất đào tạo kỹ năng chuyên môn hoặc mentoring với nhân sự có kinh nghiệm.";
-            }
-
-            if (attendance < 75 || discipline < 75)
-            {
-                return "Đề xuất trao đổi trực tiếp với nhân viên về kỷ luật, deadline và thói quen cập nhật tiến độ.";
-            }
-
-            if (rating == "Tốt")
-            {
-                return "Đề xuất duy trì nhịp giao việc hiện tại, bổ sung task thử thách hơn để phát triển năng lực.";
-            }
-
-            return "Đề xuất đặt mục tiêu rõ hơn trong kỳ tiếp theo và đánh giá lại sau 2-4 tuần.";
+            return $"{input.EmployeeName} được xếp loại {analysis.Rating} với tổng điểm {analysis.TotalScore}. "
+                + $"{findings}{causes}";
         }
 
         private static AgenticCompetencyReviewDto MapReview(CompetencyReview review)
@@ -440,25 +352,17 @@ namespace Admin.Services
 
         private static bool IsLate(Attendance attendance)
         {
-            return attendance.CheckInTime.HasValue && attendance.CheckInTime.Value.TimeOfDay > new TimeSpan(8, 0, 0);
+            return attendance.CheckInTime.HasValue && attendance.CheckInTime.Value > new TimeSpan(8, 30, 0);
         }
 
         private static bool IsEarlyLeave(Attendance attendance)
         {
-            return attendance.CheckOutTime.HasValue && attendance.CheckOutTime.Value.TimeOfDay < new TimeSpan(17, 0, 0);
+            return attendance.CheckOutTime.HasValue && attendance.CheckOutTime.Value < new TimeSpan(17, 30, 0);
         }
 
         private static bool IsIncompleteAttendance(Attendance attendance)
         {
             return attendance.CheckInTime == null || attendance.CheckOutTime == null;
-        }
-
-        private static string GetRating(decimal totalScore)
-        {
-            if (totalScore >= 90) return "Xuất sắc";
-            if (totalScore >= 80) return "Tốt";
-            if (totalScore >= 65) return "Trung bình";
-            return "Cần cải thiện";
         }
 
         private static void NormalizePeriod(ref int month, ref int year)
@@ -478,9 +382,17 @@ namespace Admin.Services
             return string.Equals(employee.Role, "ADMIN", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static decimal ClampScore(decimal value)
+        private static bool IsEmployee(Employee employee)
         {
-            return Math.Round(Math.Max(0, Math.Min(100, value)), 2);
+            return string.Equals(employee.Role, "EMPLOYEE", StringComparison.OrdinalIgnoreCase);
         }
+
+        private static bool IsInactive(Employee employee)
+        {
+            return string.Equals(employee.Status, "inactive", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(employee.Status, "da nghi viec", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(employee.Status, "Đã nghỉ việc", StringComparison.OrdinalIgnoreCase);
+        }
+
     }
 }

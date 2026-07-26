@@ -14,6 +14,8 @@ namespace Admin.Data
 
         // ✅ THÊM DÒNG NÀY
         public DbSet<Attendance> Attendances { get; set; }
+        public DbSet<AttendanceRequest> AttendanceRequests { get; set; }
+        public DbSet<AttendanceShift> AttendanceShifts { get; set; }
 
         // ✅ THÊM 2 BẢNG DANH MỤC
         public DbSet<Department> Departments { get; set; }
@@ -113,14 +115,61 @@ namespace Admin.Data
 
                 entity.Property(x => x.CheckInTime).HasColumnName("check_in");
                 entity.Property(x => x.CheckOutTime).HasColumnName("check_out");
+                entity.Property(x => x.WorkReportTitle).HasColumnName("work_report_title");
+                entity.Property(x => x.WorkReportDescription).HasColumnName("work_report_description");
+                entity.Property(x => x.WorkReportNote).HasColumnName("work_report_note");
 
                 entity.Ignore(x => x.TotalHours);
                 entity.Ignore(x => x.IsLate);
                 entity.Ignore(x => x.IsEarlyLeave);
                 entity.Ignore(x => x.Note);
                 entity.Ignore(x => x.Status);
-                entity.Ignore(x => x.CreatedAt);
-                entity.Ignore(x => x.UpdatedAt);
+                entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+                entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            });
+
+            modelBuilder.Entity<AttendanceRequest>(entity =>
+            {
+                entity.ToTable("attendance_requests");
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.Id).HasColumnName("request_id");
+                entity.Property(x => x.EmployeeId).HasColumnName("employee_id");
+                entity.Property(x => x.WorkDate).HasColumnName("work_date");
+                entity.Property(x => x.RequestType).HasColumnName("request_type");
+                entity.Property(x => x.RequestedCheckIn).HasColumnName("requested_check_in");
+                entity.Property(x => x.RequestedCheckOut).HasColumnName("requested_check_out");
+                entity.Property(x => x.OriginalCheckIn).HasColumnName("original_check_in");
+                entity.Property(x => x.OriginalCheckOut).HasColumnName("original_check_out");
+                entity.Property(x => x.Reason).HasColumnName("reason");
+                entity.Property(x => x.WorkReportTitle).HasColumnName("work_report_title");
+                entity.Property(x => x.WorkReportDescription).HasColumnName("work_report_description");
+                entity.Property(x => x.Status).HasColumnName("status");
+                entity.Property(x => x.ReviewedById).HasColumnName("reviewed_by");
+                entity.Property(x => x.ReviewNote).HasColumnName("review_note");
+                entity.Property(x => x.SubmittedAt).HasColumnName("submitted_at");
+                entity.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
+
+                entity.HasOne(x => x.Employee)
+                    .WithMany()
+                    .HasForeignKey(x => x.EmployeeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.Reviewer)
+                    .WithMany()
+                    .HasForeignKey(x => x.ReviewedById)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<AttendanceShift>(entity =>
+            {
+                entity.ToTable("attendance_shifts");
+                entity.HasKey(x => x.Id);
+
+                entity.HasOne(x => x.Employee)
+                    .WithMany()
+                    .HasForeignKey(x => x.EmployeeId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // =========================

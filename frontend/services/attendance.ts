@@ -1,5 +1,4 @@
 import { API_BASE } from './apiBase';
-import { getStoredToken } from './authSession';
 
 export interface AttendanceApiItem {
   id: number;
@@ -14,6 +13,9 @@ export interface AttendanceApiItem {
   isEarlyLeave: boolean;
   note?: string | null;
   status: string;
+  workReportTitle?: string | null;
+  workReportDescription?: string | null;
+  workReportNote?: string | null;
 }
 
 export interface AttendanceActionResponse {
@@ -35,25 +37,73 @@ export interface AttendanceMonthlyReportItem {
 
 export interface AttendanceRequestApiItem {
   id: number;
+  employeeId: number | string;
+  employeeCode?: string;
   employeeName: string;
-  employeeId: string;
+  departmentId?: number | null;
   department: string;
-  date: string;
-  checkIn: string;
-  checkOut: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected' | string;
-  submittedAt: string;
-  reviewedAt?: string | null;
-  reviewedBy?: string | null;
-  reviewNote?: string | null;
-  type: 'supplement' | 'adjustment' | string;
+  workDate?: string;
+  date?: string;
+  requestType?: 'SUPPLEMENT' | 'ADJUSTMENT';
+  type?: 'supplement' | 'adjustment';
+  requestedCheckIn?: string | null;
+  requestedCheckOut?: string | null;
+  checkIn?: string | null;
+  checkOut?: string | null;
   originalCheckIn?: string | null;
   originalCheckOut?: string | null;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewedAt?: string | null;
+  reviewedById?: number | null;
+  reviewedBy?: string | null;
+  reviewNote?: string | null;
+  workReportTitle?: string | null;
+  workReportDescription?: string | null;
+}
+
+export interface CreateAttendanceRequestPayload {
+  employeeId: number;
+  workDate: string;
+  requestType: 'SUPPLEMENT' | 'ADJUSTMENT';
+  requestedCheckIn: string;
+  requestedCheckOut: string;
+  reason: string;
+  workReportTitle?: string;
+  workReportDescription?: string;
+}
+
+export interface AttendanceCheckOutPayload {
+  workReportTitle?: string;
+  workReportDescription?: string;
+  workReportNote?: string;
+}
+
+export interface AttendanceShiftApiItem {
+  id: number;
+  employeeId: number;
+  workDate: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  description?: string | null;
+  status: 'PLANNED' | 'WORKING' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveAttendanceShiftPayload {
+  employeeId: number;
+  workDate: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  description?: string;
 }
 
 async function request<T>(path: string, init?: RequestInit) {
-  const token = getStoredToken();
+  const token = typeof window !== 'undefined' ? window.localStorage.getItem('hrm_token') : null;
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
@@ -65,7 +115,14 @@ async function request<T>(path: string, init?: RequestInit) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`${path} failed: ${res.status} ${text}`);
+    let message = text;
+    try {
+      const payload = JSON.parse(text) as { message?: string };
+      message = payload.message || text;
+    } catch {
+      // Keep the original response when it is not JSON.
+    }
+    throw new Error(message || `${path} thất bại (${res.status}).`);
   }
 
   const text = await res.text();
@@ -78,9 +135,10 @@ export function checkInEmployeeAttendance(employeeId: number) {
   });
 }
 
-export function checkOutEmployeeAttendance(employeeId: number) {
+export function checkOutEmployeeAttendance(employeeId: number, payload?: AttendanceCheckOutPayload) {
   return request<AttendanceActionResponse>(`/api/admin/attendance/checkout/${employeeId}`, {
     method: 'POST',
+    body: JSON.stringify(payload || {}),
   });
 }
 
@@ -92,20 +150,69 @@ export function fetchAttendanceMonthlyReport(year: number, month: number) {
   return request<AttendanceMonthlyReportItem[]>(`/api/admin/attendance/report?year=${year}&month=${month}`);
 }
 
-export function fetchAttendanceRequests() {
-  return request<AttendanceRequestApiItem[]>('/api/admin/attendance/requests');
+export function fetchAttendanceMonthlyRecords(year: number, month: number) {
+  return request<AttendanceApiItem[]>(`/api/admin/attendance/records?year=${year}&month=${month}`);
 }
 
-export function approveAttendanceRequest(id: number, note?: string) {
-  return request<AttendanceRequestApiItem>(`/api/admin/attendance/requests/${id}/approve`, {
-    method: 'POST',
-    body: JSON.stringify({ note }),
+export function updateAttendanceWorkReport(
+  attendanceId: number,
+  payload: AttendanceCheckOutPayload,
+) {
+  return request<AttendanceApiItem>(`/api/admin/attendance/records/${attendanceId}/report`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
   });
 }
 
-export function rejectAttendanceRequest(id: number, note?: string) {
-  return request<AttendanceRequestApiItem>(`/api/admin/attendance/requests/${id}/reject`, {
+export function fetchAttendanceRequests(status?: AttendanceRequestApiItem['status'] | 'ALL') {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  return request<AttendanceRequestApiItem[]>(`/api/admin/attendance/requests${query}`);
+}
+
+export function createAttendanceRequest(payload: CreateAttendanceRequestPayload) {
+  return request<AttendanceRequestApiItem>('/api/admin/attendance/requests', {
     method: 'POST',
-    body: JSON.stringify({ note }),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reviewAttendanceRequest(
+  requestId: number,
+  action: 'approve' | 'reject',
+  note?: string,
+) {
+  return request<AttendanceRequestApiItem>(
+    `/api/admin/attendance/requests/${requestId}/${action}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ note: note || null }),
+    },
+  );
+}
+
+export function fetchAttendanceShifts(year: number, month: number, employeeId?: number) {
+  const employeeQuery = employeeId ? `&employeeId=${employeeId}` : '';
+  return request<AttendanceShiftApiItem[]>(
+    `/api/admin/attendance/shifts?year=${year}&month=${month}${employeeQuery}`,
+  );
+}
+
+export function createAttendanceShift(payload: SaveAttendanceShiftPayload) {
+  return request<AttendanceShiftApiItem>('/api/admin/attendance/shifts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAttendanceShift(id: number, payload: SaveAttendanceShiftPayload) {
+  return request<AttendanceShiftApiItem>(`/api/admin/attendance/shifts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAttendanceShift(id: number) {
+  return request<void>(`/api/admin/attendance/shifts/${id}`, {
+    method: 'DELETE',
   });
 }

@@ -8,11 +8,13 @@ import {
   BrainCircuit,
   CalendarDays,
   CheckCircle2,
-  ClipboardList,
+  ClipboardList,
+  Download,
   Edit3,
   FileCheck2,
   Plus,
   RefreshCcw,
+  Search,
   TimerReset,
   UserRound,
   XCircle,
@@ -27,8 +29,8 @@ import { Progress } from './ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import { getSessionEmail } from '@/services/authSession';
+import { runAgenticAiWorkflow, type AgenticAiWorkflowApi } from '@/services/agenticAi';
 import { fetchEmployees, type EmployeeApiItem } from '@/services/employees';
-import { generateCompetencyReview, type AgenticCompetencyReviewApi } from '@/services/managerCompetency';
 import {
   createManagerTask,
   fetchManagerTasks,
@@ -43,8 +45,7 @@ import {
 } from '@/services/tasks';
 
 interface ManagerTasksProps {
-  mode?: 'manage' | 'review';
-  departmentName: string;
+  departmentName?: string;
 }
 
 type QuickFilter = 'all' | 'need-review' | 'active' | 'done' | 'issue';
@@ -114,13 +115,13 @@ function buildPeriodOptions() {
   const start = new Date();
   start.setDate(1);
 
-  for (let offset = 0; offset > -12; offset -= 1) {
+  for (let offset = -5; offset <= 2; offset += 1) {
     const date = new Date(start);
     date.setMonth(start.getMonth() + offset);
     options.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
   }
 
-  return options;
+  return options.reverse();
 }
 
 const periodOptions = buildPeriodOptions();
@@ -188,43 +189,52 @@ function getInitials(name: string) {
 }
 
 function isActiveEmployee(employee: EmployeeApiItem) {
-  return employee.status !== 'Đã nghỉ việc' && employee.status !== 'inactive';
+  const status = employee.status.trim().toLowerCase();
+  return status !== 'inactive' && status !== 'đã nghỉ việc';
 }
 
-function canManageDepartment(manager: EmployeeApiItem, departmentName: string) {
-  if (manager.role === 'ADMIN') return true;
+function canManageDepartment(manager: EmployeeApiItem, departmentName?: string) {
+  if (!departmentName || manager.role === 'ADMIN') return true;
   return manager.role === 'MANAGER' && manager.departmentName === departmentName;
 }
 
-function resolveManagerForDepartment(employeeList: EmployeeApiItem[], email: string, departmentName: string) {
-  const loggedInManager = employeeList.find((item) => {
-    const sameEmail = item.email.toLowerCase() === email.toLowerCase();
-    return sameEmail && isActiveEmployee(item) && (item.role === 'MANAGER' || item.role === 'ADMIN');
-  });
+function resolveManager(
+  employees: EmployeeApiItem[],
+  sessionEmail: string,
+  departmentName?: string,
+) {
+  const loggedInManager = employees.find((employee) =>
+    employee.email.toLowerCase() === sessionEmail.toLowerCase()
+    && isActiveEmployee(employee)
+    && (employee.role === 'MANAGER' || employee.role === 'ADMIN')
+  );
 
   if (loggedInManager && canManageDepartment(loggedInManager, departmentName)) {
     return loggedInManager;
   }
 
-  return (
-    employeeList.find(
-      (item) => isActiveEmployee(item) && item.role === 'MANAGER' && item.departmentName === departmentName,
-    ) ||
-    employeeList.find((item) => isActiveEmployee(item) && item.role === 'ADMIN') ||
-    loggedInManager ||
-    null
-  );
+  if (!departmentName) return loggedInManager || null;
+
+  return employees.find((employee) =>
+    isActiveEmployee(employee)
+    && employee.role === 'MANAGER'
+    && employee.departmentName === departmentName
+  ) || employees.find((employee) =>
+    isActiveEmployee(employee) && employee.role === 'ADMIN'
+  ) || null;
 }
 
-export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksProps) {
+export function ManagerTasks({ departmentName }: ManagerTasksProps) {
   const [manager, setManager] = useState<EmployeeApiItem | null>(null);
   const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
   const [tasks, setTasks] = useState<TaskApiItem[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>(mode === 'review' ? 'need-review' : 'all');
-  const [employeeFilter, setEmployeeFilter] = useState('all');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [search, setSearch] = useState('');
+  const [employeeFilter, setEmployeeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
   const [period, setPeriod] = useState(currentPeriodValue());
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskApiItem | null>(null);
@@ -236,34 +246,47 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     decision: 'APPROVED',
     comment: '',
   });
-  const [aiReview, setAiReview] = useState<AgenticCompetencyReviewApi | null>(null);
+  const [aiWorkflow, setAiWorkflow] = useState<AgenticAiWorkflowApi | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const effectiveDepartmentName = manager?.departmentName || departmentName || '';
 
   const selectedTask = useMemo(() => {
-    return tasks.find((task) => task.id === selectedTaskId && task.departmentName === departmentName && isTaskInPeriod(task, period)) || null;
-  }, [departmentName, period, selectedTaskId, tasks]);
+    return tasks.find((task) =>
+      task.id === selectedTaskId
+      && (!effectiveDepartmentName || task.departmentName === effectiveDepartmentName)
+      && isTaskInPeriod(task, period)
+    ) || null;
+  }, [effectiveDepartmentName, period, selectedTaskId, tasks]);
 
   const departmentEmployees = useMemo(() => {
-    return employees.filter((employee) => employee.departmentName === departmentName && employee.status !== 'Đã nghỉ việc');
-  }, [departmentName, employees]);
+    return employees.filter((employee) =>
+      (!effectiveDepartmentName || employee.departmentName === effectiveDepartmentName)
+      && employee.status !== 'Đã nghỉ việc'
+    );
+  }, [effectiveDepartmentName, employees]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const employeeList = await fetchEmployees();
       const email = getSessionEmail();
-      const currentManager = resolveManagerForDepartment(employeeList, email, departmentName);
+      const currentManager = resolveManager(employeeList, email, departmentName);
 
       if (!currentManager || !canManageDepartment(currentManager, departmentName)) {
         setManager(null);
         setEmployees(employeeList);
         setTasks([]);
-        toast.fire({ icon: 'warning', title: `Không tìm thấy Manager/Admin quản lý phòng ${departmentName}` });
+        toast.fire({ icon: 'warning', title: 'Không tìm thấy Manager từ tài khoản đăng nhập' });
         return;
       }
 
       const taskList = await fetchManagerTasks(currentManager.id, parsePeriod(period));
-      const visibleTasks = taskList.filter((task) => task.departmentName === departmentName && isTaskInPeriod(task, period));
+      const managerDepartment = currentManager.departmentName || departmentName || '';
+      const visibleTasks = taskList.filter((task) =>
+        (!managerDepartment || task.departmentName === managerDepartment)
+        && isTaskInPeriod(task, period)
+      );
 
       setManager(currentManager);
       setEmployees(employeeList);
@@ -299,12 +322,19 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
   }, [selectedTask?.id]);
 
   const scopedTasks = useMemo(() => {
-    return tasks.filter((task) => task.departmentName === departmentName && isTaskInPeriod(task, period));
-  }, [departmentName, period, tasks]);
+    return tasks.filter((task) =>
+      (!effectiveDepartmentName || task.departmentName === effectiveDepartmentName)
+      && isTaskInPeriod(task, period)
+    );
+  }, [effectiveDepartmentName, period, tasks]);
 
   const filteredTasks = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+
     return scopedTasks.filter((task) => {
+      const matchesSearch = !keyword || `${task.title} ${task.description || ''} ${task.employeeName}`.toLowerCase().includes(keyword);
       const matchesEmployee = employeeFilter === 'all' || String(task.employeeId) === employeeFilter;
+      const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
       const matchesQuick =
         quickFilter === 'all' ||
         (quickFilter === 'need-review' && task.status === 'SUBMITTED') ||
@@ -312,9 +342,9 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
         (quickFilter === 'done' && task.status === 'APPROVED') ||
         (quickFilter === 'issue' && (isTaskOverdue(task) || task.status === 'REVISION_REQUIRED' || task.status === 'REJECTED'));
 
-      return matchesEmployee && matchesQuick;
+      return matchesSearch && matchesEmployee && matchesStatus && matchesQuick;
     });
-  }, [employeeFilter, quickFilter, scopedTasks]);
+  }, [employeeFilter, quickFilter, scopedTasks, search, statusFilter]);
 
   const kpis = useMemo(() => {
     const total = scopedTasks.length;
@@ -331,7 +361,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     { id: 'need-review', label: 'Chờ duyệt', count: kpis.needReview },
     { id: 'active', label: 'Đang làm', count: kpis.active },
     { id: 'done', label: 'Hoàn thành', count: kpis.done },
-    { id: 'issue', label: 'Cần sửa', count: kpis.issue },
+    { id: 'issue', label: 'Cần xử lý', count: kpis.issue },
   ];
 
   const updateTaskForm = (key: keyof typeof taskForm, value: string) => {
@@ -441,14 +471,50 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
     if (!manager) return;
     const selectedPeriod = parsePeriod(period);
 
+    setAiWorkflow(null);
+    setAiOpen(true);
+    setAiLoading(true);
+
     try {
-      const review = await generateCompetencyReview(manager.id, employeeId, selectedPeriod);
-      setAiReview(review);
-      setAiOpen(true);
+      const workflow = await runAgenticAiWorkflow({
+        managerId: manager.id,
+        employeeId,
+        month: selectedPeriod.month,
+        year: selectedPeriod.year,
+        goal: 'Evaluate employee competency from task, review, attendance and leave data, then recommend manager actions.',
+        persistReview: true,
+      });
+      setAiWorkflow(workflow);
     } catch (error) {
-      console.error('Generate competency failed:', error);
+      console.error('Run Agentic AI workflow failed:', error);
+      setAiOpen(false);
       Swal.fire('Không tạo được đánh giá AI', 'Cần có dữ liệu task/review/chấm công phù hợp hoặc kiểm tra backend.', 'error');
+    } finally {
+      setAiLoading(false);
     }
+  };
+
+  const exportReport = () => {
+    const rows = [
+      ['Nhan vien', 'Task', 'Trang thai', 'Uu tien', 'Deadline', 'Tien do', 'Diem ky vong'],
+      ...filteredTasks.map((task) => [
+        task.employeeName,
+        task.title,
+        statusMeta[task.status].label,
+        task.priority,
+        formatDate(task.deadline),
+        `${task.progressPercent}%`,
+        String(task.expectedScore),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `manager-task-report-${period}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -465,7 +531,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
               <CalendarDays className="mr-2 size-4 text-blue-600" />
               <SelectValue placeholder="Kỳ đánh giá" />
             </SelectTrigger>
-            <SelectContent className="max-h-72 overflow-y-auto">
+            <SelectContent>
               {periodOptions.map((item) => (
                 <SelectItem key={item} value={item}>
                   {formatPeriod(item)}
@@ -473,15 +539,23 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
               ))}
             </SelectContent>
           </Select>
-          {mode === 'manage' && (
-            <Button className="h-10 rounded-2xl bg-blue-600 px-5 shadow-sm hover:bg-blue-700" onClick={openCreateDialog} disabled={!manager}>
-              <Plus className="mr-2 size-4" />
-              Giao task
-            </Button>
-          )}
+          <Button className="h-10 rounded-2xl bg-blue-600 px-5 shadow-sm hover:bg-blue-700" onClick={openCreateDialog} disabled={!manager}>
+            <Plus className="mr-2 size-4" />
+            Giao task
+          </Button>
           <Button variant="outline" size="icon" className="h-10 w-10 rounded-full bg-white shadow-sm" onClick={loadData} disabled={loading} aria-label="Làm mới">
             <RefreshCcw className="size-4" />
-          </Button>
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 rounded-full bg-white shadow-sm"
+            onClick={exportReport}
+            disabled={filteredTasks.length === 0}
+            aria-label="Xuất báo cáo"
+          >
+            <Download className="size-4" />
+          </Button>
         </div>
       </div>
 
@@ -510,7 +584,16 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
             ))}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[220px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tìm theo tên task hoặc nhân viên..."
+                className="h-10 rounded-2xl border-slate-200 bg-slate-50 pl-9"
+              />
+            </div>
             <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
               <SelectTrigger className="h-10 rounded-2xl bg-white">
                 <SelectValue placeholder="Nhân viên" />
@@ -523,7 +606,20 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as TaskStatus | 'all')}>
+              <SelectTrigger className="h-10 rounded-2xl bg-white">
+                <SelectValue placeholder="Trạng thái" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                {Object.entries(statusMeta).map(([status, meta]) => (
+                  <SelectItem key={status} value={status}>
+                    {meta.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </Card>
@@ -543,7 +639,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
               key={task.id}
               task={task}
               selected={selectedTaskId === task.id}
-              departmentName={departmentName}
+              departmentName={effectiveDepartmentName}
               onSelect={() => {
                 setSelectedTaskId(task.id);
                 setDetailOpen(true);
@@ -558,7 +654,6 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
       <TaskDetailDialog
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        mode={mode}
         task={selectedTask}
         reviewDraft={reviewDraft}
         onReviewDraftChange={setReviewDraft}
@@ -587,7 +682,7 @@ export function ManagerTasks({ mode = 'manage', departmentName }: ManagerTasksPr
         onSave={saveTask}
       />
 
-      <AiReviewDialog open={aiOpen} review={aiReview} onOpenChange={setAiOpen} />
+      <AiReviewDialog open={aiOpen} workflow={aiWorkflow} loading={aiLoading} onOpenChange={setAiOpen} />
     </div>
   );
 }
@@ -725,7 +820,6 @@ function TaskMeta({
 function TaskDetailDialog({
   open,
   onOpenChange,
-  mode,
   task,
   reviewDraft,
   onReviewDraftChange,
@@ -735,7 +829,6 @@ function TaskDetailDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mode: 'manage' | 'review';
   task: TaskApiItem | null;
   reviewDraft: ReviewTaskPayload;
   onReviewDraftChange: (draft: ReviewTaskPayload) => void;
@@ -853,12 +946,10 @@ function TaskDetailDialog({
         )}
 
         <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2">
-          {mode === 'manage' && (
-            <Button variant="outline" onClick={() => onEdit(task)} disabled={!canEditTask(task)}>
-              <Edit3 className="mr-2 size-4" />
-              Chỉnh sửa
-            </Button>
-          )}
+          <Button variant="outline" onClick={() => onEdit(task)} disabled={!canEditTask(task)}>
+            <Edit3 className="mr-2 size-4" />
+            Chỉnh sửa
+          </Button>
           <Button variant="outline" onClick={() => onAi(task.employeeId)}>
             <BrainCircuit className="mr-2 size-4" />
             AI đánh giá
@@ -966,32 +1057,85 @@ function TaskFormDialog({
   );
 }
 
-function AiReviewDialog({ open, review, onOpenChange }: { open: boolean; review: AgenticCompetencyReviewApi | null; onOpenChange: (open: boolean) => void }) {
+function AiReviewDialog({
+  open,
+  workflow,
+  loading,
+  onOpenChange,
+}: {
+  open: boolean;
+  workflow: AgenticAiWorkflowApi | null;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const employee = workflow?.analysis.employees[0];
+  const recommendation = workflow?.recommendation.items[0];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>AI đánh giá năng lực</DialogTitle>
           <DialogDescription>Kết quả đánh giá theo kỳ đã chọn.</DialogDescription>
         </DialogHeader>
-        {!review ? (
+        {loading || !workflow || !employee ? (
           <div className="py-8 text-center text-sm text-slate-500">Đang tạo đánh giá...</div>
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-5">
-              <AiScore label="Tổng" value={review.totalScore} />
-              <AiScore label="Task" value={review.taskPerformanceScore} />
-              <AiScore label="Chất lượng" value={review.qualitySkillScore} />
-              <AiScore label="Kỷ luật" value={review.disciplineResponsibilityScore} />
-              <AiScore label="Chuyên cần" value={review.attendanceScore} />
+              <AiScore label="Tổng" value={employee.totalScore} />
+              <AiScore label="Task" value={employee.taskPerformanceScore} />
+              <AiScore label="Chất lượng" value={employee.qualitySkillScore} />
+              <AiScore label="Kỷ luật" value={employee.disciplineResponsibilityScore} />
+              <AiScore label="Chuyên cần" value={employee.attendanceScore} />
             </div>
             <div className="rounded-2xl border border-slate-100 p-4">
               <p className="mb-2 font-semibold text-slate-900">Nhận xét AI</p>
-              <p className="text-sm leading-6 text-slate-600">{review.aiSummary}</p>
+              <p className="text-sm leading-6 text-slate-600">{workflow.report.summary}</p>
             </div>
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
               <p className="mb-2 font-semibold text-emerald-900">Khuyến nghị AI</p>
-              <p className="text-sm leading-6 text-emerald-900">{review.aiRecommendation}</p>
+              <p className="text-sm leading-6 text-emerald-900">{recommendation?.action || workflow.recommendation.overallRecommendation}</p>
+              {recommendation && (
+                <p className="mt-2 text-xs leading-5 text-emerald-800">
+                  {recommendation.reason} Evidence: {recommendation.evidence}
+                </p>
+              )}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="mb-2 text-sm font-semibold text-blue-900">Planner Agent</p>
+                <div className="space-y-2">
+                  {workflow.plan.steps.slice(0, 4).map((step) => (
+                    <div key={`${step.order}-${step.agent}`} className="rounded-xl bg-white/70 p-2 text-xs text-blue-900">
+                      <span className="font-bold">{step.order}. {step.agent}</span> - {step.action}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4">
+                <p className="mb-2 text-sm font-semibold text-violet-900">Reflection Agent</p>
+                <Badge className={workflow.reflection.isValid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>
+                  {workflow.reflection.isValid ? 'Validation passed' : 'Needs review'}
+                </Badge>
+                <div className="mt-3 space-y-2 text-xs text-violet-900">
+                  {(workflow.reflection.issues.length > 0 ? workflow.reflection.issues : workflow.reflection.checks).slice(0, 4).map((item) => (
+                    <p key={item} className="rounded-xl bg-white/70 p-2">{item}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-100 p-4">
+              <p className="mb-2 text-sm font-semibold text-slate-900">Agent trace</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {workflow.trace.slice(0, 6).map((trace) => (
+                  <div key={`${trace.agent}-${trace.action}-${trace.createdAt}`} className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+                    <p className="font-semibold text-slate-900">{trace.agent}</p>
+                    <p>{trace.action}</p>
+                    <p className="mt-1 text-slate-500">{trace.result}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

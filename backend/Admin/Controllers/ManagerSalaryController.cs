@@ -1,8 +1,11 @@
 using Admin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Admin.Controllers
 {
+    [Authorize(Roles = "MANAGER,ADMIN")]
     [ApiController]
     [Route("api/manager/salary")]
     public class ManagerSalaryController : ControllerBase
@@ -15,25 +18,50 @@ namespace Admin.Controllers
         }
 
         [HttpGet]
-        public IActionResult GetTeamSalary([FromQuery] int managerId, [FromQuery] int month, [FromQuery] int year, [FromQuery] string? status)
+        public IActionResult GetTeam(
+            [FromQuery] int managerId,
+            [FromQuery] int month,
+            [FromQuery] int year,
+            [FromQuery] string? status)
         {
-            if (managerId <= 0)
+            if (month is < 1 or > 12 || year < 2000)
             {
-                return BadRequest(new { message = "Thiếu managerId" });
+                return BadRequest(new { message = "Tháng/năm không hợp lệ." });
             }
 
-            if (month < 1 || month > 12 || year < 2000)
+            var actorClaim = User.FindFirstValue("employee_id");
+            if (!int.TryParse(actorClaim, out var actorId))
             {
-                return BadRequest(new { message = "Tháng/năm không hợp lệ" });
+                return Forbid();
+            }
+
+            if (!User.IsInRole("ADMIN") && managerId != actorId)
+            {
+                return Forbid();
             }
 
             return Ok(_service.GetByManager(managerId, month, year, status));
         }
 
         [HttpGet("dashboard")]
-        public IActionResult Dashboard([FromQuery] int managerId, [FromQuery] int month, [FromQuery] int year)
+        public IActionResult Dashboard(
+            [FromQuery] int managerId,
+            [FromQuery] int month,
+            [FromQuery] int year)
         {
+            var actorClaim = User.FindFirstValue("employee_id");
+            if (!int.TryParse(actorClaim, out var actorId))
+            {
+                return Forbid();
+            }
+
+            if (!User.IsInRole("ADMIN") && managerId != actorId)
+            {
+                return Forbid();
+            }
+
             var rows = _service.GetByManager(managerId, month, year, null);
+
             return Ok(new
             {
                 totalGross = rows.Sum(x => x.TotalIncome),

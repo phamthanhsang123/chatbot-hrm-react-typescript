@@ -51,11 +51,6 @@ export interface AgenticCompetencyReviewApi {
   updatedAt: string;
 }
 
-export interface GenerateCompetencyPayload {
-  month: number;
-  year: number;
-}
-
 export interface ReviewDecisionPayload {
   managerNote?: string | null;
 }
@@ -90,13 +85,6 @@ export function fetchCompetencyInputData(managerId: number, employeeId: number, 
   return request<CompetencyInputDataApi>(
     `/api/manager/competency/${employeeId}/input-data?managerId=${managerId}&month=${month}&year=${year}`,
   );
-}
-
-export function generateCompetencyReview(managerId: number, employeeId: number, payload: GenerateCompetencyPayload) {
-  return request<AgenticCompetencyReviewApi>(`/api/manager/competency/${employeeId}/generate?managerId=${managerId}`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
 }
 
 export function approveCompetencyReview(managerId: number, reviewId: number, payload: ReviewDecisionPayload) {

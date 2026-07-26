@@ -52,30 +52,27 @@ async function request<T>(path: string, init?: RequestInit) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`${path} failed: ${res.status} ${text}`);
+    let message = text;
+
+    try {
+      const payload = JSON.parse(text) as { message?: string };
+      message = payload.message || text;
+    } catch {
+      // Keep plain-text errors returned by older backend endpoints.
+    }
+
+    throw new Error(message || `${path} failed: ${res.status}`);
   }
 
   const text = await res.text();
-  return (text ? JSON.parse(text) : undefined) as T;
-}
+  if (!text) return undefined as T;
 
-async function localRequest<T>(path: string, init?: RequestInit) {
-  const token = getStoredToken();
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers || {}),
-    },
-  });
-
-  if (!res.ok) {
-    return [] as T;
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text) as T;
   }
 
-  const text = await res.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+  return text as T;
 }
 
 export function fetchSalaryDashboard(month: number, year: number) {
@@ -89,15 +86,15 @@ export function fetchSalaryRows(month: number, year: number, status?: string) {
 
 export function fetchManagerSalaryRows(managerId: number, month: number, year: number, status?: string) {
   const statusQuery = status && status !== 'all' ? `&status=${encodeURIComponent(status)}` : '';
-  return localRequest<SalaryRowApiItem[]>(`/api/manager/salary?managerId=${managerId}&month=${month}&year=${year}${statusQuery}`);
+  return request<SalaryRowApiItem[]>(
+    `/api/manager/salary?managerId=${managerId}&month=${month}&year=${year}${statusQuery}`,
+  );
 }
 
-export async function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
-  try {
-    return await localRequest<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
-  } catch {
-    return [];
-  }
+export function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
+  return request<SalaryRowApiItem[]>(
+    `/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`,
+  );
 }
 
 export function calculateMonthlySalary(month: number, year: number) {
@@ -107,13 +104,13 @@ export function calculateMonthlySalary(month: number, year: number) {
 }
 
 export function approveSalary(id: number) {
-  return request<string>(`/api/admin/salary/${id}/approve`, {
+  return request<{ message: string }>(`/api/admin/salary/${id}/approve`, {
     method: 'POST',
   });
 }
 
 export function paySalary(id: number) {
-  return request<string>(`/api/admin/salary/${id}/pay`, {
+  return request<{ message: string }>(`/api/admin/salary/${id}/pay`, {
     method: 'POST',
   });
 }

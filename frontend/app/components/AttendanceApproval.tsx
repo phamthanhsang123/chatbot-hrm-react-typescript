@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { CheckCircle, XCircle, Clock, Calendar, User, FileText, Eye, MessageSquare, ArrowRight, Search, Filter, ListChecks, Target, AlertTriangle, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import Swal from 'sweetalert2';
+import { CheckCircle, XCircle, Clock, Calendar, FileText, Eye, MessageSquare, ArrowRight, Search, ListChecks, Target, AlertTriangle, ChevronLeft, ChevronRight, Download, Users } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -16,17 +17,23 @@ import {
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { MetricCard } from './MetricCard';
-import { HRM_SYNC_KEYS, readSyncedRecords } from '../employees/hrmSync';
+import {
+  AttendanceApiItem,
+  AttendanceRequestApiItem,
+  fetchAttendanceMonthlyRecords,
+  fetchAttendanceRequests,
+  reviewAttendanceRequest,
+} from '@/services/attendance';
 
 // Helper function to get day of week in Vietnamese
 const getDayOfWeek = (dateStr: string): string => {
   const parts = dateStr.split('/');
   if (parts.length !== 3) return '';
-  
+
   const day = parseInt(parts[0]);
   const month = parseInt(parts[1]) - 1;
   const year = parseInt(parts[2]);
-  
+
   const date = new Date(year, month, day);
   const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
   return days[date.getDay()];
@@ -38,22 +45,6 @@ const formatDate = (date: Date): string => {
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
-};
-
-const getRelativeDateLabel = (daysAgo: number): string => {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  return formatDate(date);
-};
-
-// Helper to parse DD/MM/YYYY to Date
-const parseDate = (dateStr: string): Date | null => {
-  const parts = dateStr.split('/');
-  if (parts.length !== 3) return null;
-  const day = parseInt(parts[0]);
-  const month = parseInt(parts[1]) - 1;
-  const year = parseInt(parts[2]);
-  return new Date(year, month, day);
 };
 
 const formatDateInputValue = (date: Date): string => {
@@ -97,8 +88,6 @@ interface WorkReport {
 
 interface AttendanceRequest {
   id: number;
-  syncKey?: string;
-  externalId?: number;
   employeeName: string;
   employeeId: string;
   department: string;
@@ -132,7 +121,9 @@ interface EmployeeAttendance {
 
 type AttendanceStatusFilter = 'all' | AttendanceRequest['status'];
 type LiveWorkStatus = 'online' | 'offline';
-type AttendancePopup = 'supplement' | 'adjustment' | 'history';
+type AttendancePopup = 'review-center' | 'supplement' | 'adjustment' | 'history';
+type CalendarAttendanceState = 'online' | EmployeeAttendance['status'];
+type AttendanceReturnView = AttendancePopup | 'detail' | 'work-report' | null;
 
 interface LiveAttendanceStatus {
   employeeId: string;
@@ -157,9 +148,57 @@ interface CalendarAttendanceEvent extends LiveAttendanceStatus {
   top: number;
   height: number;
   durationLabel: string;
+  attendanceState: CalendarAttendanceState;
 }
 
-const LIVE_ATTENDANCE_STORAGE_KEY = 'hrm-live-attendance';
+const calendarAttendanceTones: Record<
+  CalendarAttendanceState,
+  { label: string; cardClass: string; dotClass: string; badgeClass: string; avatarClass: string }
+> = {
+  online: {
+    label: 'Đang làm',
+    cardClass: 'border-emerald-400 bg-emerald-50 text-emerald-950',
+    dotClass: 'bg-emerald-500',
+    badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    avatarClass: 'bg-emerald-600',
+  },
+  ontime: {
+    label: 'Đúng giờ',
+    cardClass: 'border-blue-400 bg-blue-50 text-blue-950',
+    dotClass: 'bg-blue-500',
+    badgeClass: 'border-blue-200 bg-blue-50 text-blue-700',
+    avatarClass: 'bg-blue-600',
+  },
+  late: {
+    label: 'Đi muộn',
+    cardClass: 'border-amber-400 bg-amber-50 text-amber-950',
+    dotClass: 'bg-amber-500',
+    badgeClass: 'border-amber-200 bg-amber-50 text-amber-700',
+    avatarClass: 'bg-amber-500',
+  },
+  'early-leave': {
+    label: 'Về sớm',
+    cardClass: 'border-violet-400 bg-violet-50 text-violet-950',
+    dotClass: 'bg-violet-500',
+    badgeClass: 'border-violet-200 bg-violet-50 text-violet-700',
+    avatarClass: 'bg-violet-600',
+  },
+  missing: {
+    label: 'Thiếu công',
+    cardClass: 'border-rose-400 bg-rose-50 text-rose-950',
+    dotClass: 'bg-rose-500',
+    badgeClass: 'border-rose-200 bg-rose-50 text-rose-700',
+    avatarClass: 'bg-rose-600',
+  },
+};
+
+const calendarAttendanceLegend: CalendarAttendanceState[] = [
+  'online',
+  'ontime',
+  'late',
+  'early-leave',
+  'missing',
+];
 
 const normalizeAttendanceDate = (value?: string) => {
   if (!value) return formatDate(new Date());
@@ -169,16 +208,6 @@ const normalizeAttendanceDate = (value?: string) => {
   }
   return value;
 };
-
-const requestSyncKey = (request: Pick<AttendanceRequest, 'employeeId' | 'date' | 'type' | 'submittedAt' | 'checkIn' | 'checkOut'>) =>
-  [
-    request.employeeId,
-    normalizeAttendanceDate(request.date),
-    request.type,
-    request.submittedAt,
-    request.checkIn,
-    request.checkOut,
-  ].join('|');
 
 const minutesToHoursLabel = (checkIn?: string, checkOut?: string) => {
   if (!checkIn || !checkOut) return '0h';
@@ -194,43 +223,104 @@ const getAttendanceStatusFromLive = (record: LiveAttendanceStatus): EmployeeAtte
   return timeToMinutes(record.checkIn) > timeToMinutes('08:30') ? 'late' : 'ontime';
 };
 
-const normalizeSyncedAttendanceRequest = (item: Partial<AttendanceRequest>): AttendanceRequest | null => {
-  if (!item.employeeId || !item.employeeName || !item.type || !item.checkIn || !item.checkOut) return null;
+const formatApiTime = (value?: string | null) => {
+  if (!value) return '';
 
-  const normalized: AttendanceRequest = {
-    id: Number(item.id || 0) + 10000,
-    externalId: Number(item.id || 0),
-    employeeName: item.employeeName,
-    employeeId: item.employeeId,
-    department: item.department || 'IT',
-    date: normalizeAttendanceDate(item.date),
-    checkIn: item.checkIn,
-    checkOut: item.checkOut,
-    reason: item.reason || 'Nhân viên gửi đơn chấm công từ cổng Employee.',
-    status: item.status || 'pending',
-    submittedAt: item.submittedAt || new Date().toLocaleString('vi-VN'),
-    reviewedAt: item.reviewedAt,
-    reviewedBy: item.reviewedBy,
-    reviewNote: item.reviewNote,
-    type: item.type,
-    originalCheckIn: item.originalCheckIn,
-    originalCheckOut: item.originalCheckOut,
-    workReport: item.workReport
-      ? {
-          title: item.workReport.title || 'Báo cáo công việc',
-          description: item.workReport.description || '',
-          tasks: item.workReport.tasks || [],
-          achievements: item.workReport.achievements || [],
-          note: item.workReport.note,
-        }
-      : undefined,
-  };
+  const timeOnly = value.match(/^(\d{1,2}):(\d{2})/);
+  if (timeOnly) {
+    return `${timeOnly[1].padStart(2, '0')}:${timeOnly[2]}`;
+  }
 
-  normalized.syncKey = requestSyncKey(normalized);
-  return normalized;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 };
 
-export function AttendanceApproval() {
+const formatApiDateTime = (value?: string | null) => {
+  if (!value) return undefined;
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(value)) return value;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('vi-VN');
+};
+
+const mapApiRequest = (item: AttendanceRequestApiItem): AttendanceRequest => {
+  const normalizedStatus = item.status.toUpperCase();
+  const requestType = item.requestType?.toUpperCase() || item.type?.toUpperCase();
+  const rawEmployeeId = item.employeeCode || item.employeeId;
+
+  return {
+    id: item.id,
+    employeeName: item.employeeName,
+    employeeId:
+      typeof rawEmployeeId === 'number'
+        ? `NV${String(rawEmployeeId).padStart(3, '0')}`
+        : rawEmployeeId,
+    department: item.department,
+    date: normalizeAttendanceDate(item.workDate || item.date),
+    checkIn: formatApiTime(item.requestedCheckIn || item.checkIn),
+    checkOut: formatApiTime(item.requestedCheckOut || item.checkOut),
+    reason: item.reason,
+    status:
+      normalizedStatus === 'APPROVED'
+        ? 'approved'
+        : normalizedStatus === 'REJECTED'
+          ? 'rejected'
+          : 'pending',
+    submittedAt: formatApiDateTime(item.submittedAt) || '-',
+    reviewedAt: formatApiDateTime(item.reviewedAt),
+    reviewedBy: item.reviewedBy || undefined,
+    reviewNote: item.reviewNote || undefined,
+    type: requestType === 'ADJUSTMENT' ? 'adjustment' : 'supplement',
+    originalCheckIn: formatApiTime(item.originalCheckIn),
+    originalCheckOut: formatApiTime(item.originalCheckOut),
+    workReport:
+      item.workReportTitle || item.workReportDescription
+        ? {
+            title: item.workReportTitle || 'Báo cáo công việc',
+            description: item.workReportDescription || '',
+            tasks: [],
+            achievements: [],
+          }
+        : undefined,
+  };
+};
+
+const mapApiAttendance = (item: AttendanceApiItem): EmployeeAttendance => ({
+  employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
+  employeeName: item.employeeName || `Nhân viên ${item.employeeId}`,
+  department: item.department || 'Chưa có phòng ban',
+  date: formatDate(new Date(item.date)),
+  checkIn: formatApiTime(item.checkInTime),
+  checkOut: formatApiTime(item.checkOutTime),
+  hours: `${Number(item.totalHours || 0).toFixed(2)}h`,
+  status: item.isLate ? 'late' : item.isEarlyLeave ? 'early-leave' : item.checkInTime ? 'ontime' : 'missing',
+  note: item.note && item.note !== '-' ? item.note : '',
+  workReport:
+    item.workReportTitle || item.workReportDescription
+      ? {
+          title: item.workReportTitle || 'Báo cáo công việc',
+          description: item.workReportDescription || '',
+          tasks: [],
+          achievements: [],
+          note: item.workReportNote || undefined,
+        }
+      : undefined,
+});
+
+interface AttendanceApprovalProps {
+  userRole: 'admin' | 'manager';
+  departmentScope?: string;
+}
+
+export function AttendanceApproval({ userRole, departmentScope }: AttendanceApprovalProps) {
+  const isManager = userRole === 'manager';
+  const roleTitle = isManager ? 'Chấm công team' : 'Quản lý chấm công';
+  const roleDescription = isManager
+    ? 'Theo dõi ca làm của nhân viên trong team và xử lý đơn chấm công thuộc phòng ban mình.'
+    : 'Xem lịch sử chấm công từng ngày và xét duyệt đơn bổ sung/điều chỉnh toàn hệ thống.';
+  const scopeLabel = isManager ? departmentScope || 'Team được phân quyền' : 'Toàn hệ thống';
   const [selectedRequest, setSelectedRequest] = useState<AttendanceRequest | null>(null);
   const [selectedAttendance, setSelectedAttendance] = useState<EmployeeAttendance | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
@@ -238,446 +328,108 @@ export function AttendanceApproval() {
   const [showWorkReportDialog, setShowWorkReportDialog] = useState(false);
   const [activeAttendancePopup, setActiveAttendancePopup] = useState<AttendancePopup | null>(null);
   const [returnPopupAfterDetail, setReturnPopupAfterDetail] = useState<AttendancePopup | null>(null);
+  const [returnViewAfterWorkReport, setReturnViewAfterWorkReport] = useState<AttendanceReturnView>(null);
+  const [returnViewAfterAction, setReturnViewAfterAction] = useState<AttendanceReturnView>(null);
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarAttendanceEvent | null>(null);
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [reviewNote, setReviewNote] = useState('');
-  
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>('pending');
+  const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>('all');
   const [liveDepartmentFilter, setLiveDepartmentFilter] = useState('all');
-  
+
   // Date selector for attendance history - default to today
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [liveAttendance, setLiveAttendance] = useState<LiveAttendanceStatus[]>([
-    {
-      employeeId: 'NV001',
-      employeeName: 'Nguyễn Văn An',
-      department: 'IT',
-      date: formatDate(new Date()),
-      checkIn: '08:25',
-      status: 'online',
-      lastUpdated: '08:25',
-    },
-    {
-      employeeId: 'NV002',
-      employeeName: 'Trần Thị Bình',
-      department: 'HR',
-      date: formatDate(new Date()),
-      checkIn: '08:20',
-      checkOut: '17:20',
-      status: 'offline',
-      lastUpdated: '17:20',
-    },
-  ]);
+  const selectedAttendanceYear = selectedDate.getFullYear();
+  const selectedAttendanceMonth = selectedDate.getMonth() + 1;
+  const [liveAttendance, setLiveAttendance] = useState<LiveAttendanceStatus[]>([]);
 
-  const [requests, setRequests] = useState<AttendanceRequest[]>([
-    {
-      id: 1,
-      employeeName: 'Nguyễn Văn An',
-      employeeId: 'NV001',
-      department: 'IT',
-      date: '12/01/2026',
-      checkIn: '08:30',
-      checkOut: '17:30',
-      reason: 'Quên chấm công do họp khách hàng bên ngoài văn phòng. Cuộc họp kéo dài từ 9h đến 12h tại trụ sở công ty ABC.',
-      status: 'pending',
-      submittedAt: '13/01/2026 08:30',
-      type: 'supplement',
-      workReport: {
-        title: 'Họp khách hàng và tư vấn giải pháp kỹ thuật',
-        description: 'Meeting với khách hàng ABC Corp để tư vấn về giải pháp Cloud Infrastructure và Security',
-        tasks: [
-          { name: 'Chuẩn bị tài liệu presentation và demo', status: 'completed', duration: '1h 30m' },
-          { name: 'Meeting với khách hàng tại trụ sở ABC', status: 'completed', duration: '3h 0m' },
-          { name: 'Viết báo cáo meeting và proposal', status: 'completed', duration: '2h 0m' },
-          { name: 'Follow up email với khách hàng', status: 'completed', duration: '30m' },
-        ],
-        achievements: [
-          'Khách hàng đồng ý 90% proposal',
-          'Đạt deal trị giá 500M VND',
-          'Scheduled meeting lần 2 để ký hợp đồng',
-        ],
-        note: 'Khách hàng rất hài lòng với giải pháp đề xuất'
-      }
-    },
-    {
-      id: 2,
-      employeeName: 'Trần Thị Bình',
-      employeeId: 'NV002',
-      department: 'HR',
-      date: '11/01/2026',
-      checkIn: '08:25',
-      checkOut: '17:25',
-      reason: 'Lỗi hệ thống chấm công, không quét được vân tay. Đã có xác nhận từ bộ phận IT về sự cố hệ thống.',
-      status: 'pending',
-      submittedAt: '12/01/2026 09:00',
-      type: 'supplement',
-      workReport: {
-        title: 'Tuyển dụng và phỏng vấn ứng viên',
-        description: 'Phỏng vấn 5 ứng viên cho vị trí Senior Developer và HR Specialist',
-        tasks: [
-          { name: 'Review 15 CV ứng viên', status: 'completed', duration: '1h 30m' },
-          { name: 'Phỏng vấn 3 ứng viên Senior Dev', status: 'completed', duration: '3h 0m' },
-          { name: 'Phỏng vấn 2 ứng viên HR Specialist', status: 'completed', duration: '2h 0m' },
-          { name: 'Viết feedback và đánh giá', status: 'completed', duration: '1h 0m' },
-        ],
-        achievements: [
-          'Tìm được 2 ứng viên tiềm năng cho vị trí Senior Dev',
-          '1 ứng viên HR xuất sắc, đủ tiêu chuẩn onboard',
-        ]
-      }
-    },
-    {
-      id: 3,
-      employeeName: 'Lê Hoàng Cường',
-      employeeId: 'NV003',
-      department: 'Marketing',
-      date: '10/01/2026',
-      checkIn: '08:20',
-      checkOut: '17:35',
-      reason: 'Đi công tác tại chi nhánh Đà Nẵng, có xác nhận từ trưởng phòng Marketing.',
-      status: 'pending',
-      submittedAt: '11/01/2026 14:20',
-      type: 'supplement',
-      workReport: {
-        title: 'Công tác tại chi nhánh Đà Nẵng - Lên kế hoạch Marketing Q1',
-        description: 'Làm việc với team Marketing Đà Nẵng để lên kế hoạch chiến dịch Q1/2026',
-        tasks: [
-          { name: 'Bay sáng từ HN đến ĐN (6h-8h)', status: 'completed', duration: '2h 0m' },
-          { name: 'Meeting với team Marketing chi nhánh', status: 'completed', duration: '3h 30m' },
-          { name: 'Workshop lên ý tưởng campaign', status: 'completed', duration: '2h 0m' },
-          { name: 'Review và approve budget', status: 'completed', duration: '1h 0m' },
-        ],
-        achievements: [
-          'Hoàn thành kế hoạch Marketing Q1 cho miền Trung',
-          'Team ĐN commit đạt 120% KPI',
-          'Đề xuất 3 chiến dịch mới',
-        ],
-        note: 'Sẽ follow up weekly với team ĐN'
-      }
-    },
-    {
-      id: 4,
-      employeeName: 'Phạm Minh Đức',
-      employeeId: 'NV004',
-      department: 'Sales',
-      date: '09/01/2026',
-      checkIn: '08:30',
-      checkOut: '17:30',
-      reason: 'Quên chấm công do gặp khách hàng VIP tại khách sạn Sheraton.',
-      status: 'approved',
-      submittedAt: '10/01/2026 08:00',
-      reviewedAt: '10/01/2026 10:30',
-      reviewedBy: 'HR Manager',
-      reviewNote: 'Đã xác nhận với trưởng phòng Sales. Đơn được phê duyệt.',
-      type: 'supplement',
-      workReport: {
-        title: 'Đàm phán hợp đồng với khách hàng VIP - XYZ Corporation',
-        description: 'Gặp gỡ và đàm phán hợp đồng lớn trị giá 2 tỷ VND',
-        tasks: [
-          { name: 'Chuẩn bị hợp đồng và tài liệu pháp lý', status: 'completed', duration: '2h 0m' },
-          { name: 'Meeting đàm phán với BOD khách hàng', status: 'completed', duration: '4h 0m' },
-          { name: 'Điều chỉnh điều khoản hợp đồng', status: 'completed', duration: '1h 30m' },
-        ],
-        achievements: [
-          'Đàm phán thành công hợp đồng 2 tỷ VND',
-          'Khách hàng đồng ý ký trong tuần này',
-          'Được giới thiệu thêm 2 khách hàng tiềm năng',
-        ]
-      }
-    },
-    {
-      id: 5,
-      employeeName: 'Võ Thị Như',
-      employeeId: 'NV005',
-      department: 'Finance',
-      date: '08/01/2026',
-      checkIn: '09:00',
-      checkOut: '17:00',
-      reason: 'Quên chấm công',
-      status: 'rejected',
-      submittedAt: '10/01/2026 15:00',
-      reviewedAt: '11/01/2026 09:00',
-      reviewedBy: 'HR Manager',
-      reviewNote: 'Lý do không rõ ràng. Vui lòng cung cấp thêm thông tin chi tiết.',
-      type: 'supplement',
-    },
-    {
-      id: 6,
-      employeeName: 'Hoàng Minh Tuấn',
-      employeeId: 'NV006',
-      department: 'IT',
-      date: '14/01/2026',
-      checkIn: '08:30',
-      checkOut: '17:40',
-      reason: 'Đã chấm công nhưng sai giờ ra, thực tế ra lúc 17:40 do làm thêm giờ để hoàn thành dự án gấp.',
-      status: 'pending',
-      submittedAt: '15/01/2026 08:00',
-      type: 'adjustment',
-      originalCheckIn: '08:20',
-      originalCheckOut: '17:35',
-      workReport: {
-        title: 'Deploy hotfix production - Fix critical bugs',
-        description: 'Xử lý và deploy hotfix cho các bugs nghiêm trọng trên production',
-        tasks: [
-          { name: 'Debug và tìm root cause của bug', status: 'completed', duration: '2h 30m' },
-          { name: 'Code fix và testing trên local', status: 'completed', duration: '2h 0m' },
-          { name: 'Deploy lên staging và UAT testing', status: 'completed', duration: '1h 30m' },
-          { name: 'Deploy production và monitoring', status: 'completed', duration: '1h 40m' },
-        ],
-        achievements: [
-          'Fix thành công 3 bugs critical',
-          'Zero downtime khi deploy',
-          'System hoạt động ổn định 100%',
-        ],
-        note: 'Đã làm overtime đến 17:40 để đảm bảo hệ thống ổn định'
-      }
-    },
-    {
-      id: 7,
-      employeeName: 'Nguyễn Thu Hà',
-      employeeId: 'NV007',
-      department: 'Marketing',
-      date: '13/01/2026',
-      checkIn: '08:15',
-      checkOut: '17:30',
-      reason: 'Chấm công vào sai giờ, thực tế đến sớm lúc 08:15 để chuẩn bị presentation.',
-      status: 'pending',
-      submittedAt: '14/01/2026 09:30',
-      type: 'adjustment',
-      originalCheckIn: '08:30',
-      originalCheckOut: '17:30',
-      workReport: {
-        title: 'Presentation chiến dịch Marketing cho BOD',
-        description: 'Trình bày kế hoạch Marketing Q1 và xin phê duyệt budget',
-        tasks: [
-          { name: 'Chuẩn bị slides và rehearsal', status: 'completed', duration: '2h 0m' },
-          { name: 'Presentation trước BOD', status: 'completed', duration: '1h 30m' },
-          { name: 'Q&A và điều chỉnh kế hoạch', status: 'completed', duration: '1h 0m' },
-          { name: 'Finalize kế hoạch sau feedback', status: 'completed', duration: '2h 30m' },
-        ],
-        achievements: [
-          'BOD approve 100% budget đề xuất',
-          'Được khen ngợi về chất lượng presentation',
-          'Green light cho 5 campaigns lớn',
-        ],
-        note: 'Đến sớm lúc 8h15 để chuẩn bị kỹ lưỡng'
-      }
-    },
-    {
-      id: 8,
-      employeeName: 'Trần Văn Bình',
-      employeeId: 'NV008',
-      department: 'Sales',
-      date: '09/01/2026',
-      checkIn: '08:30',
-      checkOut: '18:00',
-      reason: 'Điều chỉnh giờ ra do làm thêm giờ xử lý khách hàng khẩn cấp.',
-      status: 'approved',
-      submittedAt: '10/01/2026 08:30',
-      reviewedAt: '10/01/2026 14:00',
-      reviewedBy: 'HR Manager',
-      reviewNote: 'Đã xác nhận với quản lý trực tiếp. Approved.',
-      type: 'adjustment',
-      originalCheckIn: '08:30',
-      originalCheckOut: '17:30',
-      workReport: {
-        title: 'Xử lý khiếu nại khẩn cấp từ khách hàng',
-        description: 'Khách hàng gặp sự cố nghiêm trọng, cần hỗ trợ ngay lập tức',
-        tasks: [
-          { name: 'Tiếp nhận và phân tích vấn đề', status: 'completed', duration: '1h 0m' },
-          { name: 'Điều phối team tech support', status: 'completed', duration: '30m' },
-          { name: 'Họp với khách hàng để giải quyết', status: 'completed', duration: '2h 30m' },
-          { name: 'Follow up và đảm bảo hài lòng', status: 'completed', duration: '1h 30m' },
-        ],
-        achievements: [
-          'Giải quyết thành công khiếu nại',
-          'Khách hàng hài lòng và gia hạn hợp đồng',
-          'Tránh được việc mất khách hàng lớn',
-        ],
-        note: 'Đã làm thêm giờ đến 18h để đảm bảo khách hàng hài lòng'
-      }
-    },
-  ]);
+  const [requests, setRequests] = useState<AttendanceRequest[]>([]);
 
-  // Sample attendance data for all employees
-  const [allAttendance, setAllAttendance] = useState<EmployeeAttendance[]>([
-    // Recent demo data - yesterday / previous days
-    { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: getRelativeDateLabel(1), checkIn: '08:24', checkOut: '17:32', hours: '8h 8m', status: 'ontime', note: '',
-      workReport: {
-        title: 'Hoàn thiện dashboard quản trị',
-        description: 'Cập nhật giao diện Admin/Manager và rà soát các luồng nghiệp vụ chính',
-        tasks: [
-          { name: 'Rà soát UI module nhân viên', status: 'completed', duration: '2h 0m' },
-          { name: 'Tối ưu bộ lọc nghỉ phép', status: 'completed', duration: '2h 30m' },
-          { name: 'Kiểm tra build frontend', status: 'completed', duration: '1h 0m' },
-        ],
-        achievements: ['Dashboard ổn định hơn', 'Bộ lọc ngày có dữ liệu demo'],
-      }
-    },
-    { employeeId: 'NV002', employeeName: 'Trần Thị Bình', department: 'HR', date: getRelativeDateLabel(1), checkIn: '08:35', checkOut: '17:25', hours: '7h 50m', status: 'late', note: 'Đi muộn 5 phút' },
-    { employeeId: 'NV004', employeeName: 'Phạm Minh Đức', department: 'Sales', date: getRelativeDateLabel(1), checkIn: '08:20', checkOut: '17:40', hours: '8h 20m', status: 'ontime', note: '' },
-    { employeeId: 'NV003', employeeName: 'Lê Hoàng Cường', department: 'Marketing', date: getRelativeDateLabel(2), checkIn: '08:28', checkOut: '17:35', hours: '8h 7m', status: 'ontime', note: '',
-      workReport: {
-        title: 'Tổng hợp chiến dịch truyền thông',
-        description: 'Theo dõi hiệu quả nội dung và tổng hợp số liệu báo cáo ngày',
-        tasks: [
-          { name: 'Kiểm tra hiệu quả bài đăng', status: 'completed', duration: '2h 0m' },
-          { name: 'Tổng hợp số liệu ads', status: 'completed', duration: '2h 30m' },
-          { name: 'Đề xuất nội dung mới', status: 'completed', duration: '1h 30m' },
-        ],
-        achievements: ['CTR tăng 8%', 'Hoàn tất báo cáo daily'],
-      }
-    },
-    { employeeId: 'NV005', employeeName: 'Võ Thị Như', department: 'Finance', date: getRelativeDateLabel(2), checkIn: '09:05', checkOut: '17:30', hours: '7h 25m', status: 'late', note: 'Đi muộn 35 phút' },
-    { employeeId: 'NV006', employeeName: 'Hoàng Minh Tuấn', department: 'IT', date: getRelativeDateLabel(3), checkIn: '08:25', checkOut: '17:45', hours: '8h 20m', status: 'ontime', note: '' },
-    { employeeId: 'NV007', employeeName: 'Nguyễn Thu Hà', department: 'Marketing', date: getRelativeDateLabel(3), checkIn: '-', checkOut: '-', hours: '0h', status: 'missing', note: 'Chưa chấm công' },
-
-    // 17/01/2026 - Friday
-    { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: '17/01/2026', checkIn: '08:25', checkOut: '17:30', hours: '8h 5m', status: 'ontime', note: '',
-      workReport: {
-        title: 'Phát triển API cho module Payment',
-        description: 'Hoàn thành RESTful API cho hệ thống thanh toán',
-        tasks: [
-          { name: 'Thiết kế database schema', status: 'completed', duration: '2h 0m' },
-          { name: 'Code API endpoints', status: 'completed', duration: '3h 30m' },
-          { name: 'Write unit tests', status: 'completed', duration: '2h 0m' },
-        ],
-        achievements: ['Hoàn thành 100% API specs', 'Code coverage 95%'],
-      }
-    },
-    { employeeId: 'NV002', employeeName: 'Trần Thị Bình', department: 'HR', date: '17/01/2026', checkIn: '08:20', checkOut: '17:20', hours: '8h 0m', status: 'ontime', note: '',
-      workReport: {
-        title: 'Tổ chức chương trình đào tạo nội bộ',
-        description: 'Training về kỹ năng mềm cho nhân viên mới',
-        tasks: [
-          { name: 'Chuẩn bị tài liệu training', status: 'completed', duration: '2h 30m' },
-          { name: 'Thực hiện buổi đào tạo', status: 'completed', duration: '4h 0m' },
-          { name: 'Đánh giá và thu thập feedback', status: 'completed', duration: '1h 0m' },
-        ],
-        achievements: ['25 nhân viên tham gia', 'Feedback rate 4.8/5'],
-      }
-    },
-    { employeeId: 'NV003', employeeName: 'Lê Hoàng Cường', department: 'Marketing', date: '17/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '',
-      workReport: {
-        title: 'Launch chiến dịch quảng cáo Facebook Ads',
-        description: 'Triển khai campaign quảng cáo sản phẩm mới trên Facebook',
-        tasks: [
-          { name: 'Setup Facebook Ads campaign', status: 'completed', duration: '2h 0m' },
-          { name: 'Tạo creative content và copy', status: 'completed', duration: '3h 0m' },
-          { name: 'Monitoring và optimize ads', status: 'in-progress', duration: '2h 30m' },
-        ],
-        achievements: ['Reach 50K người', 'CTR 3.5%', 'Cost per click giảm 20%'],
-      }
-    },
-    { employeeId: 'NV004', employeeName: 'Phạm Minh Đức', department: 'Sales', date: '17/01/2026', checkIn: '08:20', checkOut: '17:40', hours: '8h 20m', status: 'ontime', note: '',
-      workReport: {
-        title: 'Chăm sóc khách hàng và closing deals',
-        description: 'Follow up 10 khách hàng tiềm năng và close 3 deals',
-        tasks: [
-          { name: 'Gọi điện tư vấn khách hàng', status: 'completed', duration: '3h 0m' },
-          { name: 'Viết proposal cho 3 khách hàng', status: 'completed', duration: '2h 30m' },
-          { name: 'Meeting và ký hợp đồng', status: 'completed', duration: '2h 0m' },
-        ],
-        achievements: ['Close 3 deals = 150M VND', 'Conversion rate 30%'],
-      }
-    },
-    { employeeId: 'NV005', employeeName: 'Võ Thị Như', department: 'Finance', date: '17/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    
-    // 16/01/2026 - Thursday
-    { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: '16/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV002', employeeName: 'Trần Thị Bình', department: 'HR', date: '16/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV003', employeeName: 'Lê Hoàng Cường', department: 'Marketing', date: '16/01/2026', checkIn: '08:28', checkOut: '17:28', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV004', employeeName: 'Phạm Minh Đức', department: 'Sales', date: '16/01/2026', checkIn: '08:25', checkOut: '17:35', hours: '8h 10m', status: 'ontime', note: '' },
-    { employeeId: 'NV005', employeeName: 'Võ Thị Như', department: 'Finance', date: '16/01/2026', checkIn: '08:28', checkOut: '17:28', hours: '8h 0m', status: 'ontime', note: '' },
-    
-    // 15/01/2026 - Wednesday
-    { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: '15/01/2026', checkIn: '08:28', checkOut: '17:28', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV002', employeeName: 'Trần Thị Bình', department: 'HR', date: '15/01/2026', checkIn: '08:25', checkOut: '17:25', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV003', employeeName: 'Lê Hoàng Cường', department: 'Marketing', date: '15/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV004', employeeName: 'Phạm Minh Đức', department: 'Sales', date: '15/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV005', employeeName: 'Võ Thị Như', department: 'Finance', date: '15/01/2026', checkIn: '08:25', checkOut: '17:25', hours: '8h 0m', status: 'ontime', note: '' },
-    
-    // 14/01/2026 - Tuesday
-    { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: '14/01/2026', checkIn: '08:35', checkOut: '17:30', hours: '7h 55m', status: 'late', note: 'Đi muộn 5 phút' },
-    { employeeId: 'NV002', employeeName: 'Trần Thị Bình', department: 'HR', date: '14/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV003', employeeName: 'Lê Hoàng Cường', department: 'Marketing', date: '14/01/2026', checkIn: '08:25', checkOut: '17:25', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV004', employeeName: 'Phạm Minh Đức', department: 'Sales', date: '14/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV005', employeeName: 'Võ Thị Như', department: 'Finance', date: '14/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-    
-    // 13/01/2026 - Monday
-    { employeeId: 'NV001', employeeName: 'Nguyễn Văn An', department: 'IT', date: '13/01/2026', checkIn: '08:25', checkOut: '17:25', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV002', employeeName: 'Trần Thị Bình', department: 'HR', date: '13/01/2026', checkIn: '08:22', checkOut: '17:22', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV003', employeeName: 'Lê Hoàng Cường', department: 'Marketing', date: '13/01/2026', checkIn: '08:40', checkOut: '17:30', hours: '7h 50m', status: 'late', note: 'Đi muộn 10 phút' },
-    { employeeId: 'NV004', employeeName: 'Phạm Minh Đức', department: 'Sales', date: '13/01/2026', checkIn: '08:22', checkOut: '17:22', hours: '8h 0m', status: 'ontime', note: '' },
-    { employeeId: 'NV005', employeeName: 'Võ Thị Như', department: 'Finance', date: '13/01/2026', checkIn: '08:30', checkOut: '17:30', hours: '8h 0m', status: 'ontime', note: '' },
-  ]);
+  const [allAttendance, setAllAttendance] = useState<EmployeeAttendance[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState('');
+  const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
 
   useEffect(() => {
-    const loadLiveAttendance = () => {
-      const saved = window.localStorage.getItem(LIVE_ATTENDANCE_STORAGE_KEY);
-      if (!saved) return;
+    let cancelled = false;
 
+    const loadRequests = async () => {
       try {
-        const parsed = JSON.parse(saved) as LiveAttendanceStatus[];
-        if (Array.isArray(parsed)) {
-          setLiveAttendance(parsed);
-        }
-      } catch {
-        window.localStorage.removeItem(LIVE_ATTENDANCE_STORAGE_KEY);
+        const data = await fetchAttendanceRequests();
+        if (cancelled) return;
+
+        setRequests(data.map(mapApiRequest));
+      } catch (error) {
+        console.error('Không tải được đơn chấm công:', error);
+        if (!cancelled) setRequests([]);
       }
     };
 
-    const loadSyncedRequests = () => {
-      const synced = readSyncedRecords<Partial<AttendanceRequest>>(HRM_SYNC_KEYS.attendanceRequests)
-        .map(normalizeSyncedAttendanceRequest)
-        .filter((item): item is AttendanceRequest => Boolean(item));
-
-      if (synced.length === 0) return;
-
-      setRequests((current) => {
-        const syncedKeys = new Set(synced.map((request) => request.syncKey));
-        const localOnly = current.filter((request) => !request.syncKey || !syncedKeys.has(request.syncKey));
-        return [...synced, ...localOnly];
-      });
-    };
-
-    loadLiveAttendance();
-    loadSyncedRequests();
-
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === LIVE_ATTENDANCE_STORAGE_KEY) {
-        loadLiveAttendance();
-      }
-      if (event.key === HRM_SYNC_KEYS.attendanceRequests) {
-        loadSyncedRequests();
-      }
-    };
-
-    const handleHrmSync = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string }>).detail;
-      if (!detail?.key || detail.key === LIVE_ATTENDANCE_STORAGE_KEY) {
-        loadLiveAttendance();
-      }
-      if (!detail?.key || detail.key === HRM_SYNC_KEYS.attendanceRequests) {
-        loadSyncedRequests();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('hrm-sync', handleHrmSync);
-    window.addEventListener('focus', loadLiveAttendance);
-    window.addEventListener('focus', loadSyncedRequests);
-
+    loadRequests();
+    window.addEventListener('focus', loadRequests);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('hrm-sync', handleHrmSync);
-      window.removeEventListener('focus', loadLiveAttendance);
-      window.removeEventListener('focus', loadSyncedRequests);
+      cancelled = true;
+      window.removeEventListener('focus', loadRequests);
     };
-  }, []);
+  }, [departmentScope, userRole]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAttendance = async () => {
+      setAttendanceLoading(true);
+      setAttendanceError('');
+      try {
+        const data = await fetchAttendanceMonthlyRecords(
+          selectedAttendanceYear,
+          selectedAttendanceMonth,
+        );
+        if (cancelled) return;
+
+        setAllAttendance(data.map(mapApiAttendance));
+        const todayKey = formatDateInputValue(new Date());
+        setLiveAttendance(
+          data
+            .filter((item) => item.checkInTime)
+            .map((item) => {
+              const checkIn = formatApiTime(item.checkInTime);
+              const checkOut = formatApiTime(item.checkOutTime);
+              const date = formatDate(new Date(item.date));
+              const isToday = item.date.slice(0, 10) === todayKey;
+              return {
+                employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
+                employeeName: item.employeeName || `Nhân viên ${item.employeeId}`,
+                department: item.department || 'Chưa có phòng ban',
+                date,
+                checkIn,
+                checkOut: checkOut || undefined,
+                checkOutDate: checkOut ? date : undefined,
+                status: isToday && !checkOut ? 'online' : 'offline',
+                lastUpdated: checkOut || checkIn,
+              };
+            }),
+        );
+      } catch (error) {
+        console.error('Không tải được lịch sử chấm công:', error);
+        if (!cancelled) {
+          setAllAttendance([]);
+          setLiveAttendance([]);
+          setAttendanceError(error instanceof Error ? error.message : 'Không tải được dữ liệu chấm công.');
+        }
+      } finally {
+        if (!cancelled) setAttendanceLoading(false);
+      }
+    };
+
+    loadAttendance();
+    return () => {
+      cancelled = true;
+    };
+  }, [attendanceRefreshKey, selectedAttendanceMonth, selectedAttendanceYear]);
 
   const supplementRequests = requests.filter(r => r.type === 'supplement');
   const adjustmentRequests = requests.filter(r => r.type === 'adjustment');
@@ -699,14 +451,14 @@ export function AttendanceApproval() {
   // Filtered requests
   const filteredRequests = useMemo(() => {
     return requests.filter(req => {
-      const matchesSearch = 
+      const matchesSearch =
         req.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         req.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         req.reason.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       const matchesDepartment = departmentFilter === 'all' || req.department === departmentFilter;
       const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
-      
+
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [requests, searchQuery, departmentFilter, statusFilter]);
@@ -737,11 +489,11 @@ export function AttendanceApproval() {
 
     return Array.from(merged.values()).filter(att => {
       const matchesDate = att.date === dateStr;
-      const matchesSearch = 
+      const matchesSearch =
         att.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         att.employeeId.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesDepartment = departmentFilter === 'all' || att.department === departmentFilter;
-      
+
       return matchesDate && matchesSearch && matchesDepartment;
     }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
   }, [allAttendance, liveAttendance, selectedDate, searchQuery, departmentFilter]);
@@ -812,7 +564,7 @@ export function AttendanceApproval() {
     const late = attendanceForDate.filter(a => a.status === 'late').length;
     const missing = attendanceForDate.filter(a => a.status === 'missing').length;
     const withReport = attendanceForDate.filter(a => a.workReport).length;
-    
+
     return { total, ontime, late, missing, withReport };
   }, [attendanceForDate]);
 
@@ -880,7 +632,10 @@ export function AttendanceApproval() {
   const calendarEvents = useMemo<CalendarAttendanceEvent[]>(() => {
     const eventMap = new Map<string, CalendarAttendanceEvent>();
 
-    const buildEvent = (record: LiveAttendanceStatus): CalendarAttendanceEvent | null => {
+    const buildEvent = (
+      record: LiveAttendanceStatus,
+      attendanceState?: CalendarAttendanceState,
+    ): CalendarAttendanceEvent | null => {
       if (!record.checkIn) return null;
       if (liveDepartmentFilter !== 'all' && record.department !== liveDepartmentFilter) return null;
 
@@ -904,22 +659,28 @@ export function AttendanceApproval() {
         top,
         height: Math.max(height, 7),
         durationLabel,
+        attendanceState:
+          attendanceState ||
+          (record.status === 'online' ? 'online' : getAttendanceStatusFromLive(record)),
       };
     };
 
     allAttendance.forEach((record) => {
       if (!weekDateKeys.includes(record.date)) return;
 
-      const event = buildEvent({
-        employeeId: record.employeeId,
-        employeeName: record.employeeName,
-        department: record.department,
-        date: record.date,
-        checkIn: record.checkIn,
-        checkOut: record.checkOut,
-        status: record.checkOut ? 'offline' : 'online',
-        lastUpdated: record.checkOut || record.checkIn,
-      });
+      const event = buildEvent(
+        {
+          employeeId: record.employeeId,
+          employeeName: record.employeeName,
+          department: record.department,
+          date: record.date,
+          checkIn: record.checkIn,
+          checkOut: record.checkOut,
+          status: record.checkOut ? 'offline' : 'online',
+          lastUpdated: record.checkOut || record.checkIn,
+        },
+        record.status,
+      );
 
       if (event) {
         eventMap.set(`${event.employeeId}-${event.date}`, event);
@@ -928,9 +689,14 @@ export function AttendanceApproval() {
 
     liveAttendance.forEach((record) => {
       if (!weekDateKeys.includes(record.date)) return;
-      const event = buildEvent(record);
+      const eventKey = `${record.employeeId}-${record.date}`;
+      const existingEvent = eventMap.get(eventKey);
+      const event = buildEvent(
+        record,
+        record.status === 'online' ? 'online' : existingEvent?.attendanceState,
+      );
       if (event) {
-        eventMap.set(`${event.employeeId}-${event.date}`, event);
+        eventMap.set(eventKey, event);
       }
     });
 
@@ -938,10 +704,26 @@ export function AttendanceApproval() {
       if (a.dayIndex !== b.dayIndex) return a.dayIndex - b.dayIndex;
       return timeToMinutes(a.checkIn) - timeToMinutes(b.checkIn);
     });
-  }, [allAttendance, calendarTotalMinutes, liveAttendance, liveDepartmentFilter, weekDateKeys]);
+  }, [
+    allAttendance,
+    calendarEndMinute,
+    calendarStartMinute,
+    calendarTotalMinutes,
+    liveAttendance,
+    liveDepartmentFilter,
+    weekDateKeys,
+  ]);
 
   const filteredSupplementRequests = filteredRequests.filter(r => r.type === 'supplement');
   const filteredAdjustmentRequests = filteredRequests.filter(r => r.type === 'adjustment');
+  const pendingRequests = useMemo(
+    () =>
+      filteredRequests
+        .filter((request) => request.status === 'pending')
+        .sort((first, second) => first.id - second.id),
+    [filteredRequests],
+  );
+  const reviewedTodayCount = attendanceForDate.length;
 
   const stats = {
     total: requests.length,
@@ -964,8 +746,68 @@ export function AttendanceApproval() {
     setSelectedDate(newDate);
   };
 
+  const handlePreviousWeek = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() - 7);
+    setSelectedDate(newDate);
+  };
+
+  const handleNextWeek = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + 7);
+    setSelectedDate(newDate);
+  };
+
   const handleToday = () => {
     setSelectedDate(new Date());
+  };
+
+  const handleExportAttendance = async () => {
+    if (attendanceForDate.length === 0) {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Không có dữ liệu để xuất',
+        text: 'Hãy chọn ngày hoặc bộ lọc có dữ liệu chấm công.',
+        confirmButtonText: 'Đóng',
+        confirmButtonColor: '#2563eb',
+      });
+      return;
+    }
+
+    const statusLabels: Record<EmployeeAttendance['status'], string> = {
+      ontime: 'Đúng giờ',
+      late: 'Đi muộn',
+      'early-leave': 'Về sớm',
+      missing: 'Thiếu công',
+    };
+    const escapeCsv = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
+    const rows = attendanceForDate.map((record) => [
+      record.employeeId,
+      record.employeeName,
+      record.department,
+      record.date,
+      record.checkIn || '-',
+      record.checkOut || '-',
+      record.hours,
+      statusLabels[record.status],
+      record.note || '',
+    ]);
+    const csv = [
+      ['Mã nhân viên', 'Họ tên', 'Phòng ban', 'Ngày', 'Giờ vào', 'Giờ ra', 'Tổng giờ', 'Trạng thái', 'Ghi chú'],
+      ...rows,
+    ]
+      .map((row) => row.map(escapeCsv).join(','))
+      .join('\r\n');
+
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `cham-cong-${formatDateInputValue(selectedDate)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const handleViewDetail = (request: AttendanceRequest) => {
@@ -983,8 +825,20 @@ export function AttendanceApproval() {
     setReturnPopupAfterDetail(null);
   };
 
-  const handleViewWorkReport = (request: AttendanceRequest | null, attendance: EmployeeAttendance | null = null) => {
+  const handleViewWorkReport = (
+    request: AttendanceRequest | null,
+    attendance: EmployeeAttendance | null = null,
+    returnView?: AttendanceReturnView,
+  ) => {
+    setReturnViewAfterWorkReport(
+      returnView !== undefined
+        ? returnView
+        : showDetailDialog
+          ? 'detail'
+          : activeAttendancePopup,
+    );
     setActiveAttendancePopup(null);
+    setShowDetailDialog(false);
     if (request) {
       setSelectedRequest(request);
       setSelectedAttendance(null);
@@ -995,103 +849,180 @@ export function AttendanceApproval() {
     setShowWorkReportDialog(true);
   };
 
-  const handleOpenActionDialog = (request: AttendanceRequest, action: 'approve' | 'reject') => {
+  const closeWorkReportDialog = (restoreView = true) => {
+    setShowWorkReportDialog(false);
+    if (restoreView) {
+      if (returnViewAfterWorkReport === 'detail') {
+        setShowDetailDialog(true);
+      } else if (
+        returnViewAfterWorkReport &&
+        returnViewAfterWorkReport !== 'work-report'
+      ) {
+        setActiveAttendancePopup(returnViewAfterWorkReport);
+      }
+    }
+    setReturnViewAfterWorkReport(null);
+  };
+
+  const handleOpenActionDialog = (
+    request: AttendanceRequest,
+    action: 'approve' | 'reject',
+    returnView?: AttendanceReturnView,
+  ) => {
+    setReturnViewAfterAction(
+      returnView !== undefined
+        ? returnView
+        : showWorkReportDialog
+          ? 'work-report'
+          : showDetailDialog
+            ? 'detail'
+            : activeAttendancePopup,
+    );
     setActiveAttendancePopup(null);
+    setShowDetailDialog(false);
+    setShowWorkReportDialog(false);
     setSelectedRequest(request);
     setActionType(action);
     setShowActionDialog(true);
     setReviewNote('');
   };
 
-  const syncReviewedRequestToEmployee = (reviewedRequest: AttendanceRequest) => {
-    if (!reviewedRequest.syncKey) return;
-
-    const synced = readSyncedRecords<Partial<AttendanceRequest>>(HRM_SYNC_KEYS.attendanceRequests);
-    const next = synced.map((item) => {
-      const normalized = normalizeSyncedAttendanceRequest(item);
-      if (!normalized || normalized.syncKey !== reviewedRequest.syncKey) return item;
-
-      return {
-        ...item,
-        status: reviewedRequest.status,
-        reviewedAt: reviewedRequest.reviewedAt,
-        reviewedBy: reviewedRequest.reviewedBy,
-        reviewNote: reviewedRequest.reviewNote,
-      };
-    });
-
-    const serialized = JSON.stringify(next);
-    window.localStorage.setItem(HRM_SYNC_KEYS.attendanceRequests, serialized);
-    window.dispatchEvent(new CustomEvent('hrm-sync', { detail: { key: HRM_SYNC_KEYS.attendanceRequests } }));
-
-    try {
-      window.dispatchEvent(
-        new StorageEvent('storage', {
-          key: HRM_SYNC_KEYS.attendanceRequests,
-          newValue: serialized,
-          storageArea: window.localStorage,
-        }),
-      );
-    } catch {
-      // Older browsers may block synthetic StorageEvent.
+  const closeActionDialog = (restoreView = true) => {
+    setShowActionDialog(false);
+    if (restoreView) {
+      if (returnViewAfterAction === 'detail') {
+        setShowDetailDialog(true);
+      } else if (returnViewAfterAction === 'work-report') {
+        setShowWorkReportDialog(true);
+      } else if (returnViewAfterAction) {
+        setActiveAttendancePopup(returnViewAfterAction);
+      }
     }
+    setReturnViewAfterAction(null);
+    setReviewNote('');
   };
 
-  const handleSubmitReview = () => {
-    if (!selectedRequest) return;
+  const handleSubmitReview = async () => {
+    if (!selectedRequest || reviewSubmitting) return;
 
-    let reviewedRequest: AttendanceRequest | null = null;
-    const updatedRequests = requests.map(req => {
-      if (req.id === selectedRequest.id) {
-        reviewedRequest = {
-          ...req,
-          status: actionType === 'approve' ? 'approved' as const : 'rejected' as const,
-          reviewedAt: new Date().toLocaleString('vi-VN'),
-          reviewedBy: 'HR Manager',
-          reviewNote: reviewNote || (actionType === 'approve' ? 'Đơn được phê duyệt' : 'Đơn bị từ chối'),
-        };
-        return reviewedRequest;
-      }
-      return req;
-    });
-
-    setRequests(updatedRequests);
-    if (reviewedRequest) {
-      syncReviewedRequestToEmployee(reviewedRequest);
+    if (actionType === 'reject' && !reviewNote.trim()) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Thiếu lý do từ chối',
+        text: 'Vui lòng nhập lý do để nhân viên biết cần bổ sung hoặc điều chỉnh gì.',
+        confirmButtonText: 'Đã hiểu',
+        confirmButtonColor: '#2563eb',
+      });
+      return;
     }
-    setShowActionDialog(false);
-    setShowDetailDialog(false);
-    setReviewNote('');
 
-    alert(
-      actionType === 'approve'
-        ? '✅ Đã phê duyệt đơn chấm công!'
-        : '❌ Đã từ chối đơn chấm công!'
-    );
+    setReviewSubmitting(true);
+    try {
+      const result = await reviewAttendanceRequest(
+        selectedRequest.id,
+        actionType,
+        reviewNote,
+      );
+      const reviewedRequest = mapApiRequest(result);
+      setRequests((current) =>
+        current.map((request) => request.id === reviewedRequest.id ? reviewedRequest : request),
+      );
+      setSelectedRequest(reviewedRequest);
+      if (reviewedRequest.status === 'approved') {
+        setAttendanceRefreshKey((current) => current + 1);
+      }
+      setShowActionDialog(false);
+      setShowDetailDialog(false);
+      setShowWorkReportDialog(false);
+      setReturnViewAfterAction(null);
+      setReturnViewAfterWorkReport(null);
+      setReturnPopupAfterDetail(null);
+      setReviewNote('');
+      await Swal.fire({
+        icon: 'success',
+        title: actionType === 'approve' ? 'Đã duyệt đơn' : 'Đã từ chối đơn',
+        text:
+          actionType === 'approve'
+            ? 'Dữ liệu chấm công đã được cập nhật.'
+            : 'Kết quả và lý do từ chối đã được lưu.',
+        confirmButtonText: 'Đóng',
+        confirmButtonColor: actionType === 'approve' ? '#16a34a' : '#dc2626',
+      });
+      return;
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Không xử lý được đơn',
+        text: error instanceof Error ? error.message : 'Vui lòng kiểm tra API và quyền tài khoản.',
+        confirmButtonText: 'Đóng',
+        confirmButtonColor: '#dc2626',
+      });
+      return;
+    } finally {
+      setReviewSubmitting(false);
+    }
+
   };
 
   const getRequestTypeBadge = (type: AttendanceRequest['type']) => (
     <Badge
       variant="outline"
-      className={type === 'supplement' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-indigo-200 bg-indigo-50 text-indigo-700'}
+      className={
+        type === 'supplement'
+          ? 'gap-1 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-50'
+          : 'gap-1 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-50'
+      }
     >
+      {type === 'supplement' ? <FileText className="size-3" /> : <Clock className="size-3" />}
       {type === 'supplement' ? 'Bổ sung công' : 'Điều chỉnh giờ'}
     </Badge>
   );
 
   const getRequestStatusBadge = (status: AttendanceRequest['status']) => {
     if (status === 'approved') {
-      return <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Đã duyệt</Badge>;
+      return (
+        <Badge variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+          <CheckCircle className="size-3" />
+          Đã duyệt
+        </Badge>
+      );
     }
 
     if (status === 'rejected') {
-      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Từ chối</Badge>;
+      return (
+        <Badge variant="outline" className="gap-1 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-50">
+          <XCircle className="size-3" />
+          Từ chối
+        </Badge>
+      );
     }
 
-    return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">Chờ duyệt</Badge>;
+    return (
+      <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">
+        <Clock className="size-3" />
+        Chờ duyệt
+      </Badge>
+    );
   };
 
-  const renderCompactRequestList = (requestList: AttendanceRequest[], title: string, description: string) => {
+  const getRequestCardTone = (status: AttendanceRequest['status']) => {
+    if (status === 'approved') {
+      return 'border-emerald-200 border-l-4 border-l-emerald-400 bg-emerald-50/30 hover:border-emerald-300';
+    }
+
+    if (status === 'rejected') {
+      return 'border-rose-200 border-l-4 border-l-rose-400 bg-rose-50/30 hover:border-rose-300';
+    }
+
+    return 'border-amber-200 border-l-4 border-l-amber-400 bg-amber-50/30 hover:border-amber-300';
+  };
+
+  const renderCompactRequestList = (
+    requestList: AttendanceRequest[],
+    title: string,
+    description: string,
+    showHeader = true,
+  ) => {
     const orderedRequests = [...requestList].sort((first, second) => {
       if (first.status === second.status) return first.id - second.id;
       return first.status === 'pending' ? -1 : 1;
@@ -1099,15 +1030,17 @@ export function AttendanceApproval() {
 
     return (
       <Card className="overflow-hidden border-gray-200 shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-            <p className="text-sm text-gray-500">{description}</p>
+        {showHeader && (
+          <div className="flex flex-col gap-3 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+              <p className="text-sm text-gray-500">{description}</p>
+            </div>
+            <Badge variant="outline" className="w-fit bg-gray-50 text-gray-700">
+              {orderedRequests.length} đơn
+            </Badge>
           </div>
-          <Badge variant="outline" className="w-fit bg-gray-50 text-gray-700">
-            {orderedRequests.length} đơn
-          </Badge>
-        </div>
+        )}
 
         <div className="space-y-3 bg-gray-50/60 p-4">
           {orderedRequests.length === 0 ? (
@@ -1118,7 +1051,7 @@ export function AttendanceApproval() {
             orderedRequests.map((request) => (
               <article
                 key={request.id}
-                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
+                className={`rounded-lg border p-4 shadow-sm transition hover:shadow-md ${getRequestCardTone(request.status)}`}
               >
                 <div className="grid gap-4 xl:grid-cols-[minmax(220px,1fr)_minmax(260px,1.25fr)_minmax(170px,0.75fr)_auto] xl:items-center">
                   <div className="min-w-0">
@@ -1262,7 +1195,16 @@ export function AttendanceApproval() {
                 </tr>
               ) : (
                 orderedRequests.map((request) => (
-                  <tr key={request.id} className="transition-colors hover:bg-gray-50">
+                  <tr
+                    key={request.id}
+                    className={`transition-colors ${
+                      request.status === 'approved'
+                        ? 'bg-emerald-50/30 hover:bg-emerald-50/60'
+                        : request.status === 'rejected'
+                        ? 'bg-rose-50/30 hover:bg-rose-50/60'
+                        : 'bg-amber-50/30 hover:bg-amber-50/60'
+                    }`}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 font-semibold text-white">
@@ -1622,7 +1564,14 @@ export function AttendanceApproval() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={handlePreviousDay} className="bg-white">
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Ngày trước"
+                title="Ngày trước"
+                onClick={handlePreviousDay}
+                className="bg-white"
+              >
                 <ChevronLeft className="size-4" />
               </Button>
               <div className="flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3">
@@ -1637,7 +1586,14 @@ export function AttendanceApproval() {
                   className="h-7 w-[145px] bg-transparent text-sm font-semibold text-gray-900 outline-none"
                 />
               </div>
-              <Button size="sm" variant="outline" onClick={handleNextDay} className="bg-white">
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Ngày sau"
+                title="Ngày sau"
+                onClick={handleNextDay}
+                className="bg-white"
+              >
                 <ChevronRight className="size-4" />
               </Button>
               <Button size="sm" onClick={handleToday} className="bg-blue-600 hover:bg-blue-700">
@@ -1682,7 +1638,15 @@ export function AttendanceApproval() {
                 {departmentFilter !== 'all' ? ` • Phòng ${departmentFilter}` : ''}
                 {searchQuery ? ` • Từ khóa "${searchQuery}"` : ''}
               </p>
-            </div>
+            </div>
+            <Button
+              variant="outline"
+              className="w-fit gap-2 bg-white text-blue-600 hover:bg-blue-50"
+              onClick={handleExportAttendance}
+            >
+              <Download className="size-4" />
+              Xuất báo cáo
+            </Button>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1798,7 +1762,7 @@ export function AttendanceApproval() {
         <Card className="border-gray-200 !p-4 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold text-gray-900">Lịch sử chấm công</h2>
+              <p className="text-xs font-medium uppercase text-gray-500">Ngày đang xem</p>
               <p className="mt-1 text-sm text-gray-500">
                 {getDayOfWeek(selectedDateLabel)}, {selectedDateLabel}
                 {departmentFilter !== 'all' ? ` • ${departmentFilter}` : ''}
@@ -1806,7 +1770,14 @@ export function AttendanceApproval() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={handlePreviousDay} className="bg-white">
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Ngày trước"
+                title="Ngày trước"
+                onClick={handlePreviousDay}
+                className="bg-white"
+              >
                 <ChevronLeft className="size-4" />
               </Button>
               <div className="flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3">
@@ -1821,12 +1792,28 @@ export function AttendanceApproval() {
                   className="h-7 w-[145px] bg-transparent text-sm font-semibold text-gray-900 outline-none"
                 />
               </div>
-              <Button size="sm" variant="outline" onClick={handleNextDay} className="bg-white">
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Ngày sau"
+                title="Ngày sau"
+                onClick={handleNextDay}
+                className="bg-white"
+              >
                 <ChevronRight className="size-4" />
               </Button>
               <Button size="sm" onClick={handleToday} className="bg-blue-600 hover:bg-blue-700">
                 Hôm nay
-              </Button>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 bg-white text-blue-600 hover:bg-blue-50"
+                onClick={handleExportAttendance}
+              >
+                <Download className="size-4" />
+                Xuất
+              </Button>
             </div>
           </div>
 
@@ -1939,24 +1926,47 @@ export function AttendanceApproval() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-[calc(100vh-7rem)] min-h-[620px] flex-col gap-1.5 overflow-hidden pb-1">
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Quản lý chấm công</h1>
-          <p className="text-gray-500 mt-1">Xem lịch sử chấm công từng ngày và xét duyệt đơn bổ sung/điều chỉnh</p>
+      <div className="flex shrink-0 flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white shadow-sm">
+            <Calendar className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-950">{roleTitle}</h1>
+              <Badge variant="outline" className={`h-6 px-2 text-[10px] ${isManager ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600'}`}>
+                {scopeLabel}
+              </Badge>
+            </div>
+            <p className="truncate text-[11px] text-slate-500">{roleDescription}</p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 lg:justify-end">
+        <div className="flex flex-wrap gap-1.5 lg:justify-end">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setActiveAttendancePopup('review-center')}
+            className="h-8 gap-1.5 bg-blue-600 px-2.5 text-xs text-white shadow-sm hover:bg-blue-700"
+          >
+            <ListChecks className="size-4" />
+            {isManager ? 'Duyệt đơn team' : 'Cần xử lý'}
+            <Badge className={`ml-1 ${stats.pending > 0 ? 'bg-amber-400 text-amber-950 hover:bg-amber-400' : 'bg-white/20 text-white hover:bg-white/20'}`}>
+              {stats.pending}
+            </Badge>
+          </Button>
+
           <Button
             type="button"
             size="sm"
             variant="outline"
             onClick={() => setActiveAttendancePopup('supplement')}
-            className="gap-2 bg-white hover:bg-blue-50"
+            className="h-8 gap-1.5 border-slate-200 bg-white px-2.5 text-xs hover:bg-blue-50"
           >
             <FileText className="size-4 text-blue-600" />
-            Đơn bổ sung
+            {isManager ? 'Bổ sung team' : 'Đơn bổ sung'}
             <Badge className="ml-1 bg-blue-100 text-blue-700 hover:bg-blue-100">
               {filteredSupplementRequests.length}
             </Badge>
@@ -1967,10 +1977,10 @@ export function AttendanceApproval() {
             size="sm"
             variant="outline"
             onClick={() => setActiveAttendancePopup('adjustment')}
-            className="gap-2 bg-white hover:bg-indigo-50"
+            className="h-8 gap-1.5 border-slate-200 bg-white px-2.5 text-xs hover:bg-indigo-50"
           >
             <ArrowRight className="size-4 text-indigo-600" />
-            Đơn điều chỉnh
+            {isManager ? 'Điều chỉnh team' : 'Đơn điều chỉnh'}
             <Badge className="ml-1 bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
               {filteredAdjustmentRequests.length}
             </Badge>
@@ -1981,10 +1991,10 @@ export function AttendanceApproval() {
             size="sm"
             variant="outline"
             onClick={() => setActiveAttendancePopup('history')}
-            className="gap-2 bg-white hover:bg-gray-50"
+            className="h-8 gap-1.5 border-slate-200 bg-white px-2.5 text-xs hover:bg-slate-50"
           >
             <Calendar className="size-4 text-gray-700" />
-            Lịch sử
+            {isManager ? 'Lịch sử team' : 'Lịch sử'}
             <Badge variant="outline" className="ml-1 bg-gray-50 text-gray-700">
               {attendanceForDate.length}
             </Badge>
@@ -1993,37 +2003,44 @@ export function AttendanceApproval() {
       </div>
 
       {/* Filters */}
-      <Card className="border border-gray-200 p-4 shadow-sm">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+      <Card className="shrink-0 border border-slate-200 bg-white p-1.5 shadow-sm">
+        <div className="flex flex-col gap-1.5 xl:flex-row xl:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
             <Input
               placeholder="Tìm theo tên, mã NV, lý do..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-11 border-gray-200 bg-gray-50 pl-10 focus:bg-white"
+              className="h-8 border-slate-200 bg-slate-50 pl-9 text-xs focus:bg-white"
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)] xl:min-w-[720px]">
-            <select
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">Tất cả phòng ban</option>
-              {departments.map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
-              ))}
-            </select>
+          <div className="grid gap-2 sm:grid-cols-[200px_minmax(0,1fr)] xl:min-w-[660px]">
+            {isManager ? (
+              <div className="flex h-8 items-center justify-between rounded-md border border-indigo-100 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-700">
+                <span>Phạm vi team</span>
+                <span className="truncate">{scopeLabel}</span>
+              </div>
+            ) : (
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Tất cả phòng ban</option>
+                {departments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            )}
 
-            <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-1 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-0.5 md:grid-cols-4">
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
                 onClick={() => setStatusFilter('all')}
-                className={`h-9 justify-between px-3 ${statusFilter === 'all' ? 'bg-white text-gray-900 shadow-sm hover:bg-white' : 'text-gray-600 hover:bg-white'}`}
+                className={`h-7 justify-between px-2 text-xs ${statusFilter === 'all' ? 'bg-white text-slate-900 shadow-sm hover:bg-white' : 'text-slate-600 hover:bg-white'}`}
               >
                 <span>Tất cả</span>
                 <Badge variant="outline" className="ml-2 bg-white text-gray-700">{stats.total}</Badge>
@@ -2033,7 +2050,7 @@ export function AttendanceApproval() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setStatusFilter('pending')}
-                className={`h-9 justify-between px-3 ${statusFilter === 'pending' ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700' : 'text-gray-600 hover:bg-white'}`}
+                className={`h-7 justify-between px-2 text-xs ${statusFilter === 'pending' ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700' : 'text-slate-600 hover:bg-white'}`}
               >
                 <span>Chờ duyệt</span>
                 <Badge className={`ml-2 ${statusFilter === 'pending' ? 'bg-white/20 text-white hover:bg-white/20' : 'bg-blue-100 text-blue-700 hover:bg-blue-100'}`}>{stats.pending}</Badge>
@@ -2043,7 +2060,7 @@ export function AttendanceApproval() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setStatusFilter('approved')}
-                className={`h-9 justify-between px-3 ${statusFilter === 'approved' ? 'bg-green-600 text-white shadow-sm hover:bg-green-700' : 'text-gray-600 hover:bg-white'}`}
+                className={`h-7 justify-between px-2 text-xs ${statusFilter === 'approved' ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700' : 'text-slate-600 hover:bg-white'}`}
               >
                 <span>Đã duyệt</span>
                 <Badge className={`ml-2 ${statusFilter === 'approved' ? 'bg-white/20 text-white hover:bg-white/20' : 'bg-green-100 text-green-700 hover:bg-green-100'}`}>{stats.approved}</Badge>
@@ -2053,7 +2070,7 @@ export function AttendanceApproval() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setStatusFilter('rejected')}
-                className={`h-9 justify-between px-3 ${statusFilter === 'rejected' ? 'bg-red-600 text-white shadow-sm hover:bg-red-700' : 'text-gray-600 hover:bg-white'}`}
+                className={`h-7 justify-between px-2 text-xs ${statusFilter === 'rejected' ? 'bg-red-600 text-white shadow-sm hover:bg-red-700' : 'text-slate-600 hover:bg-white'}`}
               >
                 <span>Từ chối</span>
                 <Badge className={`ml-2 ${statusFilter === 'rejected' ? 'bg-white/20 text-white hover:bg-white/20' : 'bg-red-100 text-red-700 hover:bg-red-100'}`}>{stats.rejected}</Badge>
@@ -2063,41 +2080,150 @@ export function AttendanceApproval() {
         </div>
       </Card>
 
-      <Card className="overflow-hidden border border-gray-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-gray-200 bg-white p-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleToday}>
+      <div className="hidden">
+        <Card className="overflow-hidden border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">{isManager ? 'Team cần xử lý' : 'Cần xử lý'}</h2>
+              <p className="text-xs text-gray-500">
+                {isManager ? 'Đơn chấm công của nhân viên trong team đang chờ duyệt' : 'Các đơn chấm công đang chờ Admin duyệt'}
+              </p>
+            </div>
+            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">{stats.pending} chờ duyệt</Badge>
+          </div>
+
+          <div className="grid max-h-[176px] gap-2 overflow-y-auto p-3 lg:grid-cols-3">
+            {pendingRequests.length === 0 ? (
+              <div className="col-span-full rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center">
+                <p className="text-sm font-semibold text-gray-700">Không có đơn cần xử lý</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {isManager ? 'Khi nhân viên trong team gửi đơn mới, đơn sẽ xuất hiện tại đây.' : 'Các đơn bổ sung hoặc điều chỉnh mới sẽ xuất hiện ở đây.'}
+                </p>
+              </div>
+            ) : (
+              pendingRequests.map((request) => (
+                <article key={request.id} className="rounded-lg border border-gray-200 bg-slate-50/70 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900">{request.employeeName}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">{request.employeeId} • {request.department}</p>
+                    </div>
+                    {getRequestTypeBadge(request.type)}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-white p-2 text-xs">
+                    <div>
+                      <p className="text-gray-500">Ngày</p>
+                      <p className="font-semibold text-gray-900">{request.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Giờ</p>
+                      <p className="font-semibold text-gray-900">{request.checkIn} - {request.checkOut}</p>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 line-clamp-2 text-xs text-gray-600">{request.reason}</p>
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="h-8 flex-1 bg-white" onClick={() => handleViewDetail(request)}>
+                      Chi tiết
+                    </Button>
+                    <Button size="sm" className="h-8 bg-green-600 hover:bg-green-700" onClick={() => handleOpenActionDialog(request, 'approve')}>
+                      Duyệt
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 border-red-200 bg-white text-red-600 hover:bg-red-50" onClick={() => handleOpenActionDialog(request, 'reject')}>
+                      Từ chối
+                    </Button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </Card>
+
+        <Card className="border border-gray-200 bg-white p-3 shadow-sm">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">{isManager ? 'Tổng quan team' : 'Tổng quan ngày'}</h2>
+              <p className="text-xs text-gray-500">{formatDate(selectedDate)}</p>
+            </div>
+            <Badge variant="outline" className="bg-blue-50 text-blue-700">{reviewedTodayCount} bản ghi</Badge>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-lg bg-blue-50 p-3">
+              <p className="text-xs text-blue-700">{isManager ? 'Đơn của team' : 'Tổng đơn'}</p>
+              <p className="mt-1 text-xl font-bold text-blue-900">{stats.total}</p>
+            </div>
+            <div className="rounded-lg bg-orange-50 p-3">
+              <p className="text-xs text-orange-700">Chờ duyệt</p>
+              <p className="mt-1 text-xl font-bold text-orange-900">{stats.pending}</p>
+            </div>
+            <div className="rounded-lg bg-green-50 p-3">
+              <p className="text-xs text-green-700">{isManager ? 'Đang làm' : 'Online'}</p>
+              <p className="mt-1 text-xl font-bold text-green-900">{liveStats.online}</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-xs text-slate-600">{isManager ? 'Chưa/đã kết thúc' : 'Offline'}</p>
+              <p className="mt-1 text-xl font-bold text-slate-900">{liveStats.offline}</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
+        <div className="flex shrink-0 flex-col gap-1 border-b border-slate-200 bg-white px-2.5 py-1.5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button size="sm" className="h-7 gap-1.5 bg-blue-600 px-2.5 text-xs hover:bg-blue-700" onClick={handleToday}>
               <Calendar className="size-4" />
               Hôm nay
             </Button>
             <div className="flex items-center gap-1">
-              <Button size="icon" variant="ghost" className="size-9 rounded-full" onClick={handlePreviousDay}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 rounded-md text-slate-600"
+                aria-label="Tuần trước"
+                title="Tuần trước"
+                onClick={handlePreviousWeek}
+              >
                 <ChevronLeft className="size-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="size-9 rounded-full" onClick={handleNextDay}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 rounded-md text-slate-600"
+                aria-label="Tuần sau"
+                title="Tuần sau"
+                onClick={handleNextWeek}
+              >
                 <ChevronRight className="size-4" />
               </Button>
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold text-gray-900">{selectedMonthLabel}</h2>
-                <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                <h2 className="text-sm font-semibold text-slate-950">{selectedMonthLabel}</h2>
+                <Badge variant="outline" className="h-6 border-blue-100 bg-blue-50 px-2 text-[10px] text-blue-700">
                   {selectedWeekRange}
                 </Badge>
-                <Badge className="gap-2 bg-green-100 text-green-700 hover:bg-green-100">
+                <Badge className="h-6 gap-1.5 bg-emerald-50 px-2 text-[10px] text-emerald-700 hover:bg-emerald-50">
                   <span className="relative flex size-2">
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex size-2 rounded-full bg-green-500" />
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
                   </span>
                   Realtime
                 </Badge>
               </div>
-              <p className="mt-1 text-sm text-gray-500">Theo dõi Start/End của nhân viên theo lịch tuần, click vào ca để xem chi tiết.</p>
+              <p className="hidden">
+                {isManager
+                  ? 'Theo dõi Start/End của team theo tuần, click vào ca để xem chi tiết nhân viên.'
+                  : 'Theo dõi Start/End của nhân viên theo lịch tuần, click vào ca để xem chi tiết.'}
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2">
               <Calendar className="size-4 text-blue-600" />
               <input
                 type="date"
@@ -2106,16 +2232,81 @@ export function AttendanceApproval() {
                   const [year, month, day] = event.target.value.split('-').map(Number);
                   setSelectedDate(new Date(year, month - 1, day));
                 }}
-                className="bg-transparent text-sm font-semibold text-gray-900 outline-none"
+                className="bg-transparent text-[11px] font-semibold text-slate-900 outline-none"
               />
             </div>
-            <Badge className="bg-green-100 text-green-700 hover:bg-green-100">{liveStats.online} online</Badge>
-            <Badge variant="outline" className="bg-gray-50 text-gray-700">{liveStats.offline} offline</Badge>
+            <Badge className="h-6 bg-emerald-50 px-2 text-[10px] text-emerald-700 hover:bg-emerald-50">{liveStats.online} online</Badge>
+            <Badge variant="outline" className="h-6 border-slate-200 bg-slate-50 px-2 text-[10px] text-slate-600">{liveStats.offline} offline</Badge>
           </div>
         </div>
 
-        <div className="grid min-h-[680px] lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="border-b border-gray-200 bg-gray-50/70 p-4 lg:border-b-0 lg:border-r">
+        <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 px-2.5 py-1">
+          <div className="flex flex-col gap-1.5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="grid grid-cols-3 gap-1.5 sm:flex sm:items-center">
+              <div className="flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2">
+                <p className="text-[10px] text-slate-500">Tổng</p>
+                <p className="text-sm font-bold text-slate-900">{liveStats.total}</p>
+              </div>
+              <div className="flex h-7 items-center gap-1.5 rounded-md border border-emerald-100 bg-white px-2">
+                <p className="text-[10px] text-emerald-700">Online</p>
+                <p className="text-sm font-bold text-emerald-700">{liveStats.online}</p>
+              </div>
+              <div className="flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2">
+                <p className="text-[10px] text-slate-500">Offline</p>
+                <p className="text-sm font-bold text-slate-700">{liveStats.offline}</p>
+              </div>
+              <div className="hidden h-7 min-w-[124px] rounded-md border border-slate-200 bg-white px-2 py-0.5 sm:block">
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span>Tỷ lệ online</span>
+                  <span className="font-semibold text-emerald-700">{liveOnlinePercent}%</span>
+                </div>
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${liveOnlinePercent}%` }} />
+                </div>
+              </div>
+              <div className="hidden h-7 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 2xl:flex">
+                {calendarAttendanceLegend.map((state) => {
+                  const tone = calendarAttendanceTones[state];
+                  return (
+                    <span key={state} className="inline-flex items-center gap-1 whitespace-nowrap text-[9px] font-medium text-slate-600">
+                      <span className={`size-1.5 rounded-full ${tone.dotClass}`} />
+                      {tone.label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {isManager ? (
+              <div className="rounded-md border border-indigo-100 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                Team {scopeLabel}: {liveStats.online}/{liveStats.total} đang làm
+              </div>
+            ) : (
+              <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setLiveDepartmentFilter('all')}
+                  className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${liveDepartmentFilter === 'all' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Tất cả {allLiveStats.online}/{allLiveStats.total}
+                </button>
+                {liveDepartmentStats.map((department) => (
+                  <button
+                    key={department.department}
+                    type="button"
+                    onClick={() => setLiveDepartmentFilter(department.department)}
+                    className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${liveDepartmentFilter === department.department ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    {department.department} {department.online}/{department.total}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <aside className="hidden">
             <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
               <p className="text-sm font-semibold text-gray-900">Trạng thái ngày chọn</p>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -2143,7 +2334,7 @@ export function AttendanceApproval() {
               </div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-3">
               <p className="mb-2 text-sm font-semibold text-gray-900">Phòng ban</p>
               <div className="space-y-2">
                 <button
@@ -2169,34 +2360,43 @@ export function AttendanceApproval() {
             </div>
           </aside>
 
-          <div className="min-w-0 overflow-x-auto">
-            <div className="min-w-[980px]">
-              <div className="grid grid-cols-[64px_repeat(7,minmax(120px,1fr))] border-b border-gray-200 bg-white">
-                <div className="border-r border-gray-100 px-3 py-3 text-xs font-semibold text-gray-400">GMT+7</div>
+          <div className="h-full min-w-0 overflow-x-auto overflow-y-hidden">
+            <div className="flex h-full min-w-[860px] flex-col">
+              <div className="sticky top-0 z-10 grid shrink-0 grid-cols-[56px_repeat(7,minmax(112px,1fr))] border-b border-slate-200 bg-white">
+                <div className="flex items-center border-r border-slate-100 px-2 text-[9px] font-semibold text-slate-400">GMT+7</div>
                 {weekDays.map((day) => {
                   const dayKey = formatDate(day);
                   const isSelected = dayKey === formatDate(selectedDate);
                   const dayName = day.toLocaleDateString('vi-VN', { weekday: 'short' });
+                  const eventCount = calendarEvents.filter((event) => event.date === dayKey).length;
 
                   return (
-                    <div key={dayKey} className={`border-r border-gray-100 px-3 py-3 text-center ${isSelected ? 'bg-blue-50' : ''}`}>
-                      <p className="text-[11px] font-semibold uppercase text-gray-500">{dayName}</p>
+                    <div key={dayKey} className={`flex h-11 items-center justify-center gap-1.5 border-r border-slate-100 px-1 text-center transition-colors ${isSelected ? 'bg-blue-50' : 'bg-white hover:bg-slate-50'}`}>
+                      <p className="text-[9px] font-semibold uppercase text-slate-500">{dayName}</p>
                       <button
                         type="button"
                         onClick={() => setSelectedDate(day)}
-                        className={`mt-1 inline-flex size-9 items-center justify-center rounded-full text-sm font-bold ${isSelected ? 'bg-blue-600 text-white' : 'text-gray-800 hover:bg-gray-100'}`}
+                        className={`inline-flex size-6 items-center justify-center rounded-full text-[11px] font-bold ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-800 hover:bg-slate-100'}`}
                       >
                         {day.getDate()}
                       </button>
+                      {eventCount > 0 && (
+                        <span
+                          title={`${eventCount} nhân viên`}
+                          className="inline-flex size-4 items-center justify-center rounded-full bg-blue-100 text-[9px] font-bold text-blue-700"
+                        >
+                          {eventCount}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
               </div>
 
-              <div className="relative grid grid-cols-[64px_repeat(7,minmax(120px,1fr))]">
-                <div className="border-r border-gray-100 bg-white">
+              <div className="relative grid min-h-0 flex-1 grid-cols-[56px_repeat(7,minmax(112px,1fr))]">
+                <div className="flex h-full flex-col border-r border-slate-100 bg-slate-50/60">
                   {weekTimeSlots.map((hour) => (
-                    <div key={hour} className="h-16 border-b border-gray-100 pr-2 pt-1 text-right text-xs text-gray-500">
+                    <div key={hour} className="min-h-0 flex-1 border-b border-slate-100 pr-2 pt-0.5 text-right text-[9px] leading-none text-slate-400">
                       {hour}:00
                     </div>
                   ))}
@@ -2206,44 +2406,62 @@ export function AttendanceApproval() {
                   const dayKey = formatDate(day);
                   const dayIndex = weekDateKeys.indexOf(dayKey);
                   const isSelected = dayKey === formatDate(selectedDate);
+                  const dayEvents = calendarEvents.filter((event) => event.dayIndex === dayIndex);
 
                   return (
-                    <div key={dayKey} className={`relative h-[1024px] border-r border-gray-100 ${isSelected ? 'bg-blue-50/40' : 'bg-white'}`}>
+                    <div key={dayKey} className={`relative flex h-full min-w-0 flex-col border-r border-slate-100 ${isSelected ? 'bg-blue-50/50' : 'bg-white'}`}>
                       {weekTimeSlots.map((hour) => (
-                        <div key={hour} className="h-16 border-b border-gray-100" />
+                        <div key={hour} className="min-h-0 flex-1 border-b border-slate-100" />
                       ))}
-                      {calendarEvents
-                        .filter((event) => event.dayIndex === dayIndex)
-                        .map((event) => {
-                          const isOnline = event.status === 'online';
 
-                          return (
-                            <button
-                              key={`${event.employeeId}-${event.date}`}
-                              type="button"
-                              onClick={() => setSelectedCalendarEvent(event)}
-                              className={`absolute left-2 right-2 overflow-hidden rounded-md border p-2 text-left text-xs shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${isOnline ? 'border-cyan-200 bg-cyan-300/90 text-slate-900' : 'border-slate-200 bg-slate-100 text-slate-600'}`}
-                              style={{ top: `${event.top}%`, height: `${event.height}%` }}
-                            >
-                              <div className="flex items-start justify-between gap-1">
-                                <span className="line-clamp-2 font-semibold leading-snug">{event.employeeName}</span>
-                                <span className={`mt-0.5 size-2 shrink-0 rounded-full ${isOnline ? 'bg-green-600' : 'bg-gray-400'}`} />
-                              </div>
-                              <p className="mt-1 truncate font-medium">{event.employeeId} • {event.department}</p>
-                              <p className="mt-1 truncate">{event.durationLabel}</p>
-                              <p className="truncate text-[11px] opacity-80">Cập nhật {event.lastUpdated || '-'}</p>
-                            </button>
-                          );
-                        })}
+                      {dayEvents.length > 0 && (
+                        <div className="attendance-day-scroll absolute inset-0 z-[1] overflow-x-auto overflow-y-hidden">
+                          <div className="flex h-full min-w-full">
+                            {dayEvents.map((event) => {
+                              const tone = calendarAttendanceTones[event.attendanceState];
+
+                              return (
+                                <div
+                                  key={`${event.employeeId}-${event.date}`}
+                                  className="relative h-full basis-1/4 shrink-0 px-0.5"
+                                >
+                                  <button
+                                    type="button"
+                                    title={`${event.employeeName} | ${tone.label} | ${event.employeeId} | ${event.department} | ${event.durationLabel}`}
+                                    onClick={() => setSelectedCalendarEvent(event)}
+                                    className={`absolute inset-x-0.5 overflow-hidden rounded-md border-l-[3px] px-1 py-1 text-left text-[10px] leading-tight shadow-sm transition duration-200 hover:z-10 hover:-translate-y-0.5 hover:shadow-md ${tone.cardClass}`}
+                                    style={{ top: `${event.top}%`, height: `${event.height}%` }}
+                                  >
+                                    <div className="flex items-start justify-between gap-0.5">
+                                      <span className="truncate font-semibold">{event.employeeName}</span>
+                                      <span className={`mt-0.5 size-1.5 shrink-0 rounded-full ${tone.dotClass}`} />
+                                    </div>
+                                    <p className="mt-0.5 truncate font-medium">{event.employeeId}</p>
+                                    <p className="truncate">{event.durationLabel}</p>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
 
-                {calendarEvents.length === 0 && (
-                  <div className="pointer-events-none absolute inset-x-[64px] top-24 flex justify-center">
+                {(attendanceLoading || attendanceError || calendarEvents.length === 0) && (
+                  <div className="pointer-events-none absolute inset-x-[56px] top-24 flex justify-center">
                     <div className="rounded-lg border border-dashed border-gray-300 bg-white/90 px-5 py-4 text-center shadow-sm">
-                      <p className="text-sm font-semibold text-gray-800">Chưa có ca chấm công trong tuần này</p>
-                      <p className="mt-1 text-xs text-gray-500">Hãy đổi ngày hoặc phòng ban để xem dữ liệu khác.</p>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {attendanceLoading
+                          ? 'Đang tải dữ liệu chấm công...'
+                          : attendanceError
+                            ? 'Không tải được dữ liệu từ hệ thống'
+                            : 'Chưa có ca chấm công trong tuần này'}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {attendanceError || 'Dữ liệu chỉ xuất hiện sau khi nhân viên check-in hoặc được duyệt bổ sung công.'}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -2448,18 +2666,72 @@ export function AttendanceApproval() {
       </Card>
 
       <Dialog
+        open={activeAttendancePopup === 'review-center'}
+        onOpenChange={(open) => setActiveAttendancePopup(open ? 'review-center' : null)}
+      >
+        <DialogContent className="!flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1080px]">
+          <DialogHeader className="shrink-0 border-b border-gray-200 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
+              <div>
+                <DialogTitle className="text-xl">
+                  {isManager ? 'Trung tâm duyệt chấm công team' : 'Trung tâm duyệt chấm công'}
+                </DialogTitle>
+                <DialogDescription className="mt-1">
+                  Xem tổng quan và xử lý các đơn đang chờ mà không rời khỏi lịch làm việc.
+                </DialogDescription>
+              </div>
+              <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">
+                {pendingRequests.length} chờ duyệt
+              </Badge>
+            </div>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <p className="text-xs font-medium text-blue-700">{isManager ? 'Đơn của team' : 'Tổng đơn'}</p>
+                <p className="mt-1 text-2xl font-bold text-blue-900">{stats.total}</p>
+              </div>
+              <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
+                <p className="text-xs font-medium text-orange-700">Chờ duyệt</p>
+                <p className="mt-1 text-2xl font-bold text-orange-900">{stats.pending}</p>
+              </div>
+              <div className="rounded-lg border border-green-100 bg-green-50 p-3">
+                <p className="text-xs font-medium text-green-700">{isManager ? 'Đang làm' : 'Online'}</p>
+                <p className="mt-1 text-2xl font-bold text-green-900">{liveStats.online}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-medium text-slate-600">{isManager ? 'Chưa/đã kết thúc' : 'Offline'}</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">{liveStats.offline}</p>
+              </div>
+            </div>
+
+            {renderCompactRequestList(
+              pendingRequests,
+              isManager ? 'Đơn team cần xử lý' : 'Đơn cần xử lý',
+              isManager
+                ? 'Các đơn chấm công của nhân viên trong phạm vi quản lý.'
+                : 'Các đơn bổ sung và điều chỉnh đang chờ Admin duyệt.',
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={activeAttendancePopup === 'history'}
         onOpenChange={(open) => setActiveAttendancePopup(open ? 'history' : null)}
       >
-        <DialogContent className="max-h-[88vh] overflow-y-auto p-0 sm:max-w-[1020px]">
-          <DialogHeader className="border-b border-gray-200 p-5">
+        <DialogContent className="!flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1020px]">
+          <DialogHeader className="shrink-0 border-b border-gray-200 p-5">
             <DialogTitle className="text-xl">Lịch sử chấm công</DialogTitle>
             <DialogDescription>
               Xem chi tiết chấm công, báo cáo công việc và trạng thái theo ngày.
             </DialogDescription>
           </DialogHeader>
 
-          {renderSimpleAttendanceHistoryPanel()}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {renderSimpleAttendanceHistoryPanel()}
+          </div>
           <div className="hidden">
           {/* Date Selector Card */}
           <Card className="!gap-2 border-gray-200 !p-4 shadow-sm">
@@ -2468,7 +2740,6 @@ export function AttendanceApproval() {
                 <h2 className="text-xl font-semibold text-gray-900 mb-1">Chọn ngày xem chấm công</h2>
                 <p className="text-sm text-gray-600">Xem chi tiết chấm công của tất cả nhân viên theo từng ngày</p>
               </div>
-              
               <div className="flex items-center gap-3">
                 <Button
                   size="sm"
@@ -2517,7 +2788,15 @@ export function AttendanceApproval() {
                 <p className="text-gray-500">
                   Có {dateStats.total} nhân viên chấm công trong ngày này
                 </p>
-              </div>
+              </div>
+              <Button
+                variant="outline"
+                className="border-gray-200 bg-white text-blue-600 hover:bg-blue-50"
+                onClick={handleExportAttendance}
+              >
+                <Download className="size-4 mr-2" />
+                Xuất báo cáo
+              </Button>
             </div>
           </Card>
 
@@ -2612,7 +2891,6 @@ export function AttendanceApproval() {
                 {departmentFilter !== 'all' && ` • Phòng: ${departmentFilter}`}
               </p>
             </div>
-            
             <div className="overflow-x-auto">
               {attendanceForDate.length === 0 ? (
                 <div className="p-8 text-center">
@@ -2705,18 +2983,26 @@ export function AttendanceApproval() {
         open={activeAttendancePopup === 'supplement'}
         onOpenChange={(open) => setActiveAttendancePopup(open ? 'supplement' : null)}
       >
-        <DialogContent className="max-h-[86vh] overflow-y-auto overflow-x-hidden p-0 sm:max-w-[900px]">
-          <DialogHeader className="border-b border-gray-200 p-5">
-            <DialogTitle className="text-xl">Đơn bổ sung chấm công</DialogTitle>
-            <DialogDescription>
-              Nhân viên gửi đơn khi quên chấm công hoặc thiếu lượt vào/ra.
-            </DialogDescription>
+        <DialogContent className="!flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[900px]">
+          <DialogHeader className="shrink-0 border-b border-gray-200 p-5">
+            <div className="flex items-start justify-between gap-3 pr-8">
+              <div>
+                <DialogTitle className="text-xl">Đơn bổ sung chấm công</DialogTitle>
+                <DialogDescription>
+                  Nhân viên gửi đơn khi quên chấm công hoặc thiếu lượt vào/ra.
+                </DialogDescription>
+              </div>
+              <Badge variant="outline" className="shrink-0 bg-sky-50 text-sky-700">
+                {filteredSupplementRequests.length} đơn
+              </Badge>
+            </div>
           </DialogHeader>
-          <div className="p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {renderCompactRequestList(
               filteredSupplementRequests,
               'Đơn bổ sung chấm công',
-              'Nhân viên gửi đơn khi quên chấm công hoặc thiếu lượt vào/ra.'
+              'Nhân viên gửi đơn khi quên chấm công hoặc thiếu lượt vào/ra.',
+              false,
             )}
           </div>
         </DialogContent>
@@ -2726,18 +3012,26 @@ export function AttendanceApproval() {
         open={activeAttendancePopup === 'adjustment'}
         onOpenChange={(open) => setActiveAttendancePopup(open ? 'adjustment' : null)}
       >
-        <DialogContent className="max-h-[86vh] overflow-y-auto overflow-x-hidden p-0 sm:max-w-[900px]">
-          <DialogHeader className="border-b border-gray-200 p-5">
-            <DialogTitle className="text-xl">Đơn điều chỉnh giờ chấm công</DialogTitle>
-            <DialogDescription>
-              Dùng cho trường hợp nhân viên cần sửa giờ vào/ra đã ghi nhận.
-            </DialogDescription>
+        <DialogContent className="!flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[900px]">
+          <DialogHeader className="shrink-0 border-b border-gray-200 p-5">
+            <div className="flex items-start justify-between gap-3 pr-8">
+              <div>
+                <DialogTitle className="text-xl">Đơn điều chỉnh giờ chấm công</DialogTitle>
+                <DialogDescription>
+                  Dùng cho trường hợp nhân viên cần sửa giờ vào/ra đã ghi nhận.
+                </DialogDescription>
+              </div>
+              <Badge variant="outline" className="shrink-0 bg-violet-50 text-violet-700">
+                {filteredAdjustmentRequests.length} đơn
+              </Badge>
+            </div>
           </DialogHeader>
-          <div className="p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {renderCompactRequestList(
               filteredAdjustmentRequests,
               'Đơn điều chỉnh giờ chấm công',
-              'Dùng cho trường hợp nhân viên cần sửa giờ vào/ra đã ghi nhận.'
+              'Dùng cho trường hợp nhân viên cần sửa giờ vào/ra đã ghi nhận.',
+              false,
             )}
           </div>
         </DialogContent>
@@ -2749,7 +3043,7 @@ export function AttendanceApproval() {
             <>
               <DialogHeader>
                 <div className="flex items-start gap-3">
-                  <div className={`flex size-12 items-center justify-center rounded-full font-bold text-white ${selectedCalendarEvent.status === 'online' ? 'bg-blue-600' : 'bg-gray-500'}`}>
+                  <div className={`flex size-12 items-center justify-center rounded-full font-bold text-white ${calendarAttendanceTones[selectedCalendarEvent.attendanceState].avatarClass}`}>
                     {selectedCalendarEvent.employeeName.charAt(0)}
                   </div>
                   <div>
@@ -2762,11 +3056,11 @@ export function AttendanceApproval() {
               </DialogHeader>
 
               <div className="space-y-4">
-                <div className={`rounded-lg border p-3 ${selectedCalendarEvent.status === 'online' ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`rounded-lg border p-3 ${calendarAttendanceTones[selectedCalendarEvent.attendanceState].badgeClass}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">Trạng thái</span>
-                    <Badge className={selectedCalendarEvent.status === 'online' ? 'bg-green-100 text-green-700 hover:bg-green-100' : 'bg-gray-200 text-gray-700 hover:bg-gray-200'}>
-                      {selectedCalendarEvent.status === 'online' ? 'Online' : 'Offline'}
+                    <Badge variant="outline" className={calendarAttendanceTones[selectedCalendarEvent.attendanceState].badgeClass}>
+                      {calendarAttendanceTones[selectedCalendarEvent.attendanceState].label}
                     </Badge>
                   </div>
                 </div>
@@ -2809,10 +3103,10 @@ export function AttendanceApproval() {
 
       {/* Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={(open) => (open ? setShowDetailDialog(true) : closeDetailDialog())}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="!flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[680px]">
           {selectedRequest && (
             <>
-              <DialogHeader>
+              <DialogHeader className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6 pr-12">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="size-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                     {selectedRequest.employeeName.charAt(0)}
@@ -2826,33 +3120,15 @@ export function AttendanceApproval() {
                 </div>
               </DialogHeader>
 
-              <div className="space-y-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm text-gray-600">Loại đơn</Label>
-                    <Badge className={selectedRequest.type === 'supplement' ? 'bg-purple-600 mt-1' : 'bg-indigo-600 mt-1'}>
-                      {selectedRequest.type === 'supplement' ? '📋 Bổ sung' : '🔄 Điều chỉnh'}
-                    </Badge>
+                    <div className="mt-1">{getRequestTypeBadge(selectedRequest.type)}</div>
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Trạng thái</Label>
-                    <div className="mt-1">
-                      <Badge
-                        className={
-                          selectedRequest.status === 'approved'
-                            ? 'bg-green-600'
-                            : selectedRequest.status === 'rejected'
-                            ? 'bg-red-600'
-                            : 'bg-yellow-600'
-                        }
-                      >
-                        {selectedRequest.status === 'approved' 
-                          ? '✓ Đã duyệt' 
-                          : selectedRequest.status === 'rejected'
-                          ? '✗ Từ chối'
-                          : '⏳ Chờ duyệt'}
-                      </Badge>
-                    </div>
+                    <div className="mt-1">{getRequestStatusBadge(selectedRequest.status)}</div>
                   </div>
                 </div>
 
@@ -2900,8 +3176,7 @@ export function AttendanceApproval() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          closeDetailDialog(false);
-                          handleViewWorkReport(selectedRequest);
+                          handleViewWorkReport(selectedRequest, null, 'detail');
                         }}
                         className="border-blue-300 text-blue-700 hover:bg-blue-100"
                       >
@@ -2935,7 +3210,7 @@ export function AttendanceApproval() {
                 )}
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="shrink-0 border-t border-gray-200 bg-white px-6 py-4">
                 {selectedRequest.status === 'pending' ? (
                   <div className="flex gap-2 w-full">
                     <Button variant="outline" onClick={() => closeDetailDialog()} className="flex-1">
@@ -2944,8 +3219,7 @@ export function AttendanceApproval() {
                     <Button
                       variant="destructive"
                       onClick={() => {
-                        closeDetailDialog(false);
-                        handleOpenActionDialog(selectedRequest, 'reject');
+                        handleOpenActionDialog(selectedRequest, 'reject', 'detail');
                       }}
                       className="flex-1"
                     >
@@ -2955,8 +3229,7 @@ export function AttendanceApproval() {
                     <Button
                       className="bg-green-600 hover:bg-green-700 flex-1"
                       onClick={() => {
-                        closeDetailDialog(false);
-                        handleOpenActionDialog(selectedRequest, 'approve');
+                        handleOpenActionDialog(selectedRequest, 'approve', 'detail');
                       }}
                     >
                       <CheckCircle className="size-4 mr-2" />
@@ -2975,7 +3248,10 @@ export function AttendanceApproval() {
       </Dialog>
 
       {/* Action Dialog (Approve/Reject) */}
-      <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
+      <Dialog
+        open={showActionDialog}
+        onOpenChange={(open) => (open ? setShowActionDialog(true) : closeActionDialog())}
+      >
         <DialogContent className="sm:max-w-[500px]">
           {selectedRequest && (
             <>
@@ -3022,14 +3298,21 @@ export function AttendanceApproval() {
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setShowActionDialog(false)}>
+                <Button
+                  variant="outline"
+                  disabled={reviewSubmitting}
+                  onClick={() => closeActionDialog()}
+                >
                   Hủy
                 </Button>
                 <Button
                   className={actionType === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+                  disabled={reviewSubmitting || (actionType === 'reject' && !reviewNote.trim())}
                   onClick={handleSubmitReview}
                 >
-                  {actionType === 'approve' ? (
+                  {reviewSubmitting ? (
+                    'Đang xử lý...'
+                  ) : actionType === 'approve' ? (
                     <>
                       <CheckCircle className="size-4 mr-2" />
                       Xác nhận phê duyệt
@@ -3048,12 +3331,15 @@ export function AttendanceApproval() {
       </Dialog>
 
       {/* Work Report View Dialog */}
-      <Dialog open={showWorkReportDialog} onOpenChange={setShowWorkReportDialog}>
-        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+      <Dialog
+        open={showWorkReportDialog}
+        onOpenChange={(open) => (open ? setShowWorkReportDialog(true) : closeWorkReportDialog())}
+      >
+        <DialogContent className="!flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[700px]">
           {(selectedRequest?.workReport || selectedAttendance?.workReport) && (
             <>
-              <DialogHeader>
-                <div className="flex items-center gap-3 mb-2">
+              <DialogHeader className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6 pr-12">
+                <div className="flex items-center gap-3">
                   <div className="size-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md">
                     <FileText className="size-6" />
                   </div>
@@ -3068,7 +3354,7 @@ export function AttendanceApproval() {
                 </div>
               </DialogHeader>
 
-              <div className="space-y-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
                 {/* Employee Info */}
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
@@ -3166,8 +3452,8 @@ export function AttendanceApproval() {
                 )}
               </div>
 
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowWorkReportDialog(false)}>
+              <DialogFooter className="shrink-0 border-t border-gray-200 bg-white px-6 py-4">
+                <Button variant="outline" onClick={() => closeWorkReportDialog()}>
                   Đóng
                 </Button>
                 {selectedRequest && selectedRequest.status === 'pending' && (
@@ -3175,8 +3461,7 @@ export function AttendanceApproval() {
                     <Button
                       variant="destructive"
                       onClick={() => {
-                        setShowWorkReportDialog(false);
-                        handleOpenActionDialog(selectedRequest, 'reject');
+                        handleOpenActionDialog(selectedRequest, 'reject', 'work-report');
                       }}
                     >
                       <XCircle className="size-4 mr-2" />
@@ -3185,8 +3470,7 @@ export function AttendanceApproval() {
                     <Button
                       className="bg-green-600 hover:bg-green-700"
                       onClick={() => {
-                        setShowWorkReportDialog(false);
-                        handleOpenActionDialog(selectedRequest, 'approve');
+                        handleOpenActionDialog(selectedRequest, 'approve', 'work-report');
                       }}
                     >
                       <CheckCircle className="size-4 mr-2" />

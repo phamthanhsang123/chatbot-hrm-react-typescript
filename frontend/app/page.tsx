@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Swal, { type SweetAlertIcon } from 'sweetalert2';
 import { Login } from './components/Login';
-import { getDefaultManagementSettings, Navbar, type ManagementSettings } from './components/Navbar';
+import { defaultManagementSettings, Navbar, type ManagementSettings } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { ManagerTasks } from './components/ManagerTasks';
 import { EmployeeTable } from './components/EmployeeTable';
@@ -24,7 +24,7 @@ import { EmployeeTasks } from './employees/EmployeeTasks';
 import type { UserRole } from './types';
 import { MANAGER_DEPARTMENT } from './types';
 
-const getManagementSettingsKey = (role: 'admin' | 'manager') => `hrm-management-settings-${role}`;
+const MANAGEMENT_SETTINGS_KEY = 'hrm-management-settings';
 
 const getDefaultPageForRole = (role: UserRole | null) => {
   if (role === 'employee') return 'attendance';
@@ -59,21 +59,20 @@ const getAlertTitle = (icon: SweetAlertIcon) => {
   }
 };
 
-function loadManagementSettings(role: 'admin' | 'manager' = 'admin') {
-  const defaults = getDefaultManagementSettings(role);
-  if (typeof window === 'undefined') return defaults;
+function loadManagementSettings() {
+  if (typeof window === 'undefined') return defaultManagementSettings;
 
-  const savedSettings = window.localStorage.getItem(getManagementSettingsKey(role));
-  if (!savedSettings) return defaults;
+  const savedSettings = window.localStorage.getItem(MANAGEMENT_SETTINGS_KEY);
+  if (!savedSettings) return defaultManagementSettings;
 
   try {
     return {
-      ...defaults,
+      ...defaultManagementSettings,
       ...JSON.parse(savedSettings),
     };
   } catch {
-    window.localStorage.removeItem(getManagementSettingsKey(role));
-    return defaults;
+    window.localStorage.removeItem(MANAGEMENT_SETTINGS_KEY);
+    return defaultManagementSettings;
   }
 }
 
@@ -82,9 +81,8 @@ export default function App() {
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(getDefaultPageForRole(null));
-  const [managementSettings, setManagementSettings] = useState<ManagementSettings>(() => loadManagementSettings('admin'));
-  const [managementSettingsOpen, setManagementSettingsOpen] = useState(false);
-  const [employeeSettingsOpen, setEmployeeSettingsOpen] = useState(false);
+  const [managerDepartment, setManagerDepartment] = useState('');
+  const [managementSettings, setManagementSettings] = useState<ManagementSettings>(loadManagementSettings);
 
   useEffect(() => {
     const nativeAlert = window.alert;
@@ -107,24 +105,31 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', managementSettings.darkMode);
+  }, [managementSettings.darkMode]);
+
   const handleManagementSettingsSave = (nextSettings: ManagementSettings) => {
     setManagementSettings(nextSettings);
-    const managementRole = userRole === 'manager' ? 'manager' : 'admin';
-    window.localStorage.setItem(getManagementSettingsKey(managementRole), JSON.stringify(nextSettings));
+    window.localStorage.setItem(MANAGEMENT_SETTINGS_KEY, JSON.stringify(nextSettings));
   };
 
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
+    setManagerDepartment(window.localStorage.getItem('hrm_employee_department') || '');
     setIsLoggedIn(true);
     setCurrentPage(getDefaultPageForRole(role));
-    if (role === 'admin' || role === 'manager') {
-      setManagementSettings(loadManagementSettings(role));
-    }
   };
 
   const handleLogout = () => {
+    window.localStorage.removeItem('hrm_token');
+    window.localStorage.removeItem('hrm_role');
+    window.localStorage.removeItem('hrm_employee_id');
+    window.localStorage.removeItem('hrm_employee_name');
+    window.localStorage.removeItem('hrm_employee_department');
     setIsLoggedIn(false);
     setUserRole(null);
+    setManagerDepartment('');
     setCurrentPage(getDefaultPageForRole(null));
     setSidebarOpen(false);
   };
@@ -161,7 +166,6 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
           currentPage={currentPage}
           onNavigate={setCurrentPage}
-          onOpenSettings={() => setEmployeeSettingsOpen(true)}
         />
 
         {/* Main Content */}
@@ -169,8 +173,6 @@ export default function App() {
           {/* Employee Navbar */}
           <EmployeeNavbar 
             onLogout={handleLogout}
-            settingsOpen={employeeSettingsOpen}
-            onSettingsOpenChange={setEmployeeSettingsOpen}
           />
 
           {/* Page Content */}
@@ -188,25 +190,25 @@ export default function App() {
     if (userRole === 'manager') {
       switch (currentPage) {
         case 'employees':
-          return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
+          return <EmployeeTable userRole="manager" departmentScope={managerDepartment || MANAGER_DEPARTMENT} readOnly />;
         case 'manager-tasks':
-          return <ManagerTasks departmentName={MANAGER_DEPARTMENT} />;
+          return <ManagerTasks />;
         case 'task-review':
-          return <ManagerTasks departmentName={MANAGER_DEPARTMENT} mode="review" />;
+          return <ManagerTasks />;
         case 'salary':
-          return <Salary />;
+          return <Salary userRole="manager" />;
         case 'leave':
-          return <Leave />;
+          return <Leave userRole="manager" />;
         case 'attendance-approval':
-          return <AttendanceApproval />;
+          return <AttendanceApproval userRole="manager" departmentScope={managerDepartment || MANAGER_DEPARTMENT} />;
         case 'competency':
-          return <CompetencyEvaluation userRole="manager" departmentScope={MANAGER_DEPARTMENT} />;
+          return <CompetencyEvaluation userRole="manager" />;
         case 'ai-assistant':
-          return <Chatbot />;
+          return <Chatbot userRole="manager" departmentScope={managerDepartment || MANAGER_DEPARTMENT} />;
         case 'reports':
           return <Reports />;
         default:
-          return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
+          return <EmployeeTable userRole="manager" departmentScope={managerDepartment || MANAGER_DEPARTMENT} readOnly />;
       }
     }
 
@@ -214,15 +216,15 @@ export default function App() {
       case 'employees':
         return <EmployeeTable userRole="admin" />;
       case 'salary':
-        return <Salary />;
+        return <Salary userRole="admin" />;
       case 'leave':
-        return <Leave />;
+        return <Leave userRole="admin" />;
       case 'attendance-approval':
-        return <AttendanceApproval />;
+        return <AttendanceApproval userRole="admin" />;
       case 'competency':
         return <CompetencyEvaluation userRole="admin" />;
       case 'ai-assistant':
-        return <Chatbot />;
+        return <Chatbot userRole="admin" />;
       case 'reports':
         return <Reports />;
       default:
@@ -232,7 +234,9 @@ export default function App() {
 
   return (
     <div
-      className="h-screen w-full min-w-0 flex overflow-hidden overscroll-none bg-slate-50 transition-colors"
+      className={`h-screen w-full min-w-0 flex overflow-hidden overscroll-none transition-colors ${
+        managementSettings.darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50'
+      }`}
     >
       {/* Admin / Manager Sidebar */}
       <Sidebar 
@@ -240,19 +244,18 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
         currentPage={currentPage}
         onNavigate={setCurrentPage}
-        onOpenSettings={() => setManagementSettingsOpen(true)}
         userRole={userRole === 'manager' ? 'manager' : 'admin'}
+        defaultCollapsed={managementSettings.sidebarCollapsed}
       />
 
       {/* Main Content */}
       <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
         {/* Admin Navbar */}
         <Navbar 
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
           onLogout={handleLogout}
           settings={managementSettings}
           onSettingsSave={handleManagementSettingsSave}
-          settingsOpen={managementSettingsOpen}
-          onSettingsOpenChange={setManagementSettingsOpen}
           userRole={userRole === 'manager' ? 'manager' : 'admin'}
         />
 
