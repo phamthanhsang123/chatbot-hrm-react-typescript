@@ -426,14 +426,18 @@ function emptyRequestForm(date = todayIso(), type: RequestType = 'supplement') {
   };
 }
 
+function readableApiError(error: unknown) {
+  return error instanceof Error ? error.message : 'Không xác định được lỗi API.';
+}
+
 export function Attendance() {
   const employeeId = getCurrentEmployeeId();
   const employeeIdentity = useMemo(() => getEmployeePortalIdentity(employeeId), [employeeId]);
   const currentDate = todayIso();
   const [period, setPeriod] = useState(currentPeriodValue());
   const [calendarDate, setCalendarDate] = useState(currentDate);
-  const [history, setHistory] = useState<AttendanceRecord[]>(demoHistory);
-  const [requests, setRequests] = useState<AttendanceRequest[]>(demoRequests);
+  const [history, setHistory] = useState<AttendanceRecord[]>([]);
+  const [requests, setRequests] = useState<AttendanceRequest[]>([]);
   const [monthlySummary, setMonthlySummary] = useState<AttendanceMonthlyReportItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [usingDemoData, setUsingDemoData] = useState(false);
@@ -563,9 +567,10 @@ export function Attendance() {
       if (todayAttendance) mergeRecord(mapApiAttendance(todayAttendance));
       setUsingDemoData(false);
     } catch (error) {
-      console.warn('Attendance API unavailable, using demo data:', error);
+      console.warn('Attendance API unavailable:', error);
       setMonthlySummary(null);
       setUsingDemoData(true);
+      setMessage(`Chưa tải được dữ liệu chấm công từ API Render. ${readableApiError(error)}`);
     } finally {
       setLoading(false);
     }
@@ -578,42 +583,32 @@ export function Attendance() {
   const handleCheckIn = async () => {
     setMessage('');
     const now = new Date();
-    const fallbackCheckIn = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const checkInTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
     try {
       const result = await checkInEmployeeAttendance(employeeId);
+      if (!result.success) {
+        setMessage(result.message || 'API chưa ghi nhận được check-in.');
+        setUsingDemoData(true);
+        return;
+      }
+
       if (result.data) {
         const record = mapApiAttendance(result.data);
         mergeRecord(record);
-        if (result.success) {
-          publishLiveAttendance({
-            ...employeeIdentity,
-            date: formatSyncDate(now),
-            checkIn: record.checkIn || fallbackCheckIn,
-            status: 'online',
-            lastUpdated: fallbackCheckIn,
-          });
-        }
+        publishLiveAttendance({
+          ...employeeIdentity,
+          date: formatSyncDate(now),
+          checkIn: record.checkIn || checkInTime,
+          status: 'online',
+          lastUpdated: checkInTime,
+        });
       }
-      setMessage(result.message || (result.success ? 'Check-in thành công.' : 'Không check-in được.'));
+      setMessage(result.message || 'Check-in thành công.');
       setUsingDemoData(false);
     } catch (error) {
-      console.warn('Check-in API unavailable, using demo data:', error);
-      mergeRecord({
-        date: currentDate,
-        checkIn: fallbackCheckIn,
-        hours: 0,
-        status: 'working',
-        note: 'Check-in demo vì API chưa phản hồi.',
-      });
-      publishLiveAttendance({
-        ...employeeIdentity,
-        date: formatSyncDate(now),
-        checkIn: fallbackCheckIn,
-        status: 'online',
-        lastUpdated: fallbackCheckIn,
-      });
-      setMessage('Đã ghi nhận check-in demo. Khi backend chạy, thao tác này sẽ gọi API chấm công thật.');
+      console.warn('Check-in API unavailable:', error);
+      setMessage(`Không check-in được qua API Render. ${readableApiError(error)}`);
       setUsingDemoData(true);
     }
   };
@@ -621,48 +616,35 @@ export function Attendance() {
   const handleCheckOut = async () => {
     setMessage('');
     const now = new Date();
-    const fallbackCheckOut = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    const fallbackCheckIn = todayRecord?.checkIn || '08:30';
+    const checkOutTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const checkInTime = todayRecord?.checkIn || '08:30';
 
     try {
       const result = await checkOutEmployeeAttendance(employeeId);
+      if (!result.success) {
+        setMessage(result.message || 'API chưa ghi nhận được check-out. Bạn cần check-in thật trước khi check-out.');
+        setUsingDemoData(true);
+        return;
+      }
+
       if (result.data) {
         const record = mapApiAttendance(result.data);
         mergeRecord(record);
-        if (result.success) {
-          publishLiveAttendance({
-            ...employeeIdentity,
-            date: formatSyncDate(now),
-            checkIn: record.checkIn || fallbackCheckIn,
-            checkOut: record.checkOut || fallbackCheckOut,
-            checkOutDate: formatSyncDate(now),
-            status: 'offline',
-            lastUpdated: fallbackCheckOut,
-          });
-        }
+        publishLiveAttendance({
+          ...employeeIdentity,
+          date: formatSyncDate(now),
+          checkIn: record.checkIn || checkInTime,
+          checkOut: record.checkOut || checkOutTime,
+          checkOutDate: formatSyncDate(now),
+          status: 'offline',
+          lastUpdated: checkOutTime,
+        });
       }
-      setMessage(result.message || (result.success ? 'Check-out thành công.' : 'Không check-out được.'));
+      setMessage(result.message || 'Check-out thành công.');
       setUsingDemoData(false);
     } catch (error) {
-      console.warn('Check-out API unavailable, using demo data:', error);
-      mergeRecord({
-        date: currentDate,
-        checkIn: fallbackCheckIn,
-        checkOut: fallbackCheckOut,
-        hours: calculateWorkedHours(fallbackCheckIn, fallbackCheckOut),
-        status: 'completed',
-        note: 'Check-out demo vì API chưa phản hồi.',
-      });
-      publishLiveAttendance({
-        ...employeeIdentity,
-        date: formatSyncDate(now),
-        checkIn: fallbackCheckIn,
-        checkOut: fallbackCheckOut,
-        checkOutDate: formatSyncDate(now),
-        status: 'offline',
-        lastUpdated: fallbackCheckOut,
-      });
-      setMessage('Đã ghi nhận check-out demo. Khi backend chạy, thao tác này sẽ gọi API chấm công thật.');
+      console.warn('Check-out API unavailable:', error);
+      setMessage(`Không check-out được qua API Render. ${readableApiError(error)}`);
       setUsingDemoData(true);
     }
   };
@@ -807,7 +789,7 @@ export function Attendance() {
 
       {usingDemoData && (
         <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          API chưa phản hồi nên màn hình đang dùng dữ liệu minh họa. Nhân viên gửi yêu cầu, HR duyệt và Manager chỉ đối chiếu.
+          API Render chưa trả dữ liệu chấm công thật. Màn hình không tự tạo dữ liệu giả; vui lòng kiểm tra backend hoặc bấm Làm mới sau khi API hoạt động.
         </div>
       )}
 

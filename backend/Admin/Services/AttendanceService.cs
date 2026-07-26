@@ -54,7 +54,9 @@ namespace Admin.Services
                     IsLate = now.TimeOfDay > new TimeSpan(8, 0, 0),
                     IsEarlyLeave = false,
                     Note = "-",
-                    Status = "Working"
+                    Status = "Working",
+                    CreatedAt = now,
+                    UpdatedAt = now
                 };
 
                 _db.Attendances.Add(attendance);
@@ -66,6 +68,7 @@ namespace Admin.Services
                 attendance.IsEarlyLeave = false;
                 attendance.Note = string.IsNullOrWhiteSpace(attendance.Note) ? "-" : attendance.Note;
                 attendance.Status = "Working";
+                attendance.UpdatedAt = now;
             }
 
             _db.SaveChanges();
@@ -92,6 +95,7 @@ namespace Admin.Services
             attendance.CheckOutTime = now;
             attendance.IsEarlyLeave = now.TimeOfDay < new TimeSpan(17, 0, 0);
             attendance.Status = "Completed";
+            attendance.UpdatedAt = now;
 
             var totalHours = Math.Round((now - attendance.CheckInTime.Value).TotalHours, 2);
             SetTotalHours(attendance, totalHours);
