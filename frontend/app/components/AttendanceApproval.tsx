@@ -17,6 +17,7 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { MetricCard } from './MetricCard';
 import { HRM_SYNC_KEYS, readSyncedRecords } from '../employees/hrmSync';
+import { approveAttendanceRequest, rejectAttendanceRequest } from '@/services/attendance';
 
 // Helper function to get day of week in Vietnamese
 const getDayOfWeek = (dateStr: string): string => {
@@ -1037,8 +1038,22 @@ export function AttendanceApproval() {
     }
   };
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = async () => {
     if (!selectedRequest) return;
+
+    try {
+      const updated = actionType === 'approve'
+        ? await approveAttendanceRequest(selectedRequest.externalId || selectedRequest.id, reviewNote || undefined)
+        : await rejectAttendanceRequest(selectedRequest.externalId || selectedRequest.id, reviewNote || undefined);
+
+      if (!updated || (updated.status !== 'approved' && updated.status !== 'rejected')) {
+        throw new Error('API không trả về trạng thái duyệt hợp lệ.');
+      }
+    } catch (error) {
+      console.error('Review attendance request failed:', error);
+      alert('Không cập nhật được đơn chấm công trên API. Giao diện sẽ giữ nguyên trạng thái cũ.');
+      return;
+    }
 
     let reviewedRequest: AttendanceRequest | null = null;
     const updatedRequests = requests.map(req => {

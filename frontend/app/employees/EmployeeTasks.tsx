@@ -286,8 +286,9 @@ export function EmployeeTasks() {
       setUsingDemoData(false);
     } catch (error) {
       console.error('fetchEmployeeTasks failed:', error);
-      setTasks(demoTasks.filter((task) => isTaskInPeriod(task, period)));
+      setTasks([]);
       setUsingDemoData(true);
+      setMessage('Không tải được task từ Render API. Không dùng dữ liệu demo để tránh lệch với Manager.');
     } finally {
       setLoading(false);
     }
@@ -358,14 +359,7 @@ export function EmployeeTasks() {
     setMessage('');
 
     if (usingDemoData) {
-      replaceTask({
-        ...selectedTask,
-        progressPercent: safeProgress,
-        status: selectedTask.status === 'NEW' ? 'IN_PROGRESS' : selectedTask.status,
-        updatedAt: new Date().toISOString(),
-      });
-      setMessage('Đã cập nhật tiến độ trên dữ liệu demo. Khi backend chạy, thao tác này sẽ gọi API Employee Task.');
-      setShowProgressDialog(false);
+      setMessage('Chưa cập nhật được tiến độ vì API Employee Task chưa phản hồi.');
       setSaving(false);
       return;
     }
@@ -390,13 +384,7 @@ export function EmployeeTasks() {
     setMessage('');
 
     if (usingDemoData) {
-      replaceTask({
-        ...task,
-        status: 'SUBMITTED',
-        progressPercent: 100,
-        updatedAt: new Date().toISOString(),
-      });
-      setMessage('Đã gửi task demo sang trạng thái chờ Manager duyệt.');
+      setMessage('Chưa gửi task được vì API Employee Task chưa phản hồi.');
       return;
     }
 
@@ -456,7 +444,7 @@ export function EmployeeTasks() {
 
       {usingDemoData && (
         <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Đang hiển thị dữ liệu mẫu vì API Employee Task chưa trả về dữ liệu. Luồng thao tác vẫn giữ đúng contract với Manager.
+          API Employee Task chưa trả về dữ liệu. Màn hình không dùng dữ liệu mẫu để tránh lệch trạng thái với Manager.
         </div>
       )}
 

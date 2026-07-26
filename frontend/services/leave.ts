@@ -70,13 +70,13 @@ export function createLeaveRequest(payload: LeaveCreatePayload) {
 }
 
 export function approveLeaveRequest(id: number) {
-  return request<void>(`/api/admin/leave-requests/${id}/approve`, {
+  return request<LeaveRequestApiItem>(`/api/admin/leave-requests/${id}/approve`, {
     method: 'POST',
   });
 }
 
 export function rejectLeaveRequest(id: number) {
-  return request<void>(`/api/admin/leave-requests/${id}/reject`, {
+  return request<LeaveRequestApiItem>(`/api/admin/leave-requests/${id}/reject`, {
     method: 'POST',
   });
 }

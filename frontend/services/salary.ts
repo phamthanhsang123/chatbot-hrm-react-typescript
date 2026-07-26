@@ -71,7 +71,8 @@ async function localRequest<T>(path: string, init?: RequestInit) {
   });
 
   if (!res.ok) {
-    return [] as T;
+    const text = await res.text();
+    throw new Error(`${path} failed: ${res.status} ${text}`);
   }
 
   const text = await res.text();
@@ -93,11 +94,7 @@ export function fetchManagerSalaryRows(managerId: number, month: number, year: n
 }
 
 export async function fetchEmployeeSalaryRows(employeeId: number, month: number, year: number) {
-  try {
-    return await localRequest<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
-  } catch {
-    return [];
-  }
+  return localRequest<SalaryRowApiItem[]>(`/api/employee/salary?employeeId=${employeeId}&month=${month}&year=${year}`);
 }
 
 export function calculateMonthlySalary(month: number, year: number) {

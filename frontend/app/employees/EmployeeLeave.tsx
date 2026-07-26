@@ -18,7 +18,7 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { createLeaveRequest, fetchLeaveRequests, type LeaveRequestApiItem } from '@/services/leave';
 import { getCurrentEmployeeId } from '@/services/tasks';
-import { HRM_SYNC_KEYS, getEmployeePortalIdentity, readSyncedRecords, upsertSyncedRecord } from './hrmSync';
+import { getEmployeePortalIdentity } from './hrmSync';
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected';
 type LeaveType = 'annual' | 'sick' | 'unpaid' | 'maternity' | 'marriage' | 'funeral';
@@ -30,6 +30,15 @@ const leaveTypeLabels: Record<LeaveType, string> = {
   maternity: 'Nghỉ thai sản',
   marriage: 'Nghỉ cưới',
   funeral: 'Nghỉ tang',
+};
+
+const leaveTypeIds: Record<LeaveType, number> = {
+  annual: 1,
+  sick: 2,
+  unpaid: 3,
+  maternity: 4,
+  marriage: 5,
+  funeral: 6,
 };
 
 interface LeaveRequest {
@@ -49,17 +58,11 @@ interface LeaveRequest {
   reviewNote?: string;
 }
 
-const demoLeaveRequests: LeaveRequest[] = [
-  { id: 1, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'annual', from: '2026-01-20', to: '2026-01-22', days: 3, reason: 'Về quê', status: 'approved', appliedDate: '2026-01-15', reviewedDate: '2026-01-16', reviewedBy: 'HR Manager', reviewNote: 'Đã duyệt' },
-  { id: 2, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'sick', from: '2026-01-10', to: '2026-01-10', days: 1, reason: 'Ốm', status: 'approved', appliedDate: '2026-01-10', reviewedDate: '2026-01-10', reviewedBy: 'HR Manager', reviewNote: 'Đã duyệt' },
-  { id: 3, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'annual', from: '2026-01-25', to: '2026-01-26', days: 2, reason: 'Du lịch', status: 'pending', appliedDate: '2026-01-16' },
-  { id: 4, employeeId: 'NV001', name: 'Nguyễn Văn A', department: 'IT', type: 'unpaid', from: '2026-01-05', to: '2026-01-05', days: 1, reason: 'Làm giấy tờ', status: 'rejected', appliedDate: '2026-01-03', reviewedDate: '2026-01-04', reviewedBy: 'HR Manager', reviewNote: 'Không đủ điều kiện' },
-];
-
 function normalizeLeaveStatus(status?: string): LeaveStatus {
   const normalized = (status || '').toLowerCase();
-  if (normalized.includes('approve') || normalized.includes('duy')) return 'approved';
   if (normalized.includes('reject') || normalized.includes('từ') || normalized.includes('tu choi')) return 'rejected';
+  if (normalized.includes('chờ') || normalized.includes('cho duyet') || normalized.includes('pending')) return 'pending';
+  if (normalized.includes('approve') || normalized.includes('đã duyệt') || normalized.includes('da duyet')) return 'approved';
   return 'pending';
 }
 
@@ -100,14 +103,7 @@ export function EmployeeLeave() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
 
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
-    const synced = readSyncedRecords<LeaveRequest>(HRM_SYNC_KEYS.leaveRequests).filter(
-      (request) => request.employeeId === employeeIdentity.employeeId,
-    );
-    if (synced.length === 0) return demoLeaveRequests;
-    const syncedIds = new Set(synced.map((request) => request.id));
-    return [...synced, ...demoLeaveRequests.filter((request) => !syncedIds.has(request.id))];
-  });
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [isLoadingApi, setIsLoadingApi] = useState(false);
   const [apiError, setApiError] = useState('');
 
@@ -145,13 +141,11 @@ export function EmployeeLeave() {
           .filter((item) => item.employeeId === numericEmployeeId)
           .map((item) => mapApiLeaveRequest(item, employeeIdentity));
 
-        if (apiRequests.length > 0) {
-          setLeaveRequests(apiRequests);
-        }
+        setLeaveRequests(apiRequests);
       })
       .catch((error) => {
         console.error('fetch employee leave requests failed:', error);
-        if (mounted) setApiError('Đang hiển thị dữ liệu dự phòng vì API nghỉ phép chưa phản hồi.');
+        if (mounted) setApiError('Không tải được dữ liệu nghỉ phép từ Render API.');
       })
       .finally(() => {
         if (mounted) setIsLoadingApi(false);
@@ -188,13 +182,13 @@ export function EmployeeLeave() {
     try {
       const created = await createLeaveRequest({
         employeeId: numericEmployeeId,
-        leaveType: leaveTypeLabels[newLeave.type],
+        leaveTypeId: leaveTypeIds[newLeave.type],
         startDate: newLeave.from,
         endDate: newLeave.to,
         reason: newLeave.reason,
       });
       const request = mapApiLeaveRequest(created, employeeIdentity);
-      setLeaveRequests([request, ...leaveRequests.filter((item) => item.id !== request.id)]);
+      setLeaveRequests((current) => [request, ...current.filter((item) => item.id !== request.id)]);
       setShowCreateDialog(false);
       setNewLeave({ type: 'annual', from: '', to: '', reason: '' });
 
@@ -208,41 +202,16 @@ export function EmployeeLeave() {
       return;
     } catch (error) {
       console.error('create leave request failed:', error);
-      setApiError('Không gửi được lên API, đơn được lưu tạm trên trình duyệt.');
+      setApiError('Không gửi được đơn nghỉ phép lên Render API. Dữ liệu chưa được lưu.');
+      void Swal.fire({
+        icon: 'error',
+        title: 'Không lưu được đơn nghỉ phép',
+        text: 'API chưa lưu thành công nên giao diện không thêm dữ liệu tạm.',
+        confirmButtonText: 'Đóng',
+        confirmButtonColor: '#dc2626',
+      });
+      return;
     }
-
-    const request: LeaveRequest = {
-      id: (Math.max(0, ...leaveRequests.map(r => r.id)) + 1),
-      employeeId: employeeIdentity.employeeId,
-      name: employeeIdentity.employeeName,
-      department: employeeIdentity.department,
-      type: newLeave.type,
-      from: newLeave.from,
-      to: newLeave.to,
-      days,
-      reason: newLeave.reason,
-      status: 'pending',
-      appliedDate: new Date().toISOString().slice(0, 10),
-    };
-
-    setLeaveRequests([request, ...leaveRequests]);
-    upsertSyncedRecord(
-      HRM_SYNC_KEYS.leaveRequests,
-      request,
-      (current) => current.employeeId === request.employeeId && current.id === request.id,
-    );
-    setShowCreateDialog(false);
-    setNewLeave({ type: 'annual', from: '', to: '', reason: '' });
-
-    void Swal.fire({
-      icon: 'success',
-      title: 'Đã gửi đơn nghỉ phép',
-      text:
-        `${leaveTypeLabels[request.type]}: ${formatLeaveDate(request.from)} - ${formatLeaveDate(request.to)} (${days} ngày). ` +
-        `Lý do: ${request.reason}. Đơn của bạn đang chờ HR phê duyệt.`,
-      confirmButtonText: 'Hoàn tất',
-      confirmButtonColor: '#059669',
-    });
   };
 
   const handleViewDetail = (request: LeaveRequest) => {

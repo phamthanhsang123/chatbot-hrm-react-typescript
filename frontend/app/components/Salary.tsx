@@ -1,6 +1,6 @@
 'use client';
 import { Calculator, ChevronDown, ChevronRight, CreditCard, DollarSign, Pencil, Search, TrendingUp, Users, Wallet } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -13,6 +13,13 @@ import {
 } from "./ui/dialog";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
+import {
+    approveSalary,
+    calculateMonthlySalary,
+    fetchSalaryRows,
+    paySalary,
+    type SalaryRowApiItem,
+} from "@/services/salary";
 
 type SalaryStatus = "pending" | "calculated" | "approved" | "paid";
 
@@ -73,6 +80,56 @@ const getRelativeMonthKey = (offset: number) => {
     date.setMonth(date.getMonth() + offset);
     return formatMonthKey(date);
 };
+
+function parseMonthKey(value: string) {
+    const [year, month] = value.split("-").map(Number);
+    return { month, year };
+}
+
+function normalizeSalaryStatus(status?: string): SalaryStatus {
+    const value = (status || "").toLowerCase();
+    if (value.includes("đã thanh toán") || value.includes("da thanh toan") || value.includes("paid")) return "paid";
+    if (value.includes("chờ thanh toán") || value.includes("cho thanh toan") || value.includes("approved")) return "approved";
+    if (value.includes("đã duyệt") || value.includes("da duyet") || value.includes("calculated")) return "calculated";
+    return "pending";
+}
+
+function mapSalaryRow(item: SalaryRowApiItem, monthKey: string): SalaryItem {
+    const allowance = Number(item.allowance || 0);
+    const socialInsurance = Math.round(Number(item.insuranceDeduction || 0) * 0.7);
+    const healthInsurance = Math.round(Number(item.insuranceDeduction || 0) * 0.2);
+    const unemploymentInsurance = Math.max(0, Number(item.insuranceDeduction || 0) - socialInsurance - healthInsurance);
+
+    return {
+        id: item.id,
+        employeeId: item.employeeCode || `NV${String(item.employeeId).padStart(3, "0")}`,
+        name: item.employeeName,
+        department: item.department || "Chưa phân phòng",
+        position: item.position || "Nhân viên",
+        month: monthKey,
+        baseSalary: Number(item.salaryBase || 0),
+        mealAllowance: Math.round(allowance * 0.4),
+        transportAllowance: Math.round(allowance * 0.3),
+        phoneAllowance: Math.round(allowance * 0.2),
+        housingAllowance: Math.max(0, allowance - Math.round(allowance * 0.9)),
+        standardDays: Number(item.standardDays || 22),
+        workDays: Number(item.workDays || 0),
+        overtimeHours: Number(item.overtimeHours || 0),
+        overtimeRate: 1.5,
+        kpiBonus: Number(item.bonus || 0),
+        projectBonus: 0,
+        holidayBonus: Number(item.overtimePay || 0),
+        socialInsurance,
+        healthInsurance,
+        unemploymentInsurance,
+        personalIncomeTax: Number(item.taxDeduction || 0),
+        advancePayment: 0,
+        penalties: Number(item.penaltyDeduction || 0),
+        salaryDeduction: Number(item.salaryDeduction || 0),
+        status: normalizeSalaryStatus(item.status),
+        calculatedDate: new Date().toISOString().slice(0, 10),
+    };
+}
 
 export function Salary() {
     const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -143,6 +200,7 @@ export function Salary() {
     const [showDeductionDetail, setShowDeductionDetail] = useState(false);
 
     const [selectedEmployee, setSelectedEmployee] = useState<SalaryItem | null>(null);
+    const [apiError, setApiError] = useState("");
     const [editSalaryForm, setEditSalaryForm] = useState({
         baseSalary: 0,
         mealAllowance: 0,
@@ -512,6 +570,28 @@ export function Salary() {
         [salaryData, selectedMonth]
     );
 
+    useEffect(() => {
+        let mounted = true;
+        const { month, year } = parseMonthKey(selectedMonth);
+
+        fetchSalaryRows(month, year, filterStatus)
+            .then((rows) => {
+                if (!mounted) return;
+                setSalaryData(rows.map((row) => mapSalaryRow(row, selectedMonth)));
+                setApiError("");
+            })
+            .catch((error) => {
+                console.error("Load salary API failed:", error);
+                if (!mounted) return;
+                setSalaryData([]);
+                setApiError("Không tải được bảng lương từ Render API.");
+            });
+
+        return () => {
+            mounted = false;
+        };
+    }, [filterStatus, selectedMonth]);
+
     const filteredData = useMemo(() => {
         const keyword = searchQuery.trim().toLowerCase();
         return monthData.filter((item) => {
@@ -609,16 +689,23 @@ export function Salary() {
         setShowEditDialog(false);
     };
 
-    const handleConfirmCalculate = () => {
+    const handleConfirmCalculate = async () => {
         // Chỉ chuyển những nhân viên status pending của tháng đang chọn sang calculated
         const pendingInMonth = monthData.filter((x) => x.status === "pending");
-        setSalaryData((prev) =>
-            prev.map((x) => {
-                if (x.month !== selectedMonth) return x;
-                if (x.status !== "pending") return x;
-                return { ...x, status: "calculated", calculatedDate: todayISO() };
-            })
-        );
+        const { month, year } = parseMonthKey(selectedMonth);
+
+        try {
+            await calculateMonthlySalary(month, year);
+            const rows = await fetchSalaryRows(month, year, filterStatus);
+            setSalaryData(rows.map((row) => mapSalaryRow(row, selectedMonth)));
+            setApiError("");
+        } catch (error) {
+            console.error("Calculate salary API failed:", error);
+            setApiError("Không tính được lương trên Render API.");
+            alert("Không tính được lương trên API. Giao diện giữ nguyên dữ liệu cũ.");
+            setShowCalculateDialog(false);
+            return;
+        }
 
         const totalNetAfter = monthData.reduce((sum, x) => sum + calcNet(x), 0);
 
@@ -637,8 +724,19 @@ export function Salary() {
         setShowApproveDialog(true);
     };
 
-    const handleConfirmApprove = () => {
+    const handleConfirmApprove = async () => {
         if (!selectedEmployee) return;
+
+        try {
+            await approveSalary(selectedEmployee.id);
+            setApiError("");
+        } catch (error) {
+            console.error("Approve salary API failed:", error);
+            setApiError("Không duyệt được lương trên Render API.");
+            alert("Không duyệt được lương trên API. Giao diện giữ nguyên trạng thái cũ.");
+            setShowApproveDialog(false);
+            return;
+        }
 
         setSalaryData((prev) =>
             prev.map((x) => {
@@ -657,7 +755,7 @@ export function Salary() {
         setShowApproveDialog(false);
     };
 
-    const handlePaySalary = (employee: SalaryItem) => {
+    const handlePaySalary = async (employee: SalaryItem) => {
         if (
             !confirm(
                 `Xác nhận thanh toán lương cho ${employee.name}?\n\nSố tiền (Net): ${formatCurrency(
@@ -666,6 +764,16 @@ export function Salary() {
             )
         )
             return;
+
+        try {
+            await paySalary(employee.id);
+            setApiError("");
+        } catch (error) {
+            console.error("Pay salary API failed:", error);
+            setApiError("Không thanh toán được lương trên Render API.");
+            alert("Không thanh toán được lương trên API. Giao diện giữ nguyên trạng thái cũ.");
+            return;
+        }
 
         setSalaryData((prev) =>
             prev.map((x) => {
@@ -697,6 +805,7 @@ export function Salary() {
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Quản lý lương thưởng</h1>
                     <p className="mt-1 text-gray-500">Theo dõi bảng lương, duyệt và thanh toán theo từng tháng.</p>
+                    {apiError && <p className="mt-1 text-xs text-amber-600">{apiError}</p>}
                 </div>
 
                 <div className="flex flex-wrap gap-2 lg:justify-end">
