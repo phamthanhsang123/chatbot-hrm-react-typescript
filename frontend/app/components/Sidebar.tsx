@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FileText,
+  LayoutDashboard,
   Settings,
   Users,
   Wallet,
@@ -29,6 +30,7 @@ interface MenuItem {
 }
 
 const adminMenuItems: MenuItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="size-5" /> },
   { id: 'employees', label: 'Nhân viên', icon: <Users className="size-5" />, badge: '125' },
   { id: 'salary', label: 'Lương thưởng', icon: <Wallet className="size-5" /> },
   { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 5 },
@@ -39,6 +41,7 @@ const adminMenuItems: MenuItem[] = [
 ];
 
 const managerMenuItems: MenuItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="size-5" /> },
   { id: 'employees', label: 'Nhân viên team', icon: <Users className="size-5" />, badge: 'IT' },
   { id: 'manager-tasks', label: 'Giao task', icon: <ClipboardList className="size-5" />, badge: 4 },
   { id: 'task-review', label: 'Duyệt task', icon: <ClipboardCheck className="size-5" />, badge: 1 },

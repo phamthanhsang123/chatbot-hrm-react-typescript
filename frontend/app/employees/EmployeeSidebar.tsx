@@ -4,6 +4,7 @@ import {
   BriefcaseBusiness,
   Calendar,
   Clock,
+  LayoutDashboard,
   Settings,
   User,
   Wallet,
@@ -25,6 +26,7 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="size-5" /> },
   { id: 'tasks', label: 'Task của tôi', icon: <BriefcaseBusiness className="size-5" />, badge: 'New' },
   { id: 'attendance', label: 'Chấm công', icon: <Clock className="size-5" /> },
   { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 2 },

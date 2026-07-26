@@ -4,6 +4,8 @@ import Swal, { type SweetAlertIcon } from 'sweetalert2';
 import { Login } from './components/Login';
 import { getDefaultManagementSettings, Navbar, type ManagementSettings } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
+import { Dashboard } from './components/Dashboard';
+import { ManagerDashboard } from './components/ManagerDashboard';
 import { ManagerTasks } from './components/ManagerTasks';
 import { EmployeeTable } from './components/EmployeeTable';
 import { Salary } from './components/Salary';
@@ -21,14 +23,15 @@ import { EmployeeLeave } from './employees/EmployeeLeave';
 import { EmployeeSalary } from './employees/EmployeeSalary'; 
 import { EmployeeProfile } from './employees/EmployeeProfile';
 import { EmployeeTasks } from './employees/EmployeeTasks';
+import { EmployeeDashboard } from './employees/EmployeeDashboard';
 import type { UserRole } from './types';
 import { MANAGER_DEPARTMENT } from './types';
 
 const getManagementSettingsKey = (role: 'admin' | 'manager') => `hrm-management-settings-${role}`;
 
 const getDefaultPageForRole = (role: UserRole | null) => {
-  if (role === 'employee') return 'attendance';
-  return 'employees';
+  if (role === 'employee') return 'dashboard';
+  return 'dashboard';
 };
 
 const escapeAlertHtml = (value: string) =>
@@ -41,7 +44,7 @@ const escapeAlertHtml = (value: string) =>
 
 const getAlertIcon = (message: string): SweetAlertIcon => {
   if (/✅|thành công|đã lưu|đã cập nhật|đã duyệt|đã tạo/i.test(message)) return 'success';
-  if (/❌|lỗi|thất bại|từ chối|xóa/i.test(message)) return 'error';
+  if (/❌|lỗi|thất bại|xóa|không .*được/i.test(message)) return 'error';
   if (/⚠️|vui lòng|không hợp lệ|cảnh báo/i.test(message)) return 'warning';
   return 'info';
 };
@@ -138,6 +141,8 @@ export default function App() {
   if (userRole === 'employee') {
     const renderEmployeePage = () => {
       switch (currentPage) {
+        case 'dashboard':
+          return <EmployeeDashboard onNavigate={setCurrentPage} />;
         case 'tasks':
           return <EmployeeTasks />;
         case 'attendance':
@@ -149,7 +154,7 @@ export default function App() {
         case 'profile':
           return <EmployeeProfile />;
         default:
-          return <Attendance />;
+          return <EmployeeDashboard onNavigate={setCurrentPage} />;
       }
     };
 
@@ -187,6 +192,8 @@ export default function App() {
   const renderManagementPage = () => {
     if (userRole === 'manager') {
       switch (currentPage) {
+        case 'dashboard':
+          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
         case 'employees':
           return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
         case 'manager-tasks':
@@ -206,11 +213,13 @@ export default function App() {
         case 'reports':
           return <Reports />;
         default:
-          return <EmployeeTable userRole="manager" departmentScope={MANAGER_DEPARTMENT} readOnly />;
+          return <ManagerDashboard departmentName={MANAGER_DEPARTMENT} onNavigate={setCurrentPage} />;
       }
     }
 
     switch (currentPage) {
+      case 'dashboard':
+        return <Dashboard onNavigate={setCurrentPage} />;
       case 'employees':
         return <EmployeeTable userRole="admin" />;
       case 'salary':
@@ -226,7 +235,7 @@ export default function App() {
       case 'reports':
         return <Reports />;
       default:
-        return <EmployeeTable userRole="admin" />;
+        return <Dashboard onNavigate={setCurrentPage} />;
     }
   };
 
