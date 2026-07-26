@@ -115,8 +115,8 @@ GET /api/employee/tasks?employeeId=5&month=6&year=2026
 API Agentic AI cung dung cung ky:
 
 ```text
-POST /api/manager/competency/generate?managerId=2&employeeId=5
-Body: { "month": 6, "year": 2026 }
+POST /api/manager/agentic-ai/analyze
+Body: { "managerId": 0, "employeeId": 5, "month": 6, "year": 2026, "persistReview": true }
 ```
 
 Luồng dung:
@@ -205,7 +205,7 @@ Base URL:
 |---|---|---|
 | GET | `/api/manager/competency?managerId={id}&month={m}&year={y}` | Xem ket qua danh gia trong ky |
 | GET | `/api/manager/competency/{employeeId}/input-data?managerId={id}&month={m}&year={y}` | Xem du lieu dau vao AI |
-| POST | `/api/manager/competency/{employeeId}/generate?managerId={id}` | Tao danh gia bang Agentic AI |
+| POST | `/api/manager/agentic-ai/analyze` | Chay workflow Agentic AI va luu ket qua hop le |
 | POST | `/api/manager/competency/{reviewId}/approve?managerId={id}` | Duyet ket qua AI |
 | POST | `/api/manager/competency/{reviewId}/reject?managerId={id}` | Tu choi ket qua AI |
 

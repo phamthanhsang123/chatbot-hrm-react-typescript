@@ -14,5 +14,46 @@
         public bool IsEarlyLeave { get; set; }
         public string Note { get; set; } = "";
         public string Status { get; set; } = "";
+        public string? WorkReportTitle { get; set; }
+        public string? WorkReportDescription { get; set; }
+        public string? WorkReportNote { get; set; }
+    }
+
+    public class AttendanceCheckOutDto
+    {
+        public string? WorkReportTitle { get; set; }
+        public string? WorkReportDescription { get; set; }
+        public string? WorkReportNote { get; set; }
+    }
+
+    public class AttendanceWorkReportDto
+    {
+        public string? WorkReportTitle { get; set; }
+        public string? WorkReportDescription { get; set; }
+        public string? WorkReportNote { get; set; }
+    }
+
+    public class SaveAttendanceShiftDto
+    {
+        public int EmployeeId { get; set; }
+        public string WorkDate { get; set; } = "";
+        public string StartTime { get; set; } = "";
+        public string EndTime { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string? Description { get; set; }
+    }
+
+    public class AttendanceShiftResponseDto
+    {
+        public int Id { get; set; }
+        public int EmployeeId { get; set; }
+        public DateTime WorkDate { get; set; }
+        public string StartTime { get; set; } = "";
+        public string EndTime { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string? Description { get; set; }
+        public string Status { get; set; } = "";
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 }

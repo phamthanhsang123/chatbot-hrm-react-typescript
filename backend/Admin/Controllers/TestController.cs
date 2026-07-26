@@ -9,12 +9,10 @@ namespace Admin.Controllers
     public class TestController : ControllerBase
     {
         private readonly AppDbContext _db;
-        private readonly DemoDataSeeder _seeder;
 
-        public TestController(AppDbContext db, DemoDataSeeder seeder)
+        public TestController(AppDbContext db)
         {
             _db = db;
-            _seeder = seeder;
         }
 
         [HttpGet("mysql")]
@@ -33,11 +31,5 @@ namespace Admin.Controllers
             });
         }
 
-        [HttpPost("seed-demo")]
-        public async Task<IActionResult> SeedDemo()
-        {
-            var result = await _seeder.SeedAsync();
-            return Ok(result);
-        }
     }
 }

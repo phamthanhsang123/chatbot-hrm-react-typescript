@@ -39,18 +39,18 @@ namespace Admin.Controllers
         public IActionResult Approve(int id)
         {
             if (!_service.Approve(id))
-                return BadRequest("Không thể duyệt");
+                return BadRequest(new { message = "Không thể duyệt bảng lương ở trạng thái hiện tại." });
 
-            return Ok("Đã duyệt");
+            return Ok(new { message = "Đã duyệt bảng lương." });
         }
 
         [HttpPost("{id}/pay")]
         public IActionResult Pay(int id)
         {
             if (!_service.Pay(id))
-                return BadRequest("Không thể thanh toán");
+                return BadRequest(new { message = "Không thể thanh toán bảng lương ở trạng thái hiện tại." });
 
-            return Ok("Đã thanh toán");
+            return Ok(new { message = "Đã thanh toán bảng lương." });
         }
     }
 }

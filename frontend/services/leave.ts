@@ -62,6 +62,36 @@ export function fetchLeaveDashboard() {
   return request<LeaveDashboardApi>('/api/admin/leave-requests/dashboard');
 }
 
+export function fetchEmployeeLeaveRequests(employeeId: number) {
+  return request<LeaveRequestApiItem[]>(
+    `/api/employee/leave-requests?employeeId=${employeeId}`,
+  );
+}
+
+export function fetchManagerLeaveRequests(status?: string) {
+  const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
+  return request<LeaveRequestApiItem[]>(`/api/manager/leave-requests${query}`);
+}
+
+export function createEmployeeLeaveRequest(payload: LeaveCreatePayload) {
+  return request<LeaveRequestApiItem>('/api/employee/leave-requests', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function approveManagerLeaveRequest(id: number) {
+  return request<void>(`/api/manager/leave-requests/${id}/approve`, {
+    method: 'POST',
+  });
+}
+
+export function rejectManagerLeaveRequest(id: number) {
+  return request<void>(`/api/manager/leave-requests/${id}/reject`, {
+    method: 'POST',
+  });
+}
+
 export function createLeaveRequest(payload: LeaveCreatePayload) {
   return request<LeaveRequestApiItem>('/api/admin/leave-requests', {
     method: 'POST',

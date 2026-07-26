@@ -3,21 +3,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import {
   AlertTriangle,
+  BriefcaseBusiness,
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
-  ClipboardCheck,
+  ClipboardCheck,
   Eye,
   FileText,
   GripHorizontal,
   History,
-  LogIn,
-  LogOut,
+  LoaderCircle,
+  Play,
   RefreshCcw,
+  Save,
   Send,
+  Square,
   TimerReset,
+  Trash2,
+  X,
 } from 'lucide-react';
 import {
   addDays,
@@ -45,24 +51,26 @@ import { Textarea } from '../components/ui/textarea';
 import {
   AttendanceApiItem,
   AttendanceMonthlyReportItem,
+  AttendanceRequestApiItem,
+  AttendanceShiftApiItem,
   checkInEmployeeAttendance,
   checkOutEmployeeAttendance,
-  fetchAttendanceByDate,
+  createAttendanceRequest,
+  createAttendanceShift,
+  deleteAttendanceShift,
+  fetchAttendanceMonthlyRecords,
   fetchAttendanceMonthlyReport,
+  fetchAttendanceRequests,
+  fetchAttendanceShifts,
+  updateAttendanceShift,
+  updateAttendanceWorkReport,
 } from '@/services/attendance';
 import { getCurrentEmployeeId } from '@/services/tasks';
-import {
-  HRM_SYNC_KEYS,
-  LiveAttendanceSyncRecord,
-  formatSyncDate,
-  getEmployeePortalIdentity,
-  readSyncedRecords,
-  upsertSyncedRecord,
-} from './hrmSync';
 
 type AttendanceStatus = 'completed' | 'working' | 'late' | 'early' | 'missing';
 type RequestStatus = 'pending' | 'approved' | 'rejected';
 type RequestType = 'supplement' | 'adjustment';
+type PlannedShiftStatus = 'planned' | 'working' | 'completed';
 
 interface WorkReport {
   title: string;
@@ -71,6 +79,7 @@ interface WorkReport {
 }
 
 interface AttendanceRecord {
+  id: number;
   date: string;
   checkIn?: string;
   checkOut?: string;
@@ -100,122 +109,26 @@ interface AttendanceRequest {
   workReport?: WorkReport;
 }
 
-const demoHistory: AttendanceRecord[] = [
-  {
-    date: '2026-06-23',
-    checkIn: '08:18',
-    hours: 0,
-    status: 'working',
-    note: 'Đang làm việc',
-    workReport: {
-      title: 'Hoàn thiện giao diện chấm công',
-      description: 'Xây dựng lịch tuần, trạng thái giờ làm và luồng gửi yêu cầu cho HR.',
-    },
-  },
-  {
-    date: '2026-06-22',
-    checkIn: '08:26',
-    checkOut: '17:32',
-    hours: 8.1,
-    status: 'completed',
-    note: 'Đủ công',
-    workReport: {
-      title: 'Đối chiếu nghiệp vụ chấm công',
-      description: 'Kiểm tra dữ liệu User với màn hình HR và báo cáo Manager.',
-    },
-  },
-  {
-    date: '2026-06-19',
-    checkIn: '08:24',
-    hours: 0,
-    status: 'working',
-    note: 'Đang làm việc',
-  },
-  {
-    date: '2026-06-18',
-    checkIn: '08:25',
-    checkOut: '17:35',
-    hours: 8.17,
-    status: 'completed',
-    note: 'Đủ công',
-    workReport: {
-      title: 'Hoàn thiện Employee Task',
-      description: 'Cập nhật giao diện task cá nhân, kiểm tra filter kỳ đánh giá và luồng gửi duyệt.',
-      note: 'Đã chuyển sang trạng thái sẵn sàng review.',
-    },
-  },
-  {
-    date: '2026-06-17',
-    checkIn: '08:37',
-    checkOut: '17:30',
-    hours: 7.88,
-    status: 'late',
-    note: 'Đi muộn 7 phút',
-    workReport: {
-      title: 'Kiểm thử portal nhân viên',
-      description: 'Kiểm tra dashboard, task, nghỉ phép và lương cá nhân sau khi lấy code mới.',
-    },
-  },
-  {
-    date: '2026-06-16',
-    checkIn: '08:28',
-    checkOut: '17:20',
-    hours: 7.87,
-    status: 'completed',
-    note: 'Đủ công',
-  },
-  {
-    date: '2026-06-15',
-    hours: 0,
-    status: 'missing',
-    note: 'Chưa chấm công, cần gửi bổ sung',
-  },
-  {
-    date: '2026-06-12',
-    checkIn: '08:20',
-    checkOut: '16:45',
-    hours: 7.42,
-    status: 'early',
-    note: 'Về sớm 15 phút',
-  },
-];
+interface PlannedShift {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  description?: string;
+  status: PlannedShiftStatus;
+  report?: WorkReport;
+}
 
-const demoRequests: AttendanceRequest[] = [
-  {
-    id: 1,
-    employeeName: 'Nguyễn Văn A',
-    employeeId: 'NV001',
-    department: 'IT',
-    type: 'supplement',
-    date: '2026-06-15',
-    checkIn: '08:30',
-    checkOut: '17:30',
-    reason: 'Quên chấm công do họp khách hàng ngoài văn phòng.',
-    status: 'pending',
-    submittedAt: '2026-06-16 08:20',
-    workReport: {
-      title: 'Họp khách hàng và xử lý demo',
-      description: 'Chuẩn bị demo, họp khách hàng và tổng hợp phản hồi gửi Manager.',
-    },
-  },
-  {
-    id: 2,
-    employeeName: 'Nguyễn Văn A',
-    employeeId: 'NV001',
-    department: 'IT',
-    type: 'adjustment',
-    date: '2026-06-12',
-    checkIn: '08:20',
-    checkOut: '17:15',
-    reason: 'Có làm thêm đến 17:15 nhưng máy chấm công ghi nhận sai giờ ra.',
-    status: 'approved',
-    submittedAt: '2026-06-13 09:00',
-    reviewedBy: 'HR Manager',
-    reviewedAt: '2026-06-13 15:30',
-    reviewNote: 'Đã đối chiếu log hệ thống và duyệt điều chỉnh.',
-    originalCheckOut: '16:45',
-  },
-];
+interface ShiftDraft {
+  id?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  description: string;
+  status: PlannedShiftStatus;
+}
 
 const statusMeta: Record<AttendanceStatus, { label: string; className: string; bar: string }> = {
   completed: { label: 'Đủ công', className: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100', bar: 'bg-emerald-500' },
@@ -261,8 +174,8 @@ function buildPeriodOptions() {
 }
 
 const periodOptions = buildPeriodOptions();
-const calendarHours = Array.from({ length: 13 }, (_, index) => index + 7);
-const calendarRowHeight = 58;
+const calendarHours = Array.from({ length: 24 }, (_, index) => index);
+const calendarRowHeight = 20;
 const calendarStartHour = calendarHours[0];
 const calendarEndHour = calendarHours[calendarHours.length - 1] + 1;
 const workSchedule = {
@@ -323,12 +236,23 @@ function calculateWorkedMinutes(checkIn?: string, checkOut?: string) {
   const end = timeToMinutes(checkOut);
   if (end <= start) return 0;
 
-  const lunchOverlap = Math.max(0, Math.min(end, workSchedule.lunchEnd) - Math.max(start, workSchedule.lunchStart));
-  return Math.max(0, end - start - lunchOverlap);
+  return Math.max(0, end - start - calculateLunchBreakMinutes(checkIn, checkOut));
 }
 
 function calculateWorkedHours(checkIn?: string, checkOut?: string) {
   return calculateWorkedMinutes(checkIn, checkOut) / 60;
+}
+
+function calculateLunchBreakMinutes(checkIn?: string, checkOut?: string) {
+  if (!checkIn || !checkOut) return 0;
+  const start = timeToMinutes(checkIn);
+  const end = timeToMinutes(checkOut);
+  if (end <= start) return 0;
+
+  return Math.max(
+    0,
+    Math.min(end, workSchedule.lunchEnd) - Math.max(start, workSchedule.lunchStart),
+  );
 }
 
 function getCalendarSegmentMetrics(startMinutes: number, endMinutes: number) {
@@ -339,7 +263,24 @@ function getCalendarSegmentMetrics(startMinutes: number, endMinutes: number) {
 
   return {
     top: ((visibleStart - gridStart) / 60) * calendarRowHeight,
-    height: Math.max(36, ((visibleEnd - visibleStart) / 60) * calendarRowHeight),
+    height: Math.max(18, ((visibleEnd - visibleStart) / 60) * calendarRowHeight),
+  };
+}
+
+function timeFromCalendarPointer(clientY: number, top: number, height: number) {
+  const position = Math.max(0, Math.min(clientY - top, height));
+  const rawMinutes = calendarStartHour * 60 + (position / height) * (calendarEndHour - calendarStartHour) * 60;
+  return Math.max(0, Math.min(Math.round(rawMinutes / 30) * 30, 24 * 60));
+}
+
+function createShiftDraft(date = todayIso(), startTime = '08:00', endTime = '17:00'): ShiftDraft {
+  return {
+    date,
+    startTime,
+    endTime,
+    title: 'Ca làm việc',
+    description: '',
+    status: 'planned',
   };
 }
 
@@ -363,14 +304,6 @@ function getCalendarMonthDays(value: string) {
   const first = startOfWeek(startOfMonth(selected), { weekStartsOn: 1 });
   const last = endOfWeek(endOfMonth(selected), { weekStartsOn: 1 });
   return eachDayOfInterval({ start: first, end: last });
-}
-
-function publishLiveAttendance(record: LiveAttendanceSyncRecord) {
-  upsertSyncedRecord(
-    HRM_SYNC_KEYS.liveAttendance,
-    record,
-    (current) => current.employeeId === record.employeeId && current.date === record.date,
-  );
 }
 
 function isRecordInPeriod(record: { date: string }, period: string) {
@@ -405,13 +338,80 @@ function mapApiAttendance(item: AttendanceApiItem): AttendanceRecord {
     !checkIn ? 'missing' : !checkOut ? 'working' : item.isLate ? 'late' : item.isEarlyLeave ? 'early' : 'completed';
 
   return {
+    id: item.id,
     date,
     checkIn,
     checkOut,
     hours: checkIn && checkOut ? calculateWorkedHours(checkIn, checkOut) : Number(item.totalHours || 0),
     status,
     note: item.note && item.note !== '-' ? item.note : statusMeta[status].label,
+    workReport:
+      item.workReportTitle || item.workReportDescription || item.workReportNote
+        ? {
+            title: item.workReportTitle || 'Báo cáo công việc',
+            description: item.workReportDescription || '',
+            note: item.workReportNote || undefined,
+          }
+        : undefined,
   };
+}
+
+function mapApiRequest(item: AttendanceRequestApiItem): AttendanceRequest {
+  const normalizedStatus = item.status.toLowerCase() as RequestStatus;
+  const normalizedType = (
+    item.requestType?.toLowerCase() ||
+    item.type ||
+    'supplement'
+  ) as RequestType;
+
+  return {
+    id: item.id,
+    employeeName: item.employeeName,
+    employeeId: String(item.employeeCode || item.employeeId),
+    department: item.department,
+    type: normalizedType,
+    date: (item.workDate || item.date || '').slice(0, 10),
+    checkIn: formatTimeFromIso(item.requestedCheckIn || item.checkIn),
+    checkOut: formatTimeFromIso(item.requestedCheckOut || item.checkOut),
+    reason: item.reason,
+    status: normalizedStatus,
+    submittedAt: item.submittedAt,
+    reviewedBy: item.reviewedBy || undefined,
+    reviewedAt: item.reviewedAt || undefined,
+    reviewNote: item.reviewNote || undefined,
+    originalCheckIn: formatTimeFromIso(item.originalCheckIn),
+    originalCheckOut: formatTimeFromIso(item.originalCheckOut),
+    workReport:
+      item.workReportTitle || item.workReportDescription
+        ? {
+            title: item.workReportTitle || 'Báo cáo công việc',
+            description: item.workReportDescription || '',
+          }
+        : undefined,
+  };
+}
+
+function mapApiShift(item: AttendanceShiftApiItem): PlannedShift {
+  const statusMap: Record<AttendanceShiftApiItem['status'], PlannedShiftStatus> = {
+    PLANNED: 'planned',
+    WORKING: 'working',
+    COMPLETED: 'completed',
+    CANCELLED: 'completed',
+  };
+
+  return {
+    id: String(item.id),
+    date: item.workDate.slice(0, 10),
+    startTime: item.startTime.slice(0, 5),
+    endTime: item.endTime.slice(0, 5),
+    title: item.title,
+    description: item.description || '',
+    status: statusMap[item.status],
+  };
+}
+
+function getApiError(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function emptyRequestForm(date = todayIso(), type: RequestType = 'supplement') {
@@ -426,13 +426,8 @@ function emptyRequestForm(date = todayIso(), type: RequestType = 'supplement') {
   };
 }
 
-function readableApiError(error: unknown) {
-  return error instanceof Error ? error.message : 'Không xác định được lỗi API.';
-}
-
 export function Attendance() {
   const employeeId = getCurrentEmployeeId();
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(employeeId), [employeeId]);
   const currentDate = todayIso();
   const [period, setPeriod] = useState(currentPeriodValue());
   const [calendarDate, setCalendarDate] = useState(currentDate);
@@ -440,14 +435,24 @@ export function Attendance() {
   const [requests, setRequests] = useState<AttendanceRequest[]>([]);
   const [monthlySummary, setMonthlySummary] = useState<AttendanceMonthlyReportItem | null>(null);
   const [loading, setLoading] = useState(false);
-  const [usingDemoData, setUsingDemoData] = useState(false);
+  const [dataError, setDataError] = useState('');
   const [message, setMessage] = useState('');
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<AttendanceRequest | null>(null);
   const [requestForm, setRequestForm] = useState(emptyRequestForm());
   const [requestError, setRequestError] = useState('');
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [plannedShifts, setPlannedShifts] = useState<PlannedShift[]>([]);
+  const [shiftDraft, setShiftDraft] = useState<ShiftDraft>(() => createShiftDraft(currentDate));
+  const [shiftError, setShiftError] = useState('');
+  const [shiftSaving, setShiftSaving] = useState(false);
+  const [attendanceActionLoading, setAttendanceActionLoading] = useState(false);
+  const [checkoutReport, setCheckoutReport] = useState<WorkReport>({ title: '', description: '', note: '' });
+  const [editingReportShiftId, setEditingReportShiftId] = useState<string | null>(null);
 
   const periodRecords = useMemo(() => {
     return history
@@ -462,6 +467,14 @@ export function Attendance() {
   }, [period, requests]);
 
   const todayRecord = useMemo(() => history.find((record) => record.date === currentDate) || null, [currentDate, history]);
+  const todayShift = useMemo(
+    () => plannedShifts.find((shift) => shift.date === currentDate) || null,
+    [currentDate, plannedShifts],
+  );
+  const shiftAttendanceRecord = useMemo(
+    () => history.find((record) => record.date === shiftDraft.date) || null,
+    [history, shiftDraft.date],
+  );
 
   const stats = useMemo(() => {
     const workingDays = workingDaysInPeriod(period);
@@ -486,95 +499,44 @@ export function Attendance() {
     });
   }, []);
 
-  useEffect(() => {
-    const todaySyncDate = formatSyncDate(new Date());
-    const liveRecord = readSyncedRecords<LiveAttendanceSyncRecord>(HRM_SYNC_KEYS.liveAttendance).find(
-      (record) => record.employeeId === employeeIdentity.employeeId && record.date === todaySyncDate,
-    );
-
-    if (liveRecord) {
-      mergeRecord({
-        date: currentDate,
-        checkIn: liveRecord.checkIn,
-        checkOut: liveRecord.checkOut,
-        hours: calculateWorkedHours(liveRecord.checkIn, liveRecord.checkOut),
-        status: liveRecord.status === 'online' ? 'working' : 'completed',
-        note: liveRecord.status === 'online' ? 'Đang làm việc' : 'Đã check-out',
-      });
-    }
-
-    const syncedRequests = readSyncedRecords<AttendanceRequest>(HRM_SYNC_KEYS.attendanceRequests).filter(
-      (request) => request.employeeId === employeeIdentity.employeeId,
-    );
-    if (syncedRequests.length > 0) {
-      setRequests((current) => {
-        const syncedIds = new Set(syncedRequests.map((request) => request.id));
-        return [...syncedRequests, ...current.filter((request) => !syncedIds.has(request.id))];
-      });
-    }
-  }, [currentDate, employeeIdentity.employeeId, mergeRecord]);
-
-  useEffect(() => {
-    const loadReviewedRequests = () => {
-      const syncedRequests = readSyncedRecords<AttendanceRequest>(HRM_SYNC_KEYS.attendanceRequests).filter(
-        (request) => request.employeeId === employeeIdentity.employeeId,
-      );
-
-      if (syncedRequests.length === 0) return;
-
-      setRequests((current) => {
-        const syncedIds = new Set(syncedRequests.map((request) => request.id));
-        return [...syncedRequests, ...current.filter((request) => !syncedIds.has(request.id))];
-      });
-    };
-
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === HRM_SYNC_KEYS.attendanceRequests) {
-        loadReviewedRequests();
-      }
-    };
-
-    const handleHrmSync = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string }>).detail;
-      if (!detail?.key || detail.key === HRM_SYNC_KEYS.attendanceRequests) {
-        loadReviewedRequests();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('hrm-sync', handleHrmSync);
-    window.addEventListener('focus', loadReviewedRequests);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('hrm-sync', handleHrmSync);
-      window.removeEventListener('focus', loadReviewedRequests);
-    };
-  }, [employeeIdentity.employeeId]);
-
   const loadAttendance = useCallback(async () => {
     const { month, year } = parsePeriod(period);
     setLoading(true);
     setMessage('');
+    setDataError('');
 
     try {
-      const [monthlyData, todayData] = await Promise.all([
+      const [monthlyData, attendanceData, requestData, shiftData] = await Promise.all([
         fetchAttendanceMonthlyReport(year, month),
-        fetchAttendanceByDate(currentDate),
+        fetchAttendanceMonthlyRecords(year, month),
+        fetchAttendanceRequests(),
+        fetchAttendanceShifts(year, month, employeeId),
       ]);
+
+      const mappedAttendance = attendanceData
+        .filter((item) => Number(item.employeeId) === employeeId)
+        .map(mapApiAttendance);
+      const mappedShifts = shiftData.map(mapApiShift).map((shift) => ({
+        ...shift,
+        report: mappedAttendance.find((record) => record.date === shift.date)?.workReport,
+      }));
+
       setMonthlySummary(monthlyData.find((item) => Number(item.employeeId) === employeeId) || null);
-      const todayAttendance = todayData.find((item) => Number(item.employeeId) === employeeId);
-      if (todayAttendance) mergeRecord(mapApiAttendance(todayAttendance));
-      setUsingDemoData(false);
+      setHistory(mappedAttendance);
+      setRequests(
+        requestData
+          .filter((item) => Number(item.employeeId) === employeeId)
+          .map(mapApiRequest),
+      );
+      setPlannedShifts(mappedShifts);
     } catch (error) {
-      console.warn('Attendance API unavailable:', error);
+      console.error('Không tải được dữ liệu chấm công:', error);
       setMonthlySummary(null);
-      setUsingDemoData(true);
-      setMessage(`Chưa tải được dữ liệu chấm công từ API Render. ${readableApiError(error)}`);
+      setDataError(getApiError(error, 'Không tải được dữ liệu chấm công từ máy chủ.'));
     } finally {
       setLoading(false);
     }
-  }, [currentDate, employeeId, mergeRecord, period]);
+  }, [employeeId, period]);
 
   useEffect(() => {
     loadAttendance();
@@ -582,70 +544,218 @@ export function Attendance() {
 
   const handleCheckIn = async () => {
     setMessage('');
-    const now = new Date();
-    const checkInTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    setDataError('');
 
     try {
       const result = await checkInEmployeeAttendance(employeeId);
-      if (!result.success) {
-        setMessage(result.message || 'API chưa ghi nhận được check-in.');
-        setUsingDemoData(true);
-        return;
-      }
-
       if (result.data) {
-        const record = mapApiAttendance(result.data);
-        mergeRecord(record);
-        publishLiveAttendance({
-          ...employeeIdentity,
-          date: formatSyncDate(now),
-          checkIn: record.checkIn || checkInTime,
-          status: 'online',
-          lastUpdated: checkInTime,
-        });
+        mergeRecord(mapApiAttendance(result.data));
       }
-      setMessage(result.message || 'Check-in thành công.');
-      setUsingDemoData(false);
+      setMessage(result.message || (result.success ? 'Check-in thành công.' : 'Không check-in được.'));
+      return result.success;
     } catch (error) {
-      console.warn('Check-in API unavailable:', error);
-      setMessage(`Không check-in được qua API Render. ${readableApiError(error)}`);
-      setUsingDemoData(true);
+      const errorMessage = getApiError(error, 'Không thể check-in. Vui lòng kiểm tra kết nối máy chủ.');
+      setDataError(errorMessage);
+      return false;
     }
   };
 
-  const handleCheckOut = async () => {
+  const handleCheckOut = async (report?: WorkReport) => {
     setMessage('');
-    const now = new Date();
-    const checkOutTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    const checkInTime = todayRecord?.checkIn || '08:30';
+    setDataError('');
 
     try {
-      const result = await checkOutEmployeeAttendance(employeeId);
-      if (!result.success) {
-        setMessage(result.message || 'API chưa ghi nhận được check-out. Bạn cần check-in thật trước khi check-out.');
-        setUsingDemoData(true);
+      const result = await checkOutEmployeeAttendance(employeeId, {
+        workReportTitle: report?.title,
+        workReportDescription: report?.description,
+        workReportNote: report?.note,
+      });
+      if (result.data) {
+        mergeRecord(mapApiAttendance(result.data));
+      }
+      setMessage(result.message || (result.success ? 'Check-out thành công.' : 'Không check-out được.'));
+      return result.success;
+    } catch (error) {
+      const errorMessage = getApiError(error, 'Không thể check-out. Vui lòng kiểm tra kết nối máy chủ.');
+      setDataError(errorMessage);
+      return false;
+    }
+  };
+
+  const openNewShift = (date: string, startTime: string, endTime: string) => {
+    setShiftDraft(createShiftDraft(date, startTime, endTime));
+    setShiftError('');
+    setShiftDialogOpen(true);
+  };
+
+  const openShift = (shift: PlannedShift) => {
+    const attendance = history.find((record) => record.date === shift.date);
+    const effectiveStatus: PlannedShiftStatus = attendance?.checkOut
+      ? 'completed'
+      : attendance?.checkIn
+        ? 'working'
+        : shift.status;
+    setShiftDraft({ ...shift, status: effectiveStatus, description: shift.description || '' });
+    setShiftError('');
+    setShiftDialogOpen(true);
+  };
+
+  const saveShift = async () => {
+    setShiftError('');
+    if (!shiftDraft.title.trim()) {
+      setShiftError('Vui lòng nhập tên hoặc nội dung chính của ca làm.');
+      return;
+    }
+    if (timeToMinutes(shiftDraft.endTime) <= timeToMinutes(shiftDraft.startTime)) {
+      setShiftError('Giờ kết thúc phải sau giờ bắt đầu.');
+      return;
+    }
+
+    setShiftSaving(true);
+    try {
+      const payload = {
+        employeeId,
+        workDate: shiftDraft.date,
+        startTime: shiftDraft.startTime,
+        endTime: shiftDraft.endTime,
+        title: shiftDraft.title.trim(),
+        description: shiftDraft.description.trim() || undefined,
+      };
+      const saved = shiftDraft.id
+        ? await updateAttendanceShift(Number(shiftDraft.id), payload)
+        : await createAttendanceShift(payload);
+      const nextShift = mapApiShift(saved);
+
+      setPlannedShifts((current) => (
+        shiftDraft.id
+          ? current.map((shift) => (shift.id === shiftDraft.id ? nextShift : shift))
+          : [...current, nextShift]
+      ));
+      setShiftDialogOpen(false);
+      setMessage(`Đã lưu ca ${nextShift.startTime} - ${nextShift.endTime} ngày ${formatDate(nextShift.date)}.`);
+    } catch (error) {
+      setShiftError(getApiError(error, 'Không thể lưu ca làm vào hệ thống.'));
+    } finally {
+      setShiftSaving(false);
+    }
+  };
+
+  const deleteShift = async () => {
+    if (!shiftDraft.id || shiftDraft.status !== 'planned') return;
+    setShiftSaving(true);
+    setShiftError('');
+    try {
+      await deleteAttendanceShift(Number(shiftDraft.id));
+      setPlannedShifts((current) => current.filter((shift) => shift.id !== shiftDraft.id));
+      setShiftDialogOpen(false);
+      setMessage('Đã xóa ca dự kiến.');
+    } catch (error) {
+      setShiftError(getApiError(error, 'Không thể xóa ca làm.'));
+    } finally {
+      setShiftSaving(false);
+    }
+  };
+
+  const updateTodayShiftStatus = (status: PlannedShiftStatus, report?: WorkReport) => {
+    setPlannedShifts((current) => current.map((shift) => (
+      shift.date === currentDate && shift.status !== 'completed'
+        ? { ...shift, status, report: report || shift.report }
+        : shift
+    )));
+  };
+
+  const handleAttendanceAction = async () => {
+    if (attendanceActionLoading || todayRecord?.checkOut) return;
+
+    if (!todayRecord?.checkIn) {
+      setAttendanceActionLoading(true);
+      try {
+        const success = await handleCheckIn();
+        if (success) {
+          updateTodayShiftStatus('working');
+          setShiftDialogOpen(false);
+        }
+      } finally {
+        setAttendanceActionLoading(false);
+      }
+      return;
+    }
+
+    setCheckoutReport({
+      title: todayShift?.title || 'Báo cáo công việc trong ca',
+      description: todayShift?.report?.description || todayShift?.description || '',
+      note: todayShift?.report?.note || '',
+    });
+    setEditingReportShiftId(null);
+    setShiftDialogOpen(false);
+    setCheckoutDialogOpen(true);
+  };
+
+  const openCompletedReportEditor = () => {
+    if (!shiftDraft.id) return;
+    const shift = plannedShifts.find((item) => item.id === shiftDraft.id);
+    if (!shift) return;
+
+    setCheckoutReport({
+      title: shift.report?.title || shift.title,
+      description: shift.report?.description || shift.description || '',
+      note: shift.report?.note || '',
+    });
+    setEditingReportShiftId(shift.id);
+    setShiftDialogOpen(false);
+    setCheckoutDialogOpen(true);
+  };
+
+  const finishAttendanceShift = async () => {
+    if (!checkoutReport.description.trim()) return;
+    const report = {
+      title: checkoutReport.title.trim() || 'Báo cáo công việc trong ca',
+      description: checkoutReport.description.trim(),
+      note: checkoutReport.note?.trim(),
+    };
+
+    if (editingReportShiftId) {
+      const editedShift = plannedShifts.find((shift) => shift.id === editingReportShiftId);
+      const attendance = editedShift
+        ? history.find((record) => record.date === editedShift.date)
+        : null;
+      if (!attendance) {
+        setDataError('Không tìm thấy bản ghi chấm công để cập nhật báo cáo.');
         return;
       }
 
-      if (result.data) {
-        const record = mapApiAttendance(result.data);
-        mergeRecord(record);
-        publishLiveAttendance({
-          ...employeeIdentity,
-          date: formatSyncDate(now),
-          checkIn: record.checkIn || checkInTime,
-          checkOut: record.checkOut || checkOutTime,
-          checkOutDate: formatSyncDate(now),
-          status: 'offline',
-          lastUpdated: checkOutTime,
+      setAttendanceActionLoading(true);
+      setDataError('');
+      try {
+        const updated = await updateAttendanceWorkReport(attendance.id, {
+          workReportTitle: report.title,
+          workReportDescription: report.description,
+          workReportNote: report.note,
         });
+        mergeRecord(mapApiAttendance(updated));
+        setPlannedShifts((current) => current.map((shift) => (
+          shift.id === editingReportShiftId ? { ...shift, report } : shift
+        )));
+        setMessage('Đã cập nhật báo cáo công việc. Giờ chấm công thực tế không thay đổi.');
+        setEditingReportShiftId(null);
+        setCheckoutDialogOpen(false);
+      } catch (error) {
+        setDataError(getApiError(error, 'Không thể cập nhật báo cáo công việc.'));
+      } finally {
+        setAttendanceActionLoading(false);
       }
-      setMessage(result.message || 'Check-out thành công.');
-      setUsingDemoData(false);
-    } catch (error) {
-      console.warn('Check-out API unavailable:', error);
-      setMessage(`Không check-out được qua API Render. ${readableApiError(error)}`);
-      setUsingDemoData(true);
+      return;
+    }
+
+    setAttendanceActionLoading(true);
+    try {
+      const success = await handleCheckOut(report);
+      if (success) {
+        updateTodayShiftStatus('completed', report);
+        setCheckoutDialogOpen(false);
+      }
+    } finally {
+      setAttendanceActionLoading(false);
     }
   };
 
@@ -660,7 +770,7 @@ export function Attendance() {
     setRequestDialogOpen(true);
   };
 
-  const submitRequest = () => {
+  const submitRequest = async () => {
     setRequestError('');
     if (!requestForm.date || !requestForm.checkIn || !requestForm.checkOut || !requestForm.reason.trim()) {
       setRequestError('Vui lòng nhập đủ ngày, giờ và lý do trước khi gửi HR.');
@@ -677,38 +787,29 @@ export function Attendance() {
       return;
     }
 
-    const nextRequest: AttendanceRequest = {
-      id: Math.max(0, ...requests.map((request) => request.id)) + 1,
-      ...employeeIdentity,
-      type: requestForm.type,
-      date: requestForm.date,
-      checkIn: requestForm.checkIn,
-      checkOut: requestForm.checkOut,
-      reason: requestForm.reason.trim(),
-      status: 'pending',
-      submittedAt: new Date().toLocaleString('sv-SE').slice(0, 16),
-      originalCheckIn: selectedRecord?.checkIn,
-      originalCheckOut: selectedRecord?.checkOut,
-      workReport:
-        requestForm.reportTitle.trim() || requestForm.reportDescription.trim()
-          ? {
-              title: requestForm.reportTitle.trim() || 'Báo cáo công việc',
-              description: requestForm.reportDescription.trim(),
-            }
-          : undefined,
-    };
-
-    setRequests((current) => [nextRequest, ...current]);
-    upsertSyncedRecord(
-      HRM_SYNC_KEYS.attendanceRequests,
-      nextRequest,
-      (current) => current.employeeId === nextRequest.employeeId && current.id === nextRequest.id,
-    );
-    setMessage('Đã gửi đơn chấm công ở trạng thái chờ HR duyệt.');
-    setRequestDialogOpen(false);
-    setRequestError('');
-    setSelectedRecord(null);
-    setRequestForm(emptyRequestForm());
+    setRequestSubmitting(true);
+    try {
+      const saved = await createAttendanceRequest({
+        employeeId,
+        workDate: requestForm.date,
+        requestType: requestForm.type === 'supplement' ? 'SUPPLEMENT' : 'ADJUSTMENT',
+        requestedCheckIn: requestForm.checkIn,
+        requestedCheckOut: requestForm.checkOut,
+        reason: requestForm.reason.trim(),
+        workReportTitle: requestForm.reportTitle.trim() || undefined,
+        workReportDescription: requestForm.reportDescription.trim() || undefined,
+      });
+      const nextRequest = mapApiRequest(saved);
+      setRequests((current) => [nextRequest, ...current.filter((item) => item.id !== nextRequest.id)]);
+      setMessage('Đã gửi đơn chấm công ở trạng thái chờ HR duyệt.');
+      setRequestDialogOpen(false);
+      setSelectedRecord(null);
+      setRequestForm(emptyRequestForm());
+    } catch (error) {
+      setRequestError(getApiError(error, 'Không thể gửi đơn chấm công.'));
+    } finally {
+      setRequestSubmitting(false);
+    }
   };
 
   const openDetail = (record?: AttendanceRecord, request?: AttendanceRequest) => {
@@ -751,22 +852,38 @@ export function Attendance() {
   };
 
   const selectedCalendarRecord = history.find((record) => record.date === calendarDate);
+  const isShiftForToday = Boolean(shiftDraft.id) && shiftDraft.date === currentDate;
+  const shiftHasEnded = shiftDraft.status === 'completed'
+    || (shiftDraft.date === currentDate && Boolean(todayRecord?.checkOut));
+  const shiftHasStarted = shiftDraft.status === 'working'
+    || (shiftDraft.date === currentDate && Boolean(todayRecord?.checkIn) && !todayRecord?.checkOut);
+  const shiftActionLabel = attendanceActionLoading
+    ? (shiftHasStarted ? 'Đang kết thúc...' : 'Đang bắt đầu...')
+    : !shiftDraft.id
+      ? 'Lưu ca trước'
+      : shiftDraft.date !== currentDate
+        ? 'Chỉ dùng hôm nay'
+        : shiftHasEnded
+          ? 'Đã kết thúc'
+          : shiftHasStarted
+            ? 'Kết thúc'
+            : 'Bắt đầu';
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-3 rounded-2xl bg-slate-50/70 p-3 text-[13px]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
-            <ClipboardCheck className="size-6" />
+          <div className="flex size-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-100">
+            <ClipboardCheck className="size-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-950">Chấm công</h1>
-            <p className="mt-1 text-sm text-slate-500">Theo dõi giờ làm và xử lý dữ liệu chấm công của bạn.</p>
+            <h1 className="text-xl font-bold text-slate-950">Chấm công</h1>
+            <p className="mt-0.5 text-xs text-slate-500">Theo dõi giờ làm và xử lý dữ liệu chấm công của bạn.</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={loadAttendance} disabled={loading} title="Làm mới dữ liệu">
+        <div className="flex flex-wrap items-center gap-2 [&_button]:h-9">
+          <Button variant="outline" size="sm" onClick={loadAttendance} disabled={loading} title="Làm mới dữ liệu">
             <RefreshCcw className={`mr-2 size-4 ${loading ? 'animate-spin' : ''}`} />
             Làm mới
           </Button>
@@ -778,7 +895,7 @@ export function Attendance() {
             onOpenRequest={(request) => openDetail(undefined, request)}
             onAdjustRecord={(record) => openRequestDialog(record.date, record.status === 'missing' ? 'supplement' : 'adjustment', record)}
           />
-          <Button onClick={() => openRequestDialog(calendarDate, selectedCalendarRecord ? 'adjustment' : 'supplement', selectedCalendarRecord)}>
+          <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => openRequestDialog(calendarDate, selectedCalendarRecord ? 'adjustment' : 'supplement', selectedCalendarRecord)}>
             <Send className="mr-2 size-4" />
             Tạo yêu cầu
           </Button>
@@ -787,41 +904,31 @@ export function Attendance() {
 
       {message && <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</div>}
 
-      {usingDemoData && (
-        <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          API Render chưa trả dữ liệu chấm công thật. Màn hình không tự tạo dữ liệu giả; vui lòng kiểm tra backend hoặc bấm Làm mới sau khi API hoạt động.
+      {dataError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {dataError}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="grid lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className="border-b border-slate-200 bg-slate-50/70 lg:border-b-0 lg:border-r">
-            <div className="border-b border-slate-200 p-4">
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/70">
+        <div className="grid lg:grid-cols-[208px_minmax(0,1fr)]">
+          <aside className="border-b border-slate-200 bg-slate-50/80 lg:border-b-0 lg:border-r">
+            <div className="border-b border-slate-200 p-2.5">
               <p className="text-xs font-semibold uppercase text-slate-500">Hôm nay, {formatDate(currentDate)}</p>
-              <div className="mt-3 flex items-start justify-between gap-3">
+              <div className="mt-1.5 flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-xl font-bold text-slate-950">{todayRecord ? statusMeta[todayRecord.status].label : 'Chưa check-in'}</p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="text-base font-bold text-slate-950">{todayRecord ? statusMeta[todayRecord.status].label : 'Chưa check-in'}</p>
+                  <p className="mt-1 text-xs text-slate-500">
                     {todayRecord?.checkIn || '--:--'} <span className="mx-1">-</span> {todayRecord?.checkOut || '--:--'}
                   </p>
                 </div>
                 <span className={`mt-1 size-3 rounded-full ${todayRecord ? statusMeta[todayRecord.status].bar : 'bg-slate-300'}`} />
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <Button size="sm" onClick={handleCheckIn} disabled={Boolean(todayRecord?.checkIn && todayRecord.status !== 'missing')}>
-                  <LogIn className="mr-2 size-4" />
-                  Check-in
-                </Button>
-                <Button size="sm" variant="outline" onClick={handleCheckOut} disabled={!todayRecord?.checkIn || Boolean(todayRecord?.checkOut)}>
-                  <LogOut className="mr-2 size-4" />
-                  Check-out
-                </Button>
-              </div>
               <Button
                 size="sm"
                 variant="ghost"
-                className="mt-2 w-full justify-start text-blue-700"
+                className="mt-2 w-full justify-start px-0 text-blue-700 hover:bg-transparent hover:text-blue-800"
                 onClick={() => openRequestDialog(currentDate, 'supplement', todayRecord || undefined)}
               >
                 <Send className="mr-2 size-4" />
@@ -829,8 +936,8 @@ export function Attendance() {
               </Button>
             </div>
 
-            <div className="border-b border-slate-200 p-4">
-              <div className="mb-3 flex items-center justify-between">
+            <div className="border-b border-slate-200 p-2.5">
+              <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold text-slate-900">
                   {format(parseISO(calendarDate), "'Tháng' M, yyyy", { locale: vi })}
                 </p>
@@ -856,7 +963,7 @@ export function Attendance() {
                     <button
                       key={dayIso}
                       type="button"
-                      className={`relative mx-auto flex size-7 items-center justify-center rounded-full text-xs transition-colors ${
+                      className={`relative mx-auto flex size-5 items-center justify-center rounded-full text-[10px] transition-colors ${
                         selected ? 'bg-blue-600 font-semibold text-white' : today ? 'bg-blue-50 font-semibold text-blue-700' : isSameMonth(day, parseISO(calendarDate)) ? 'text-slate-700 hover:bg-slate-200' : 'text-slate-300'
                       }`}
                       onClick={() => selectCalendarDate(day)}
@@ -879,9 +986,9 @@ export function Attendance() {
               <SummaryMetric icon={<Send className="size-4" />} label="Chờ duyệt" value={stats.pending} tone="slate" />
             </div>
 
-            <div className="p-4">
-              <p className="mb-3 text-xs font-semibold uppercase text-slate-500">Trạng thái</p>
-              <div className="space-y-2">
+            <div className="p-2.5">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase text-slate-500">Trạng thái</p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
                 {(Object.keys(statusMeta) as AttendanceStatus[]).map((status) => (
                   <div key={status} className="flex items-center gap-2 text-xs text-slate-600">
                     <span className={`size-2.5 rounded-sm ${statusMeta[status].bar}`} />
@@ -893,7 +1000,7 @@ export function Attendance() {
           </aside>
 
           <section className="min-w-0">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-2 border-b border-slate-200 bg-white/90 px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="sm" onClick={() => selectCalendarDate(parseISO(currentDate))}>Hôm nay</Button>
                 <Button variant="ghost" size="icon" className="size-8" onClick={() => moveCalendarWeek(-1)} title="Tuần trước">
@@ -924,14 +1031,296 @@ export function Attendance() {
               today={currentDate}
               records={history}
               requests={requests}
+              plannedShifts={plannedShifts}
               onSelectDate={(date) => selectCalendarDate(date)}
               onOpenRecord={(record) => openDetail(record)}
               onOpenRequest={(request) => openDetail(undefined, request)}
+              onOpenShift={openShift}
+              onCreateShift={openNewShift}
               onProposeTimeChange={proposeAttendanceChange}
             />
           </section>
         </div>
       </div>
+
+      <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
+        <DialogContent
+          className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-xl overflow-x-hidden overflow-y-auto"
+          showCloseButton={false}
+        >
+          <DialogHeader className="min-w-0">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="flex items-center gap-2">
+                  <CalendarPlus className="size-5 shrink-0 text-blue-600" />
+                  {shiftDraft.id ? 'Chi tiết ca làm' : 'Tạo ca làm'}
+                </DialogTitle>
+                <DialogDescription className="mt-1 max-w-md leading-5">
+                  Ca dự kiến giúp bạn tự sắp xếp lịch. Giờ chấm công thật chỉ được ghi nhận khi bắt đầu và kết thúc ca.
+                </DialogDescription>
+              </div>
+              <div className="w-fit shrink-0 rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-sm">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAttendanceAction}
+                  disabled={attendanceActionLoading || !isShiftForToday || shiftHasEnded}
+                  title={
+                    shiftDraft.date === currentDate
+                      ? shiftActionLabel
+                      : 'Chỉ có thể chấm công cho ca trong ngày hôm nay'
+                  }
+                  className={
+                    shiftHasEnded
+                      ? 'h-8 bg-white px-2.5 text-xs font-semibold text-slate-500 shadow-none hover:bg-white'
+                      : shiftHasStarted
+                        ? 'h-8 bg-rose-600 px-2.5 text-xs font-semibold text-white hover:bg-rose-700'
+                        : 'h-8 bg-emerald-600 px-2.5 text-xs font-semibold text-white hover:bg-emerald-700'
+                  }
+                >
+                  {attendanceActionLoading
+                    ? <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
+                    : shiftHasEnded
+                      ? <CheckCircle2 className="mr-1.5 size-3.5" />
+                      : shiftHasStarted
+                        ? <Square className="mr-1.5 size-3 fill-current" />
+                        : <Play className="mr-1.5 size-3.5 fill-current" />}
+                  {shiftActionLabel}
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="grid min-w-0 gap-4">
+            <div className="min-w-0 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="shiftTitle">Nội dung ca làm</Label>
+                <div className="text-right">
+                  <span
+                    className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700"
+                    title="Giờ công thực tế sau khi trừ thời gian nghỉ trưa"
+                  >
+                    {calculateWorkedHours(shiftDraft.startTime, shiftDraft.endTime).toFixed(1)} giờ công
+                  </span>
+                  {calculateLunchBreakMinutes(shiftDraft.startTime, shiftDraft.endTime) > 0 && (
+                    <p className="mt-1 text-[10px] text-slate-500">Đã trừ nghỉ trưa 12:00–13:00</p>
+                  )}
+                </div>
+              </div>
+              <Input
+                id="shiftTitle"
+                className="w-full min-w-0"
+                value={shiftDraft.title}
+                onChange={(event) => setShiftDraft((current) => ({ ...current, title: event.target.value }))}
+                placeholder="Ví dụ: Hoàn thiện API chấm công"
+              />
+            </div>
+
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="shiftDate">Ngày</Label>
+                <Input
+                  id="shiftDate"
+                  className="w-full min-w-0"
+                  type="date"
+                  value={shiftDraft.date}
+                  disabled={shiftDraft.status !== 'planned'}
+                  onChange={(event) => setShiftDraft((current) => ({ ...current, date: event.target.value }))}
+                />
+              </div>
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="shiftStart">Bắt đầu</Label>
+                <Input
+                  id="shiftStart"
+                  className="w-full min-w-0"
+                  type="time"
+                  step={1800}
+                  value={shiftDraft.startTime}
+                  disabled={shiftDraft.status !== 'planned'}
+                  onChange={(event) => setShiftDraft((current) => ({ ...current, startTime: event.target.value }))}
+                />
+              </div>
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="shiftEnd">Kết thúc</Label>
+                <Input
+                  id="shiftEnd"
+                  className="w-full min-w-0"
+                  type="time"
+                  step={1800}
+                  value={shiftDraft.endTime}
+                  disabled={shiftDraft.status !== 'planned'}
+                  onChange={(event) => setShiftDraft((current) => ({ ...current, endTime: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0 space-y-2">
+              <Label htmlFor="shiftDescription">Công việc trong ca</Label>
+              <Textarea
+                id="shiftDescription"
+                rows={5}
+                value={shiftDraft.description}
+                onChange={(event) => setShiftDraft((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Ghi kế hoạch hoặc những công việc cần thực hiện trong ca hôm nay..."
+                className="min-h-28 w-full min-w-0 resize-none"
+              />
+            </div>
+
+            {shiftError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{shiftError}</div>
+            )}
+
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+              <div>
+                {shiftDraft.id && shiftDraft.status === 'planned' && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={deleteShift}
+                    disabled={shiftSaving}
+                    title="Xóa ca"
+                    aria-label="Xóa ca"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                )}
+              </div>
+              <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="size-8"
+                  onClick={() => setShiftDialogOpen(false)}
+                  title="Đóng"
+                  aria-label="Đóng"
+                >
+                  <X className="size-4" />
+                </Button>
+                {shiftDraft.status === 'completed' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 px-2.5"
+                    onClick={openCompletedReportEditor}
+                    title="Chỉnh sửa báo cáo công việc"
+                  >
+                    <FileText className="size-3.5" />
+                    Report
+                  </Button>
+                )}
+                {shiftDraft.status === 'completed' && shiftAttendanceRecord?.checkIn && shiftAttendanceRecord.checkOut && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setShiftDialogOpen(false);
+                      openRequestDialog(shiftDraft.date, 'adjustment', shiftAttendanceRecord);
+                    }}
+                    className="h-8 gap-1.5 px-2.5"
+                    title="Gửi yêu cầu điều chỉnh giờ"
+                  >
+                    <TimerReset className="size-3.5" />
+                    Giờ
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 px-2.5"
+                  onClick={saveShift}
+                  disabled={shiftSaving}
+                  title={
+                    !shiftDraft.id
+                      ? 'Lưu ca'
+                      : shiftDraft.status === 'planned'
+                        ? 'Lưu thay đổi'
+                        : 'Lưu nội dung'
+                  }
+                >
+                  <Save className="size-3.5" />
+                  Lưu
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={checkoutDialogOpen}
+        onOpenChange={(open) => {
+          setCheckoutDialogOpen(open);
+          if (!open) setEditingReportShiftId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BriefcaseBusiness className="size-5 text-blue-600" />
+              {editingReportShiftId ? 'Chỉnh sửa báo cáo công việc' : 'Kết thúc ca và báo cáo công việc'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingReportShiftId
+                ? 'Bạn có thể cập nhật nội dung báo cáo; giờ vào và giờ ra thực tế vẫn được giữ nguyên.'
+                : 'Ghi ngắn gọn kết quả trong ca để quản lý có dữ liệu đối chiếu hiệu suất.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="checkoutReportTitle">Tiêu đề</Label>
+              <Input
+                id="checkoutReportTitle"
+                value={checkoutReport.title}
+                onChange={(event) => setCheckoutReport((current) => ({ ...current, title: event.target.value }))}
+                placeholder="Ví dụ: Hoàn thiện giao diện chấm công"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="checkoutReportDescription">Kết quả đã làm</Label>
+              <Textarea
+                id="checkoutReportDescription"
+                rows={4}
+                value={checkoutReport.description}
+                onChange={(event) => setCheckoutReport((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Nêu công việc đã hoàn thành, kết quả và phần còn tồn đọng..."
+              />
+              {!checkoutReport.description.trim() && (
+                <p className="text-xs text-amber-700">Cần nhập kết quả công việc trước khi kết thúc ca.</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="checkoutReportNote">Ghi chú (không bắt buộc)</Label>
+              <Textarea
+                id="checkoutReportNote"
+                rows={2}
+                value={checkoutReport.note || ''}
+                onChange={(event) => setCheckoutReport((current) => ({ ...current, note: event.target.value }))}
+                placeholder="Khó khăn, đề xuất hỗ trợ hoặc kế hoạch tiếp theo..."
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)}>Hủy</Button>
+            <Button
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={finishAttendanceShift}
+              disabled={attendanceActionLoading || !checkoutReport.description.trim()}
+            >
+              {editingReportShiftId
+                ? <FileText className="mr-2 size-4" />
+                : <Square className="mr-2 size-3.5 fill-current" />}
+              {attendanceActionLoading
+                ? 'Đang lưu...'
+                : editingReportShiftId
+                  ? 'Lưu báo cáo'
+                  : 'Kết thúc ca'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
@@ -1020,9 +1409,9 @@ export function Attendance() {
             <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>
               Hủy
             </Button>
-            <Button onClick={submitRequest}>
+            <Button onClick={submitRequest} disabled={requestSubmitting}>
               <Send className="mr-2 size-4" />
-              Gửi HR duyệt
+              {requestSubmitting ? 'Đang gửi...' : 'Gửi HR duyệt'}
             </Button>
           </div>
         </DialogContent>
@@ -1190,9 +1579,12 @@ interface AttendanceWeekCalendarProps {
   today: string;
   records: AttendanceRecord[];
   requests: AttendanceRequest[];
+  plannedShifts: PlannedShift[];
   onSelectDate: (date: Date) => void;
   onOpenRecord: (record: AttendanceRecord) => void;
   onOpenRequest: (request: AttendanceRequest) => void;
+  onOpenShift: (shift: PlannedShift) => void;
+  onCreateShift: (date: string, startTime: string, endTime: string) => void;
   onProposeTimeChange: (record: AttendanceRecord, checkIn: string, checkOut: string) => void;
 }
 
@@ -1200,6 +1592,15 @@ interface CheckoutResizeState {
   date: string;
   checkIn: string;
   checkOut: string;
+  dayTop: number;
+  dayHeight: number;
+}
+
+interface ShiftSelectionState {
+  date: string;
+  anchorMinutes: number;
+  startMinutes: number;
+  endMinutes: number;
   dayTop: number;
   dayHeight: number;
 }
@@ -1216,21 +1617,24 @@ function AttendanceWeekCalendar({
   today,
   records,
   requests,
+  plannedShifts,
   onSelectDate,
   onOpenRecord,
   onOpenRequest,
+  onOpenShift,
+  onCreateShift,
   onProposeTimeChange,
 }: AttendanceWeekCalendarProps) {
   const [checkoutResize, setCheckoutResize] = useState<CheckoutResizeState | null>(null);
   const checkoutResizeRef = useRef<CheckoutResizeState | null>(null);
+  const [shiftSelection, setShiftSelection] = useState<ShiftSelectionState | null>(null);
+  const shiftSelectionRef = useRef<ShiftSelectionState | null>(null);
   const weekStart = startOfWeek(parseISO(selectedDate), { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const timelineHeight = calendarHours.length * calendarRowHeight;
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const nowTop = ((nowMinutes - calendarStartHour * 60) / 60) * calendarRowHeight;
-  const lunchTop = ((workSchedule.lunchStart - calendarStartHour * 60) / 60) * calendarRowHeight;
-  const lunchHeight = ((workSchedule.lunchEnd - workSchedule.lunchStart) / 60) * calendarRowHeight;
 
   const startCheckoutResize = (event: ReactPointerEvent<HTMLElement>, record: AttendanceRecord) => {
     if (!record.checkIn || !record.checkOut) return;
@@ -1286,6 +1690,63 @@ function AttendanceWeekCalendar({
     };
   }, [checkoutResize?.date, onProposeTimeChange, records]);
 
+  const startShiftSelection = (event: ReactPointerEvent<HTMLDivElement>, date: string) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-calendar-event]')) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const anchorMinutes = Math.min(23 * 60 + 30, timeFromCalendarPointer(event.clientY, rect.top, rect.height));
+    const nextState: ShiftSelectionState = {
+      date,
+      anchorMinutes,
+      startMinutes: anchorMinutes,
+      endMinutes: Math.min(24 * 60 - 1, anchorMinutes + 30),
+      dayTop: rect.top,
+      dayHeight: rect.height,
+    };
+    shiftSelectionRef.current = nextState;
+    setShiftSelection(nextState);
+  };
+
+  useEffect(() => {
+    if (!shiftSelection?.date) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const current = shiftSelectionRef.current;
+      if (!current) return;
+      const pointerMinutes = timeFromCalendarPointer(event.clientY, current.dayTop, current.dayHeight);
+      const draggingForward = pointerMinutes >= current.anchorMinutes;
+      const startMinutes = draggingForward ? current.anchorMinutes : pointerMinutes;
+      const endMinutes = Math.min(
+        24 * 60 - 1,
+        draggingForward ? Math.max(current.anchorMinutes + 30, pointerMinutes) : current.anchorMinutes,
+      );
+      const nextState = { ...current, startMinutes, endMinutes };
+      shiftSelectionRef.current = nextState;
+      setShiftSelection(nextState);
+    };
+
+    const clearSelection = () => {
+      shiftSelectionRef.current = null;
+      setShiftSelection(null);
+    };
+
+    const handlePointerUp = () => {
+      const current = shiftSelectionRef.current;
+      if (!current) return;
+      clearSelection();
+      onCreateShift(current.date, minutesToTime(current.startMinutes), minutesToTime(current.endMinutes));
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', clearSelection);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', clearSelection);
+    };
+  }, [onCreateShift, shiftSelection?.date]);
+
   const startAttendanceDrag = (event: DragEvent<HTMLElement>, record: AttendanceRecord, mode: 'move' | 'checkout') => {
     if (!record.checkIn || !record.checkOut) {
       event.preventDefault();
@@ -1329,9 +1790,9 @@ function AttendanceWeekCalendar({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[920px]">
-        <div className="grid grid-cols-[64px_repeat(7,minmax(112px,1fr))] border-b border-slate-200 bg-white">
-          <div className="flex items-end justify-center border-r border-slate-200 pb-3 text-[10px] font-medium text-slate-400">GMT+7</div>
+      <div className="min-w-[700px] select-none">
+        <div className="grid grid-cols-[48px_repeat(7,minmax(84px,1fr))] border-b border-slate-200 bg-white">
+          <div className="flex items-end justify-center border-r border-slate-200 pb-2 text-[10px] font-medium text-slate-400">GMT+7</div>
           {weekDays.map((day) => {
             const dateIso = toIsoDate(day);
             const isToday = dateIso === today;
@@ -1339,12 +1800,12 @@ function AttendanceWeekCalendar({
             const dayRequests = requests.filter((request) => request.date === dateIso);
             const firstRequest = dayRequests[0];
             return (
-              <div key={dateIso} className={`min-h-[92px] border-r border-slate-200 px-2 py-2 text-center last:border-r-0 ${isSelected ? 'bg-blue-50/60' : ''}`}>
+              <div key={dateIso} className={`min-h-[52px] border-r border-slate-200 px-1 py-1 text-center last:border-r-0 ${isSelected ? 'bg-blue-50/60' : ''}`}>
                 <button type="button" className="group mx-auto block" onClick={() => onSelectDate(day)}>
                   <span className={`block text-[11px] font-semibold uppercase ${isToday ? 'text-blue-600' : 'text-slate-500'}`}>
                     {format(day, 'EEE', { locale: vi })}
                   </span>
-                  <span className={`mx-auto mt-1 flex size-9 items-center justify-center rounded-full text-lg ${isToday ? 'bg-blue-600 font-semibold text-white' : isSelected ? 'bg-blue-100 font-semibold text-blue-700' : 'text-slate-800 group-hover:bg-slate-100'}`}>
+                  <span className={`mx-auto mt-0.5 flex size-7 items-center justify-center rounded-full text-sm ${isToday ? 'bg-blue-600 font-semibold text-white' : isSelected ? 'bg-blue-100 font-semibold text-blue-700' : 'text-slate-800 group-hover:bg-slate-100'}`}>
                     {format(day, 'd')}
                   </span>
                 </button>
@@ -1363,36 +1824,32 @@ function AttendanceWeekCalendar({
           })}
         </div>
 
-        <div className="grid grid-cols-[64px_repeat(7,minmax(112px,1fr))] bg-white">
+        <div className="grid grid-cols-[48px_repeat(7,minmax(84px,1fr))] bg-white">
           <div className="relative border-r border-slate-200" style={{ height: timelineHeight }}>
             {calendarHours.map((hour, index) => (
               <span
                 key={hour}
-                className="absolute right-2 -translate-y-1/2 text-[10px] font-medium text-slate-400"
+                className={`absolute right-1.5 -translate-y-1/2 text-[9px] font-medium text-slate-400 ${hour % 2 !== 0 ? 'hidden' : ''}`}
                 style={{ top: index * calendarRowHeight }}
               >
                 {String(hour).padStart(2, '0')}:00
               </span>
             ))}
-            <span
-              className="absolute inset-x-1 z-10 -translate-y-1/2 rounded bg-slate-200 px-1 py-0.5 text-center text-[9px] font-semibold text-slate-600"
-              style={{ top: lunchTop + lunchHeight / 2 }}
-            >
-              Nghỉ trưa
-            </span>
-          </div>
+        </div>
 
-          {weekDays.map((day) => {
+        {weekDays.map((day) => {
             const dateIso = toIsoDate(day);
             const dayRecords = records.filter((record) => record.date === dateIso);
+            const dayShifts = plannedShifts.filter((shift) => shift.date === dateIso);
             const isToday = dateIso === today;
             const isSelected = dateIso === selectedDate;
             return (
               <div
                 key={dateIso}
                 data-attendance-day={dateIso}
-                className={`relative border-r border-slate-200 last:border-r-0 ${isSelected ? 'bg-blue-50/30' : ''}`}
+                className={`relative cursor-crosshair touch-none border-r border-slate-200 last:border-r-0 ${isSelected ? 'bg-blue-50/30' : ''}`}
                 style={{ height: timelineHeight }}
+                onPointerDown={(event) => startShiftSelection(event, dateIso)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => handleAttendanceDrop(event, dateIso)}
               >
@@ -1403,11 +1860,6 @@ function AttendanceWeekCalendar({
                     style={{ top: index * calendarRowHeight }}
                   />
                 ))}
-
-                <div
-                  className="pointer-events-none absolute inset-x-0 z-[1] border-y border-slate-200 bg-slate-100/90"
-                  style={{ top: lunchTop, height: lunchHeight }}
-                />
 
                 {dayRecords.map((record) => {
                   const displayedRecord = checkoutResize?.date === record.date
@@ -1428,6 +1880,7 @@ function AttendanceWeekCalendar({
                     return (
                       <button
                         key={`${record.date}-${segmentIndex}`}
+                        data-calendar-event
                         type="button"
                         draggable={Boolean(record.checkIn && record.checkOut)}
                         className={`absolute inset-x-1 z-10 overflow-hidden rounded-md border-l-4 p-2 text-left text-xs shadow-sm transition-colors ${record.checkOut ? 'cursor-grab active:cursor-grabbing' : ''} ${eventTone}`}
@@ -1455,6 +1908,48 @@ function AttendanceWeekCalendar({
                   });
                 })}
 
+                {dayShifts.map((shift) => {
+                  const metrics = getCalendarSegmentMetrics(timeToMinutes(shift.startTime), timeToMinutes(shift.endTime));
+                  const tone = shift.status === 'completed'
+                    ? 'border-emerald-400 bg-emerald-100/95 text-emerald-950 hover:bg-emerald-200'
+                    : shift.status === 'working'
+                      ? 'border-blue-500 bg-blue-100/95 text-blue-950 hover:bg-blue-200'
+                      : 'border-violet-400 bg-violet-100/95 text-violet-950 hover:bg-violet-200';
+                  return (
+                    <button
+                      key={shift.id}
+                      data-calendar-event
+                      type="button"
+                      className={`absolute inset-x-1 z-[15] overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-left text-[10px] shadow-sm transition-colors ${tone}`}
+                      style={{ top: metrics.top, height: metrics.height }}
+                      onClick={() => onOpenShift(shift)}
+                      title={`${shift.title}: ${shift.startTime} - ${shift.endTime}`}
+                    >
+                      <span className="block truncate font-semibold">{shift.title}</span>
+                      {metrics.height >= 34 && (
+                        <span className="mt-0.5 block font-medium opacity-80">{shift.startTime} - {shift.endTime}</span>
+                      )}
+                      {metrics.height >= 58 && (
+                        <span className="mt-1 block opacity-70">
+                          {shift.status === 'completed' ? 'Đã kết thúc' : shift.status === 'working' ? 'Đang thực hiện' : 'Ca dự kiến'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+
+                {shiftSelection?.date === dateIso && (() => {
+                  const metrics = getCalendarSegmentMetrics(shiftSelection.startMinutes, shiftSelection.endMinutes);
+                  return (
+                    <div
+                      className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-dashed border-violet-500 bg-violet-200/70 px-1.5 py-1 text-[10px] font-semibold text-violet-950 shadow-sm"
+                      style={{ top: metrics.top, height: metrics.height }}
+                    >
+                      {minutesToTime(shiftSelection.startMinutes)} - {minutesToTime(shiftSelection.endMinutes)}
+                    </div>
+                  );
+                })()}
+
                 {isToday && nowTop >= 0 && nowTop <= timelineHeight && (
                   <div className="pointer-events-none absolute inset-x-0 z-20 flex items-center" style={{ top: nowTop }}>
                     <span className="-ml-1 size-2 rounded-full bg-red-500" />
@@ -1481,12 +1976,12 @@ function SummaryMetric({ icon, label, value, tone }: { icon: ReactNode; label: s
   }[tone];
 
   return (
-    <div className="min-w-0 border-b border-r border-slate-200 p-3 even:border-r-0">
+    <div className="min-w-0 border-b border-r border-slate-200 p-2.5 even:border-r-0">
       <div className="flex items-center gap-2">
         <span className={toneClass}>{icon}</span>
         <div className="min-w-0">
           <p className="truncate text-[11px] text-slate-500">{label}</p>
-          <p className="text-base font-bold text-slate-950">{value}</p>
+          <p className="text-sm font-bold text-slate-950">{value}</p>
         </div>
       </div>
     </div>

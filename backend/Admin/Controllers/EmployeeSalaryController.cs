@@ -1,8 +1,11 @@
 using Admin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Admin.Controllers
 {
+    [Authorize(Roles = "EMPLOYEE,MANAGER,ADMIN")]
     [ApiController]
     [Route("api/employee/salary")]
     public class EmployeeSalaryController : ControllerBase
@@ -15,16 +18,25 @@ namespace Admin.Controllers
         }
 
         [HttpGet]
-        public IActionResult GetByEmployee([FromQuery] int employeeId, [FromQuery] int month, [FromQuery] int year)
+        public IActionResult GetMine(
+            [FromQuery] int employeeId,
+            [FromQuery] int month,
+            [FromQuery] int year)
         {
-            if (employeeId <= 0)
+            if (month is < 1 or > 12 || year < 2000)
             {
-                return BadRequest(new { message = "Thiếu employeeId" });
+                return BadRequest(new { message = "Tháng/năm không hợp lệ." });
             }
 
-            if (month < 1 || month > 12 || year < 2000)
+            var actorClaim = User.FindFirstValue("employee_id");
+            if (!int.TryParse(actorClaim, out var actorId))
             {
-                return BadRequest(new { message = "Tháng/năm không hợp lệ" });
+                return Forbid();
+            }
+
+            if (User.IsInRole("EMPLOYEE") && employeeId != actorId)
+            {
+                return Forbid();
             }
 
             return Ok(_service.GetByEmployee(employeeId, month, year));

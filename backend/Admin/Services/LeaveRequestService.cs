@@ -1,6 +1,6 @@
-﻿using Admin.Data;
-using Admin.Models;
+using Admin.Data;
 using Admin.DTOs;
+using Admin.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
@@ -9,88 +9,90 @@ namespace Admin.Services
     public class LeaveRequestService
     {
         private readonly AppDbContext _db;
-        private static readonly object DemoLock = new();
-        private static readonly List<LeaveRequestDto> DemoLeaveRequests = new()
-        {
-            new LeaveRequestDto { Id = 1, EmployeeId = 1, EmployeeName = "Nguyễn Văn A", LeaveType = "Nghỉ phép năm", StartDate = new DateTime(2026, 1, 10), EndDate = new DateTime(2026, 1, 12), TotalDays = 3, Reason = "Du lịch gia đình", Status = "Chờ duyệt" },
-            new LeaveRequestDto { Id = 2, EmployeeId = 2, EmployeeName = "Trần Thị B", LeaveType = "Nghỉ ốm", StartDate = new DateTime(2026, 1, 8), EndDate = new DateTime(2026, 1, 9), TotalDays = 2, Reason = "Ốm, cần nghỉ ngơi", Status = "Đã duyệt" },
-            new LeaveRequestDto { Id = 3, EmployeeId = 3, EmployeeName = "Lê Văn C", LeaveType = "Nghỉ không lương", StartDate = new DateTime(2026, 1, 15), EndDate = new DateTime(2026, 1, 20), TotalDays = 6, Reason = "Việc gia đình cần xử lý", Status = "Chờ duyệt" },
-            new LeaveRequestDto { Id = 4, EmployeeId = 4, EmployeeName = "Phạm Thị D", LeaveType = "Nghỉ phép năm", StartDate = new DateTime(2026, 1, 5), EndDate = new DateTime(2026, 1, 7), TotalDays = 3, Reason = "Nghỉ ngơi sau dự án", Status = "Đã duyệt" }
-        };
 
         public LeaveRequestService(AppDbContext db)
         {
             _db = db;
         }
 
-        // =========================
-        // GET ALL
-        // =========================
-        public List<LeaveRequestDto> GetAll(string? status)
+        public List<LeaveRequestDto> GetAll(
+            string? status,
+            int? employeeId = null,
+            int? departmentId = null)
         {
-            try
-            {
-                var query =
-                    from l in _db.LeaveRequests
-                    join e in _db.Employees on l.EmployeeId equals e.Id
-                    join t in _db.LeaveTypes on l.LeaveTypeId equals t.Id
-                    select new LeaveRequestDto
-                    {
-                        Id = l.Id,
-                        EmployeeId = e.Id,
-                        EmployeeName = e.FullName,
-                        LeaveType = t.Name,
-                        StartDate = l.StartDate,
-                        EndDate = l.EndDate,
-                        TotalDays = l.TotalDays,
-                        Reason = l.Reason,
-                        Status = l.Status
-                    };
-
-                if (!string.IsNullOrWhiteSpace(status))
+            var query =
+                from leave in _db.LeaveRequests.AsNoTracking()
+                join employee in _db.Employees.AsNoTracking()
+                    on leave.EmployeeId equals employee.Id
+                join leaveType in _db.LeaveTypes.AsNoTracking()
+                    on leave.LeaveTypeId equals leaveType.Id
+                where !employeeId.HasValue || employee.Id == employeeId.Value
+                where !departmentId.HasValue || employee.DepartmentId == departmentId.Value
+                select new LeaveRequestDto
                 {
-                    query = query.Where(x => x.Status == status);
-                }
+                    Id = leave.Id,
+                    EmployeeId = employee.Id,
+                    EmployeeName = employee.FullName ?? "",
+                    LeaveType = leaveType.Name ?? "Nghỉ phép năm",
+                    StartDate = leave.StartDate,
+                    EndDate = leave.EndDate,
+                    TotalDays = leave.TotalDays,
+                    Reason = leave.Reason ?? "",
+                    Status = leave.Status ?? "Chờ duyệt"
+                };
 
-                var rows = query.ToList();
-                return rows.Count > 0 ? rows : GetDemo(status);
-            }
-            catch
+            var normalizedStatus = NormalizeStatus(status);
+            if (!string.IsNullOrWhiteSpace(normalizedStatus))
             {
-                return GetDemo(status);
+                query = query.Where(x => x.Status == normalizedStatus);
             }
+
+            var results = query
+                .OrderByDescending(x => x.StartDate)
+                .ThenByDescending(x => x.Id)
+                .ToList();
+
+            foreach (var result in results)
+            {
+                result.TotalDays = Math.Max(1, (result.EndDate.Date - result.StartDate.Date).Days + 1);
+            }
+
+            return results;
         }
 
-        // =========================
-        // CREATE
-        // =========================
-        public LeaveRequest Create(LeaveRequestCreateDto dto)
+        public LeaveRequestDto Create(LeaveRequestCreateDto dto)
         {
-            var formats = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+            var start = ParseDate(dto.StartDate, "StartDate");
+            var end = ParseDate(dto.EndDate, "EndDate");
 
-            if (!DateTime.TryParseExact(
-                dto.StartDate,
-                formats,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var start))
+            if (end < start)
             {
-                throw new Exception("StartDate không đúng định dạng");
+                throw new InvalidOperationException("Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.");
             }
 
-            if (!DateTime.TryParseExact(
-                dto.EndDate,
-                formats,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var end))
+            if (!_db.Employees.Any(x => x.Id == dto.EmployeeId))
             {
-                throw new Exception("EndDate không đúng định dạng");
+                throw new InvalidOperationException("Nhân viên không tồn tại.");
             }
 
-            if (end.Date < start.Date)
+            var leaveType = _db.LeaveTypes
+                .AsNoTracking()
+                .FirstOrDefault(x => x.Id == dto.LeaveTypeId);
+
+            if (leaveType == null)
             {
-                throw new Exception("EndDate phải lớn hơn hoặc bằng StartDate");
+                throw new InvalidOperationException("Loại nghỉ phép không tồn tại.");
+            }
+
+            var overlaps = _db.LeaveRequests.Any(x =>
+                x.EmployeeId == dto.EmployeeId &&
+                x.Status != "Từ chối" &&
+                x.StartDate <= end &&
+                x.EndDate >= start);
+
+            if (overlaps)
+            {
+                throw new InvalidOperationException("Khoảng ngày này đã có đơn nghỉ phép đang xử lý.");
             }
 
             var leave = new LeaveRequest
@@ -99,163 +101,123 @@ namespace Admin.Services
                 LeaveTypeId = dto.LeaveTypeId,
                 StartDate = start,
                 EndDate = end,
-                TotalDays = (end.Date - start.Date).Days + 1,
-                Reason = dto.Reason,
+                TotalDays = (end - start).Days + 1,
+                Reason = dto.Reason.Trim(),
                 Status = "Chờ duyệt",
                 CreatedAt = DateTime.Now
             };
 
-            try
-            {
-                _db.Add(leave);
-                _db.SaveChanges();
-            }
-            catch
-            {
-                lock (DemoLock)
-                {
-                    leave.Id = DemoLeaveRequests.Count == 0 ? 1 : DemoLeaveRequests.Max(x => x.Id) + 1;
-                    DemoLeaveRequests.Insert(0, new LeaveRequestDto
-                    {
-                        Id = leave.Id,
-                        EmployeeId = dto.EmployeeId,
-                        EmployeeName = $"NV{dto.EmployeeId:D3}",
-                        LeaveType = GetDemoLeaveType(dto.LeaveTypeId),
-                        StartDate = start,
-                        EndDate = end,
-                        TotalDays = leave.TotalDays,
-                        Reason = dto.Reason,
-                        Status = "Chờ duyệt"
-                    });
-                }
-            }
+            _db.LeaveRequests.Add(leave);
+            _db.SaveChanges();
 
-            return leave;
-        }
+            var employeeName = _db.Employees
+                .AsNoTracking()
+                .Where(x => x.Id == dto.EmployeeId)
+                .Select(x => x.FullName)
+                .First();
 
-        // =========================
-        // APPROVE
-        // =========================
-        public LeaveRequestDto? Approve(int id)
-        {
-            try
-            {
-                var leave = _db.Set<LeaveRequest>().Find(id);
-                if (leave == null) return null;
-
-                leave.Status = "Đã duyệt";
-                _db.SaveChanges();
-                return GetAll(null).FirstOrDefault(x => x.Id == id);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("Không lưu được trạng thái duyệt vào database.", ex);
-            }
-        }
-
-        // =========================
-        // REJECT
-        // =========================
-        public LeaveRequestDto? Reject(int id)
-        {
-            try
-            {
-                var leave = _db.Set<LeaveRequest>().Find(id);
-                if (leave == null) return null;
-
-                leave.Status = "Từ chối";
-                _db.SaveChanges();
-                return GetAll(null).FirstOrDefault(x => x.Id == id);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("Không lưu được trạng thái từ chối vào database.", ex);
-            }
-        }
-
-        // =========================
-        // DASHBOARD
-        // =========================
-        public object Dashboard()
-        {
-            var today = DateTime.Today;
-
-            try
-            {
-                return new
-                {
-                    pending = _db.Set<LeaveRequest>().Count(l => l.Status == "Chờ duyệt"),
-                    approved = _db.Set<LeaveRequest>().Count(l => l.Status == "Đã duyệt"),
-                    rejected = _db.Set<LeaveRequest>().Count(l => l.Status == "Từ chối"),
-                    onLeaveToday = _db.Set<LeaveRequest>()
-                        .Count(l =>
-                            l.Status == "Đã duyệt"
-                            && l.StartDate.Date <= today
-                            && l.EndDate.Date >= today
-                        )
-                };
-            }
-            catch
-            {
-                var rows = GetDemo(null);
-                return new
-                {
-                    pending = rows.Count(x => x.Status == "Chờ duyệt"),
-                    approved = rows.Count(x => x.Status == "Đã duyệt"),
-                    rejected = rows.Count(x => x.Status == "Từ chối"),
-                    onLeaveToday = rows.Count(x => x.Status == "Đã duyệt" && x.StartDate.Date <= today && x.EndDate.Date >= today)
-                };
-            }
-        }
-
-        private static List<LeaveRequestDto> GetDemo(string? status)
-        {
-            lock (DemoLock)
-            {
-                var rows = DemoLeaveRequests.Select(Clone).ToList();
-                return string.IsNullOrWhiteSpace(status)
-                    ? rows
-                    : rows.Where(x => x.Status == status).ToList();
-            }
-        }
-
-        private static bool UpdateDemoStatus(int id, string status)
-        {
-            lock (DemoLock)
-            {
-                var item = DemoLeaveRequests.FirstOrDefault(x => x.Id == id);
-                if (item == null) return false;
-                item.Status = status;
-                return true;
-            }
-        }
-
-        private static LeaveRequestDto Clone(LeaveRequestDto item)
-        {
             return new LeaveRequestDto
             {
-                Id = item.Id,
-                EmployeeId = item.EmployeeId,
-                EmployeeName = item.EmployeeName,
-                LeaveType = item.LeaveType,
-                StartDate = item.StartDate,
-                EndDate = item.EndDate,
-                TotalDays = item.TotalDays,
-                Reason = item.Reason,
-                Status = item.Status
+                Id = leave.Id,
+                EmployeeId = leave.EmployeeId,
+                EmployeeName = employeeName,
+                LeaveType = leaveType.Name,
+                StartDate = leave.StartDate,
+                EndDate = leave.EndDate,
+                TotalDays = leave.TotalDays,
+                Reason = leave.Reason,
+                Status = leave.Status
             };
         }
 
-        private static string GetDemoLeaveType(int id)
+        public bool Approve(int id, int? departmentId = null)
         {
-            return id switch
+            return Review(id, "Đã duyệt", departmentId);
+        }
+
+        public bool Reject(int id, int? departmentId = null)
+        {
+            return Review(id, "Từ chối", departmentId);
+        }
+
+        public object Dashboard(int? departmentId = null)
+        {
+            var today = DateTime.Today;
+            var query =
+                from leave in _db.LeaveRequests.AsNoTracking()
+                join employee in _db.Employees.AsNoTracking()
+                    on leave.EmployeeId equals employee.Id
+                where !departmentId.HasValue || employee.DepartmentId == departmentId.Value
+                select leave;
+
+            return new
             {
-                2 => "Nghỉ ốm",
-                3 => "Nghỉ không lương",
-                4 => "Nghỉ thai sản",
-                5 => "Nghỉ cưới",
-                6 => "Nghỉ tang",
-                _ => "Nghỉ phép năm"
+                pending = query.Count(x => x.Status == "Chờ duyệt" || x.Status == "PENDING"),
+                approved = query.Count(x => x.Status == "Đã duyệt" || x.Status == "APPROVED"),
+                rejected = query.Count(x => x.Status == "Từ chối" || x.Status == "REJECTED"),
+                onLeaveToday = query.Count(x =>
+                    (x.Status == "Đã duyệt" || x.Status == "APPROVED") &&
+                    x.StartDate <= today &&
+                    x.EndDate >= today)
+            };
+        }
+
+        public int? GetDepartmentId(int employeeId)
+        {
+            return _db.Employees
+                .AsNoTracking()
+                .Where(x => x.Id == employeeId)
+                .Select(x => x.DepartmentId)
+                .FirstOrDefault();
+        }
+
+        private bool Review(int id, string nextStatus, int? departmentId)
+        {
+            var query =
+                from leave in _db.LeaveRequests
+                join employee in _db.Employees
+                    on leave.EmployeeId equals employee.Id
+                where leave.Id == id
+                where !departmentId.HasValue || employee.DepartmentId == departmentId.Value
+                select leave;
+
+            var request = query.FirstOrDefault();
+            if (request == null ||
+                (request.Status != "Chờ duyệt" && request.Status != "PENDING"))
+            {
+                return false;
+            }
+
+            request.Status = nextStatus;
+            _db.SaveChanges();
+            return true;
+        }
+
+        private static DateTime ParseDate(string value, string fieldName)
+        {
+            var formats = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+            if (DateTime.TryParseExact(
+                value,
+                formats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsed))
+            {
+                return parsed.Date;
+            }
+
+            throw new InvalidOperationException($"{fieldName} không đúng định dạng.");
+        }
+
+        private static string? NormalizeStatus(string? status)
+        {
+            return status?.Trim().ToLowerInvariant() switch
+            {
+                null or "" or "all" => null,
+                "pending" or "chờ duyệt" => "Chờ duyệt",
+                "approved" or "đã duyệt" => "Đã duyệt",
+                "rejected" or "từ chối" => "Từ chối",
+                _ => status
             };
         }
     }

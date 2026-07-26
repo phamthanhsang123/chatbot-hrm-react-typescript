@@ -237,7 +237,8 @@ GET http://localhost:5297/api/admin/competency/1/analyze
 |---|---:|---|
 | Manager xem danh gia nang luc | GET | `/api/manager/competency` |
 | Lay du lieu dau vao cua nhan vien | GET | `/api/manager/competency/{employeeId}/input-data` |
-| Tao danh gia nang luc | POST | `/api/manager/competency/{employeeId}/generate` |
+| Chay Agentic AI va tao danh gia | POST | `/api/manager/agentic-ai/analyze` |
+| Hoi du lieu HRM bang ngon ngu tu nhien | POST | `/api/manager/agentic-ai/query` |
 | Duyet review nang luc | POST | `/api/manager/competency/{reviewId}/approve` |
 | Tu choi review nang luc | POST | `/api/manager/competency/{reviewId}/reject` |
 
@@ -246,4 +247,4 @@ GET http://localhost:5297/api/admin/competency/1/analyze
 - Nen xem Swagger public truoc khi code frontend: `https://hrm-backend-api-hzgh.onrender.com/swagger`.
 - Frontend lay API base tu `frontend/services/apiBase.ts`, hien dang tro den Render public.
 - Khong push mat khau database that len GitHub. Neu can doi database, dung bien moi truong hoac file cau hinh local rieng.
-- Cac endpoint co fallback demo de giao dien van co du lieu khi database rong hoac chua dong bo schema.
+- Module Agentic AI khong dung fallback demo. Neu thieu task, review hoac cham cong, Reflection se tra canh bao va khong luu danh gia.

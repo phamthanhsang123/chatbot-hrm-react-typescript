@@ -4,8 +4,6 @@ import {
   BriefcaseBusiness,
   Calendar,
   Clock,
-  LayoutDashboard,
-  Settings,
   User,
   Wallet,
 } from 'lucide-react';
@@ -15,7 +13,6 @@ interface EmployeeSidebarProps {
   onClose: () => void;
   currentPage: string;
   onNavigate: (page: string) => void;
-  onOpenSettings?: () => void;
 }
 
 interface MenuItem {
@@ -26,7 +23,6 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="size-5" /> },
   { id: 'tasks', label: 'Task của tôi', icon: <BriefcaseBusiness className="size-5" />, badge: 'New' },
   { id: 'attendance', label: 'Chấm công', icon: <Clock className="size-5" /> },
   { id: 'leave', label: 'Nghỉ phép', icon: <Calendar className="size-5" />, badge: 2 },
@@ -34,7 +30,7 @@ const menuItems: MenuItem[] = [
   { id: 'profile', label: 'Hồ sơ cá nhân', icon: <User className="size-5" /> },
 ];
 
-export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate, onOpenSettings }: EmployeeSidebarProps) {
+export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate }: EmployeeSidebarProps) {
   const handleNavigate = (pageId: string) => {
     onNavigate(pageId);
     onClose();
@@ -100,21 +96,6 @@ export function EmployeeSidebar({ isOpen, onClose, currentPage, onNavigate, onOp
               ))}
             </div>
           </nav>
-
-          <div className="border-t border-white/10 p-4">
-            <button
-              className="group flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white"
-              onClick={() => {
-                onOpenSettings?.();
-                onClose();
-              }}
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5">
-                <Settings className="size-5 transition-transform duration-300 group-hover:rotate-90" />
-              </span>
-              <span className="flex-1 text-left text-[15px] font-semibold">Cài đặt</span>
-            </button>
-          </div>
         </div>
       </aside>
     </>

@@ -1,21 +1,18 @@
-﻿using Admin.Services;
+using Admin.DTOs;
+using Admin.Models;
+using Admin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Admin.Controllers
 {
     [ApiController]
+    [Authorize]
     [Route("api/admin/attendance")]
     public class AttendanceController : ControllerBase
     {
         private readonly AttendanceService _service;
-        private static readonly object RequestLock = new();
-        private static readonly List<AttendanceRequestDto> DemoRequests = new()
-        {
-            new AttendanceRequestDto(1, "Nguyễn Văn An", "NV001", "IT", "12/01/2026", "08:30", "17:30", "Quên chấm công do họp khách hàng bên ngoài văn phòng.", "pending", "13/01/2026 08:30", null, null, null, "supplement", null, null),
-            new AttendanceRequestDto(2, "Trần Thị Bình", "NV002", "HR", "11/01/2026", "08:25", "17:25", "Lỗi hệ thống chấm công, không quét được vân tay.", "pending", "12/01/2026 09:00", null, null, null, "supplement", null, null),
-            new AttendanceRequestDto(3, "Lê Hoàng Cường", "NV003", "Marketing", "10/01/2026", "08:20", "17:35", "Đi công tác tại chi nhánh Đà Nẵng.", "pending", "11/01/2026 14:20", null, null, null, "supplement", null, null),
-            new AttendanceRequestDto(4, "Hoàng Minh Tuấn", "NV006", "IT", "14/01/2026", "08:30", "17:40", "Sai giờ ra, thực tế ra lúc 17:40 do làm thêm.", "pending", "15/01/2026 08:00", null, null, null, "adjustment", "08:20", "17:35")
-        };
 
         public AttendanceController(AttendanceService service)
         {
@@ -23,151 +20,281 @@ namespace Admin.Controllers
         }
 
         [HttpGet("requests")]
-        public IActionResult GetRequests()
+        public async Task<IActionResult> GetRequests([FromQuery] string? status)
         {
-            lock (RequestLock)
-            {
-                return Ok(DemoRequests);
-            }
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            return Ok(await _service.GetRequestsAsync(actor, status));
         }
 
-        [HttpPost("requests/{id}/approve")]
-        public IActionResult ApproveRequest(int id, [FromBody] AttendanceReviewDto? dto)
+        [HttpPost("requests")]
+        public async Task<IActionResult> CreateRequest([FromBody] CreateAttendanceRequestDto dto)
         {
-            return ReviewRequest(id, "approved", dto?.Note);
-        }
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
 
-        [HttpPost("requests/{id}/reject")]
-        public IActionResult RejectRequest(int id, [FromBody] AttendanceReviewDto? dto)
-        {
-            return ReviewRequest(id, "rejected", dto?.Note);
-        }
-
-        private IActionResult ReviewRequest(int id, string status, string? note)
-        {
-            lock (RequestLock)
-            {
-                var index = DemoRequests.FindIndex(x => x.Id == id);
-                if (index < 0) return NotFound();
-
-                var current = DemoRequests[index];
-                DemoRequests[index] = current with
-                {
-                    Status = status,
-                    ReviewedAt = DateTime.Now.ToString("dd/MM/yyyy HH:mm"),
-                    ReviewedBy = "HR Manager",
-                    ReviewNote = string.IsNullOrWhiteSpace(note)
-                        ? (status == "approved" ? "Đơn được phê duyệt" : "Đơn bị từ chối")
-                        : note
-                };
-
-                return Ok(DemoRequests[index]);
-            }
-        }
-
-        // CHECK-IN
-        [HttpPost("checkin/{empId}")]
-        public IActionResult CheckIn(int empId)
-        {
             try
             {
-                var result = _service.CheckIn(empId);
-                return Ok(result);
+                var result = await _service.CreateRequestAsync(actor, dto);
+                return CreatedAtAction(nameof(GetRequests), new { status = result.Status }, result);
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException exception)
             {
-                return Ok(new
-                {
-                    success = false,
-                    message = "Chưa ghi nhận được check-in trên database. Frontend có thể dùng dữ liệu tạm thời.",
-                    error = ex.Message
-                });
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
             }
         }
 
-        // CHECK-OUT
-        [HttpPost("checkout/{empId}")]
-        public IActionResult CheckOut(int empId)
+        [HttpPost("requests/{id:int}/approve")]
+        public Task<IActionResult> ApproveRequest(int id, [FromBody] AttendanceReviewDto? dto)
         {
+            return ReviewRequestAsync(id, true, dto?.Note);
+        }
+
+        [HttpPost("requests/{id:int}/reject")]
+        public Task<IActionResult> RejectRequest(int id, [FromBody] AttendanceReviewDto? dto)
+        {
+            return ReviewRequestAsync(id, false, dto?.Note);
+        }
+
+        [HttpPost("checkin/{employeeId:int}")]
+        public async Task<IActionResult> CheckIn(int employeeId)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
             try
             {
-                var result = _service.CheckOut(empId);
-
-                if (result == null)
-                {
-                    return Ok(new
-                    {
-                        success = false,
-                        message = "Chưa check-in hoặc đã check-out"
-                    });
-                }
-
-                return Ok(result);
+                return Ok(await _service.CheckInAsync(actor, employeeId));
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException exception)
             {
-                return Ok(new
-                {
-                    success = false,
-                    message = "Chưa ghi nhận được check-out trên database. Frontend có thể dùng dữ liệu tạm thời.",
-                    error = ex.Message
-                });
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
             }
         }
 
-        // DAILY LIST - GIỮ PHẦN MỚI
+        [HttpPost("checkout/{employeeId:int}")]
+        public async Task<IActionResult> CheckOut(int employeeId, [FromBody] AttendanceCheckOutDto? dto)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                var result = await _service.CheckOutAsync(actor, employeeId, dto);
+                return result == null
+                    ? BadRequest(new { message = "Chưa check-in hoặc đã check-out." })
+                    : Ok(result);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+            }
+        }
+
         [HttpGet]
-        public IActionResult GetByDate([FromQuery] string? date)
+        public async Task<IActionResult> GetByDate([FromQuery] string? date)
         {
-            if (string.IsNullOrWhiteSpace(date))
-                return BadRequest("Thiếu date");
+            if (string.IsNullOrWhiteSpace(date) || !DateTime.TryParse(date, out var parsedDate))
+            {
+                return BadRequest(new { message = "Ngày chấm công không hợp lệ." });
+            }
 
-            if (!DateTime.TryParse(date, out var parsedDate))
-                return BadRequest("Date không hợp lệ");
-
-            var result = _service.GetByDate(parsedDate);
-            return Ok(result);
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+            return Ok(await _service.GetByDateAsync(parsedDate, actor));
         }
 
-        // SUMMARY - GIỮ PHẦN MỚI
         [HttpGet("summary")]
-        public IActionResult GetSummary([FromQuery] string? date)
+        public async Task<IActionResult> GetSummary([FromQuery] string? date)
         {
-            var parsedDate = DateTime.Today;
-            if (!string.IsNullOrWhiteSpace(date) && !DateTime.TryParse(date, out parsedDate))
-                return BadRequest("Date không hợp lệ");
+            if (string.IsNullOrWhiteSpace(date) || !DateTime.TryParse(date, out var parsedDate))
+            {
+                return BadRequest(new { message = "Ngày chấm công không hợp lệ." });
+            }
 
-            var result = _service.GetSummary(parsedDate);
-            return Ok(result);
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+            return Ok(await _service.GetSummaryAsync(parsedDate, actor));
         }
 
-        // MONTHLY REPORT - GIỮ API CŨ
         [HttpGet("report")]
-        public IActionResult MonthlyReport([FromQuery] int year, [FromQuery] int month)
+        public async Task<IActionResult> MonthlyReport([FromQuery] int year, [FromQuery] int month)
         {
-            var result = _service.GetMonthlyReport(year, month);
-            return Ok(result);
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                return Ok(await _service.GetMonthlyReportAsync(year, month, actor));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpGet("records")]
+        public async Task<IActionResult> MonthlyRecords([FromQuery] int year, [FromQuery] int month)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                return Ok(await _service.GetMonthlyRecordsAsync(year, month, actor));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpGet("shifts")]
+        public async Task<IActionResult> GetShifts(
+            [FromQuery] int year,
+            [FromQuery] int month,
+            [FromQuery] int? employeeId)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                return Ok(await _service.GetShiftsAsync(actor, year, month, employeeId));
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpPut("records/{id:int}/report")]
+        public async Task<IActionResult> UpdateWorkReport(
+            int id,
+            [FromBody] AttendanceWorkReportDto dto)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                return Ok(await _service.UpdateWorkReportAsync(actor, id, dto));
+            }
+            catch (KeyNotFoundException exception)
+            {
+                return NotFound(new { message = exception.Message });
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpPost("shifts")]
+        public async Task<IActionResult> CreateShift([FromBody] SaveAttendanceShiftDto dto)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                return Ok(await _service.CreateShiftAsync(actor, dto));
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpPut("shifts/{id:int}")]
+        public async Task<IActionResult> UpdateShift(int id, [FromBody] SaveAttendanceShiftDto dto)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                return Ok(await _service.UpdateShiftAsync(actor, id, dto));
+            }
+            catch (KeyNotFoundException exception)
+            {
+                return NotFound(new { message = exception.Message });
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpDelete("shifts/{id:int}")]
+        public async Task<IActionResult> DeleteShift(int id)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                await _service.DeleteShiftAsync(actor, id);
+                return NoContent();
+            }
+            catch (KeyNotFoundException exception)
+            {
+                return NotFound(new { message = exception.Message });
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        private async Task<IActionResult> ReviewRequestAsync(int id, bool approve, string? note)
+        {
+            var actor = await GetActorAsync();
+            if (actor == null) return Unauthorized(new { message = "Tài khoản đăng nhập không còn tồn tại." });
+
+            try
+            {
+                return Ok(await _service.ReviewRequestAsync(actor, id, approve, note));
+            }
+            catch (KeyNotFoundException exception)
+            {
+                return NotFound(new { message = exception.Message });
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        private async Task<Employee?> GetActorAsync()
+        {
+            var email = User.FindFirstValue(ClaimTypes.Name);
+            return string.IsNullOrWhiteSpace(email) ? null : await _service.GetActorAsync(email);
         }
     }
-
-    public record AttendanceReviewDto(string? Note);
-
-    public record AttendanceRequestDto(
-        int Id,
-        string EmployeeName,
-        string EmployeeId,
-        string Department,
-        string Date,
-        string CheckIn,
-        string CheckOut,
-        string Reason,
-        string Status,
-        string SubmittedAt,
-        string? ReviewedAt,
-        string? ReviewedBy,
-        string? ReviewNote,
-        string Type,
-        string? OriginalCheckIn,
-        string? OriginalCheckOut
-    );
 }

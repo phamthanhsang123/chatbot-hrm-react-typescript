@@ -15,6 +15,7 @@ bin/
 obj/
 backend/**/bin/
 backend/**/obj/
+.tmp/
 
 # Environment and local config
 .env

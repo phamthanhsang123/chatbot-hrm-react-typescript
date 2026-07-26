@@ -549,7 +549,7 @@ Tổng điểm =
 | GET | `/api/admin/competency/dashboard` | Dashboard năng lực toàn công ty |
 | GET | `/api/admin/competency/{employeeId}/analyze` | AI phân tích nhân viên |
 | GET | `/api/manager/competency` | Manager xem đánh giá phòng ban |
-| POST | `/api/manager/competency/{employeeId}/generate` | Tạo đánh giá AI cho nhân viên |
+| POST | `/api/manager/agentic-ai/analyze` | Chạy Agentic AI và tạo đánh giá hợp lệ cho nhân viên |
 | POST | `/api/manager/competency/{reviewId}/approve` | Manager duyệt đánh giá |
 
 ---

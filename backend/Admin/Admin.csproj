@@ -4,6 +4,7 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>6a94cd3f-40fa-4319-9261-5f56c622879a</UserSecretsId>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -18,6 +19,13 @@
 		</PackageReference>
 		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.0" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Update="Data\hr-policies.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</Content>
 	</ItemGroup>
 
 </Project>

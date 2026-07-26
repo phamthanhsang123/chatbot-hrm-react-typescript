@@ -1,7 +1,19 @@
 'use client';
 import { BarChart3, Calendar, Clock, CheckCircle, XCircle, Plus, Eye } from 'lucide-react';
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import Swal from 'sweetalert2';
+import {
+  approveLeaveRequest,
+  approveManagerLeaveRequest,
+  createLeaveRequest,
+  fetchLeaveRequests,
+  fetchManagerLeaveRequests,
+  rejectLeaveRequest,
+  rejectManagerLeaveRequest,
+  type LeaveRequestApiItem,
+} from '@/services/leave';
+import { fetchEmployees, type EmployeeApiItem } from '@/services/employees';
+import type { ManagementRole } from '../types';
 import { Card } from './ui/card';
 import { MetricCard } from './MetricCard';
 import { Button } from './ui/button';
@@ -16,14 +28,6 @@ import {
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
-import {
-  approveLeaveRequest,
-  createLeaveRequest,
-  fetchLeaveRequests,
-  rejectLeaveRequest,
-  type LeaveRequestApiItem,
-} from '@/services/leave';
-import { fetchEmployees, type EmployeeApiItem } from '@/services/employees';
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected';
 type LeaveType = 'annual' | 'sick' | 'unpaid' | 'maternity' | 'marriage' | 'funeral';
@@ -61,73 +65,53 @@ interface LeaveRequest {
   reviewNote?: string;
 }
 
-function normalizeLeaveStatus(status: string): LeaveStatus {
-  const value = status.trim().toLowerCase();
-  if (value.includes('từ chối') || value.includes('rejected') || value.includes('reject')) return 'rejected';
-  if (value.includes('chờ') || value.includes('pending')) return 'pending';
-  if (value.includes('đã duyệt') || value.includes('approved') || value === 'duyet' || value === 'duyệt') return 'approved';
+interface LeaveProps {
+  userRole?: ManagementRole;
+}
+
+const leaveTypeIds: Record<LeaveType, number> = {
+  annual: 1,
+  sick: 2,
+  unpaid: 3,
+  maternity: 4,
+  marriage: 5,
+  funeral: 6,
+};
+
+function normalizeLeaveStatus(value: string): LeaveStatus {
+  const status = value.trim().toLowerCase();
+  if (status === 'approved' || status.includes('đã duyệt')) return 'approved';
+  if (status === 'rejected' || status.includes('từ chối')) return 'rejected';
   return 'pending';
 }
 
-function normalizeLeaveType(type: string): LeaveType {
-  const value = type.toLowerCase();
-  if (value.includes('ốm') || value.includes('sick')) return 'sick';
-  if (value.includes('không') || value.includes('unpaid')) return 'unpaid';
-  if (value.includes('thai') || value.includes('maternity')) return 'maternity';
-  if (value.includes('cưới') || value.includes('marriage')) return 'marriage';
-  if (value.includes('tang') || value.includes('funeral')) return 'funeral';
+function normalizeLeaveType(value: string): LeaveType {
+  const type = value.trim().toLowerCase();
+  if (type.includes('sick') || type.includes('ốm')) return 'sick';
+  if (type.includes('unpaid') || type.includes('không lương')) return 'unpaid';
+  if (type.includes('maternity') || type.includes('thai sản')) return 'maternity';
+  if (type.includes('marriage') || type.includes('cưới')) return 'marriage';
+  if (type.includes('funeral') || type.includes('tang')) return 'funeral';
   return 'annual';
 }
 
-function toDateInputValue(value: string) {
-  return value ? value.slice(0, 10) : '';
-}
-
-function normalizeVietnamese(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase()
-    .trim();
-}
-
-function normalizeApiLeaveStatus(status: string): LeaveStatus {
-  const value = normalizeVietnamese(status);
-  if (value.includes('tu choi') || value.includes('rejected') || value.includes('reject')) return 'rejected';
-  if (value.includes('cho') || value.includes('pending')) return 'pending';
-  if (value.includes('da duyet') || value.includes('duyet') || value.includes('approved')) return 'approved';
-  return 'pending';
-}
-
-function normalizeApiLeaveType(type: string): LeaveType {
-  const value = normalizeVietnamese(type);
-  if (value.includes('om') || value.includes('sick')) return 'sick';
-  if (value.includes('khong luong') || value.includes('unpaid')) return 'unpaid';
-  if (value.includes('thai') || value.includes('maternity')) return 'maternity';
-  if (value.includes('cuoi') || value.includes('marriage')) return 'marriage';
-  if (value.includes('tang') || value.includes('funeral')) return 'funeral';
-  return 'annual';
-}
-
-function mapLeaveRequest(item: LeaveRequestApiItem): LeaveRequest {
+function mapLeaveRequest(item: LeaveRequestApiItem, departments: Map<number, string>): LeaveRequest {
   return {
     id: item.id,
     employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
-    name: item.employeeName || `NV${item.employeeId}`,
-    department: 'API',
-    type: normalizeApiLeaveType(item.leaveType),
-    from: toDateInputValue(item.startDate),
-    to: toDateInputValue(item.endDate),
-    days: Number(item.totalDays || 0),
-    reason: item.reason || '',
-    status: normalizeApiLeaveStatus(item.status),
-    appliedDate: toDateInputValue(item.startDate),
+    name: item.employeeName,
+    department: departments.get(item.employeeId) || '-',
+    type: normalizeLeaveType(item.leaveType),
+    from: item.startDate.slice(0, 10),
+    to: item.endDate.slice(0, 10),
+    days: Number(item.totalDays) || 0,
+    reason: item.reason,
+    status: normalizeLeaveStatus(item.status),
+    appliedDate: item.startDate.slice(0, 10),
   };
 }
 
-export function Leave() {
+export function Leave({ userRole = 'admin' }: LeaveProps) {
   const [filterStatus, setFilterStatus] = useState<LeaveFilterStatus>('pending');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLeaveDate, setSelectedLeaveDate] = useState('');
@@ -137,14 +121,10 @@ export function Leave() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [rejectNote, setRejectNote] = useState('');
-  const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
-  const [apiLoading, setApiLoading] = useState(false);
-  const [apiError, setApiError] = useState('');
 
   // Form state for create dialog
   const [newLeave, setNewLeave] = useState({
-    employeeId: '',
-    employeeName: '',
+    employeeId: 0,
     type: 'annual' as LeaveType,
     from: '',
     to: '',
@@ -311,14 +291,44 @@ export function Leave() {
       appliedDate: getRelativeDateKey(2),
     },
   ]);
+  const [employees, setEmployees] = useState<EmployeeApiItem[]>([]);
+  const [apiStatus, setApiStatus] = useState('Đang tải đơn nghỉ phép...');
+
+  const loadLeaveRequests = useCallback(async () => {
+    setApiStatus('Đang tải đơn nghỉ phép...');
+    try {
+      const employeeRows = userRole === 'admin' ? await fetchEmployees() : [];
+      setEmployees(employeeRows);
+      const departments = new Map(employeeRows.map((employee) => [
+        employee.id,
+        employee.departmentName || '-',
+      ]));
+      const rows = userRole === 'manager'
+        ? await fetchManagerLeaveRequests()
+        : await fetchLeaveRequests();
+      setLeaveRequests(rows.map((item) => mapLeaveRequest(item, departments)));
+      setCurrentPage(1);
+      setApiStatus('');
+    } catch (error) {
+      console.error('Không tải được đơn nghỉ phép:', error);
+      setLeaveRequests([]);
+      setApiStatus('Không tải được dữ liệu nghỉ phép từ hệ thống.');
+    }
+  }, [userRole]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void loadLeaveRequests(), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadLeaveRequests]);
 
   const filteredData = useMemo(() => {
+    if (apiStatus) return [];
     return leaveRequests.filter((request) => {
       const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
       const matchesDate = !selectedLeaveDate || (request.from <= selectedLeaveDate && request.to >= selectedLeaveDate);
       return matchesStatus && matchesDate;
     });
-  }, [leaveRequests, filterStatus, selectedLeaveDate]);
+  }, [apiStatus, leaveRequests, filterStatus, selectedLeaveDate]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / LEAVE_PAGE_SIZE));
   const startIndex = (currentPage - 1) * LEAVE_PAGE_SIZE;
@@ -329,47 +339,20 @@ export function Leave() {
   );
 
   const stats = useMemo(() => {
-    const total = leaveRequests.length;
-    const pending = leaveRequests.filter((x) => x.status === 'pending').length;
-    const approved = leaveRequests.filter((x) => x.status === 'approved').length;
-    const rejected = leaveRequests.filter((x) => x.status === 'rejected').length;
+    const source = apiStatus ? [] : leaveRequests;
+    const total = source.length;
+    const pending = source.filter((x) => x.status === 'pending').length;
+    const approved = source.filter((x) => x.status === 'approved').length;
+    const rejected = source.filter((x) => x.status === 'rejected').length;
     
     // Count people on leave today
     const today = new Date().toISOString().slice(0, 10);
-    const onLeaveToday = leaveRequests.filter((x) => {
+    const onLeaveToday = source.filter((x) => {
       return x.status === 'approved' && x.from <= today && x.to >= today;
     }).length;
 
     return { total, pending, approved, rejected, onLeaveToday };
-  }, [leaveRequests]);
-
-  const loadLeaveData = async () => {
-    setApiLoading(true);
-    setApiError('');
-
-    try {
-      const [requests, employeeList] = await Promise.all([
-        fetchLeaveRequests(),
-        fetchEmployees(),
-      ]);
-
-      setLeaveRequests(requests.map(mapLeaveRequest));
-      setEmployees(employeeList.filter((employee) => employee.status !== 'Đã nghỉ việc'));
-    } catch (error) {
-      console.error('Load leave API failed:', error);
-      setApiError('Không tải được dữ liệu nghỉ phép từ Render API. Giao diện đang giữ dữ liệu hiện có.');
-    } finally {
-      setApiLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadLeaveData();
-  }, []);
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
+  }, [apiStatus, leaveRequests]);
 
   const getLeaveTypeLabel = (type: LeaveType) => {
     const types = {
@@ -422,45 +405,20 @@ export function Leave() {
     setShowRejectDialog(true);
   };
 
-  const calculateLeaveDays = (fromDate: string, toDate: string) => {
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-    return Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  };
-
   const handleConfirmApprove = async () => {
     if (!selectedRequest) return;
 
     try {
-      await approveLeaveRequest(selectedRequest.id);
-      setLeaveRequests((current) =>
-        current.map((request) =>
-          request.id === selectedRequest.id
-            ? {
-                ...request,
-                status: 'approved',
-                reviewedDate: formatDateKey(new Date()),
-                reviewedBy: 'HR Admin',
-              }
-            : request,
-        ),
-      );
-      await Swal.fire({
-        icon: 'success',
-        title: 'Đã duyệt',
-        text: `Đã duyệt đơn nghỉ phép cho ${selectedRequest.name}.`,
-        confirmButtonText: 'Đóng',
-      });
-    } catch (error) {
-      console.error('Approve leave API failed:', error);
-      await Swal.fire({
-        icon: 'error',
-        title: 'Không duyệt được đơn',
-        text: 'Kiểm tra API hoặc trạng thái đơn nghỉ phép.',
-        confirmButtonText: 'Đóng',
-      });
-    } finally {
+      if (userRole === 'manager') {
+        await approveManagerLeaveRequest(selectedRequest.id);
+      } else {
+        await approveLeaveRequest(selectedRequest.id);
+      }
+      await loadLeaveRequests();
+      alert(`Đã duyệt đơn nghỉ phép của ${selectedRequest.name}.`);
       setShowApproveDialog(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Không thể duyệt đơn nghỉ phép.');
     }
   };
 
@@ -468,102 +426,54 @@ export function Leave() {
     if (!selectedRequest) return;
 
     if (!rejectNote.trim()) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Thiếu lý do',
-        text: 'Vui lòng nhập lý do từ chối.',
-        confirmButtonText: 'Đóng',
-      });
+      alert('⚠️ Vui lòng nhập lý do từ chối!');
       return;
     }
 
     try {
-      await rejectLeaveRequest(selectedRequest.id);
-      setLeaveRequests((current) =>
-        current.map((request) =>
-          request.id === selectedRequest.id
-            ? {
-                ...request,
-                status: 'rejected',
-                reviewedDate: formatDateKey(new Date()),
-                reviewedBy: 'HR Admin',
-                reviewNote: rejectNote.trim(),
-              }
-            : request,
-        ),
-      );
-      await Swal.fire({
-        icon: 'success',
-        title: 'Đã từ chối',
-        text: `Đã từ chối đơn nghỉ phép của ${selectedRequest.name}.`,
-        confirmButtonText: 'Đóng',
-      });
-    } catch (error) {
-      console.error('Reject leave API failed:', error);
-      await Swal.fire({
-        icon: 'error',
-        title: 'Không từ chối được đơn',
-        text: 'Kiểm tra API hoặc trạng thái đơn nghỉ phép.',
-        confirmButtonText: 'Đóng',
-      });
-    } finally {
+      if (userRole === 'manager') {
+        await rejectManagerLeaveRequest(selectedRequest.id);
+      } else {
+        await rejectLeaveRequest(selectedRequest.id);
+      }
+      await loadLeaveRequests();
+      alert(`Đã từ chối đơn nghỉ phép của ${selectedRequest.name}.`);
       setShowRejectDialog(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Không thể từ chối đơn nghỉ phép.');
     }
   };
 
   const handleCreateLeave = async () => {
     if (!newLeave.employeeId || !newLeave.from || !newLeave.to || !newLeave.reason) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Thiếu thông tin',
-        text: 'Vui lòng điền đầy đủ thông tin đơn nghỉ phép.',
-        confirmButtonText: 'Đóng',
-      });
+      alert('⚠️ Vui lòng điền đầy đủ thông tin!');
       return;
     }
 
-    const selectedEmployee = employees.find((employee) => String(employee.id) === newLeave.employeeId);
-    const typeIdMap: Record<LeaveType, number> = {
-      annual: 1,
-      sick: 2,
-      unpaid: 3,
-      maternity: 4,
-      marriage: 5,
-      funeral: 6,
-    };
+    const from = new Date(newLeave.from);
+    const to = new Date(newLeave.to);
+    const days = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     try {
       await createLeaveRequest({
-        employeeId: Number(newLeave.employeeId),
-        leaveTypeId: typeIdMap[newLeave.type],
+        employeeId: newLeave.employeeId,
+        leaveTypeId: leaveTypeIds[newLeave.type],
         startDate: newLeave.from,
         endDate: newLeave.to,
         reason: newLeave.reason,
       });
-      await loadLeaveData();
-      await Swal.fire({
-        icon: 'success',
-        title: 'Đã tạo đơn',
-        text: `Đã tạo đơn nghỉ phép cho ${selectedEmployee?.fullName || 'nhân viên'}.`,
-        confirmButtonText: 'Đóng',
-      });
+      await loadLeaveRequests();
+      alert(`Đã tạo đơn nghỉ phép ${days} ngày.`);
       setShowCreateDialog(false);
       setNewLeave({
-        employeeId: '',
-        employeeName: '',
+        employeeId: 0,
         type: 'annual',
         from: '',
         to: '',
         reason: '',
       });
     } catch (error) {
-      console.error('Create leave API failed:', error);
-      await Swal.fire({
-        icon: 'error',
-        title: 'Không tạo được đơn',
-        text: 'Kiểm tra dữ liệu hoặc kết nối API.',
-        confirmButtonText: 'Đóng',
-      });
+      alert(error instanceof Error ? error.message : 'Không thể tạo đơn nghỉ phép.');
     }
   };
 
@@ -599,28 +509,24 @@ export function Leave() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Quản lý nghỉ phép</h1>
           <p className="text-gray-500 mt-1">Theo dõi và duyệt đơn xin nghỉ phép</p>
-          <p className="mt-1 text-xs text-blue-600">{apiLoading ? 'Đang tải dữ liệu từ Render API...' : 'Dữ liệu nghỉ phép được đồng bộ từ Render API'}</p>
+          {apiStatus && <p className="mt-2 text-sm text-amber-700">{apiStatus}</p>}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleViewStats}>
             <BarChart3 className="size-4 mr-2" />
             Thống kê
           </Button>
-          <Button
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-            onClick={() => setShowCreateDialog(true)}
-          >
-            <Plus className="size-4 mr-2" />
-            Tạo đơn nghỉ phép
-          </Button>
+          {userRole === 'admin' && (
+            <Button
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              onClick={() => setShowCreateDialog(true)}
+            >
+              <Plus className="size-4 mr-2" />
+              Tạo đơn nghỉ phép
+            </Button>
+          )}
         </div>
       </div>
-
-      {apiError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {apiError}
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
@@ -912,23 +818,16 @@ export function Leave() {
 
           <div className="space-y-4">
             <div>
-              <Label>Nh?n vi?n</Label>
+              <Label>Tên nhân viên</Label>
               <select
-                className="h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
                 value={newLeave.employeeId}
-                onChange={(e) => {
-                  const employee = employees.find((item) => String(item.id) === e.target.value);
-                  setNewLeave({
-                    ...newLeave,
-                    employeeId: e.target.value,
-                    employeeName: employee?.fullName || '',
-                  });
-                }}
+                onChange={(event) => setNewLeave({ ...newLeave, employeeId: Number(event.target.value) })}
               >
-                <option value="">Chọn nhân viên từ API</option>
+                <option value={0}>Chọn nhân viên</option>
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
-                    {employee.fullName} - {employee.departmentName || 'Chưa phân phòng'}
+                    {employee.fullName} - {employee.departmentName || 'Chưa có phòng ban'}
                   </option>
                 ))}
               </select>

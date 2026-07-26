@@ -1,11 +1,13 @@
 using Admin.DTOs;
 using Admin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Admin.Controllers
 {
     [ApiController]
     [Route("api/manager/competency")]
+    [Authorize(Roles = "ADMIN,MANAGER")]
     public class ManagerCompetencyController : ControllerBase
     {
         private readonly AgenticCompetencyService _service;
@@ -21,6 +23,7 @@ namespace Admin.Controllers
             try
             {
                 var now = DateTime.Now;
+                managerId = GetActorEmployeeId();
                 return Ok(await _service.GetManagerReviews(managerId, month ?? now.Month, year ?? now.Year));
             }
             catch (InvalidOperationException ex)
@@ -39,27 +42,8 @@ namespace Admin.Controllers
             try
             {
                 var now = DateTime.Now;
+                managerId = GetActorEmployeeId();
                 return Ok(await _service.GetInputData(managerId, employeeId, month ?? now.Month, year ?? now.Year));
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpPost("{employeeId:int}/generate")]
-        public async Task<IActionResult> Generate(
-            int employeeId,
-            [FromQuery] int managerId,
-            [FromBody] GenerateCompetencyReviewDto dto)
-        {
-            try
-            {
-                var now = DateTime.Now;
-                var month = dto.Month == 0 ? now.Month : dto.Month;
-                var year = dto.Year == 0 ? now.Year : dto.Year;
-
-                return Ok(await _service.GenerateReview(managerId, employeeId, month, year));
             }
             catch (InvalidOperationException ex)
             {
@@ -72,6 +56,7 @@ namespace Admin.Controllers
         {
             try
             {
+                managerId = GetActorEmployeeId();
                 var review = await _service.ApproveReview(managerId, reviewId, dto.ManagerNote);
                 return review == null ? NotFound(new { message = "Review not found" }) : Ok(review);
             }
@@ -86,6 +71,7 @@ namespace Admin.Controllers
         {
             try
             {
+                managerId = GetActorEmployeeId();
                 var review = await _service.RejectReview(managerId, reviewId, dto.ManagerNote);
                 return review == null ? NotFound(new { message = "Review not found" }) : Ok(review);
             }
@@ -93,6 +79,17 @@ namespace Admin.Controllers
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        private int GetActorEmployeeId()
+        {
+            var employeeIdClaim = User.FindFirst("employee_id")?.Value;
+            if (!int.TryParse(employeeIdClaim, out var employeeId) || employeeId <= 0)
+            {
+                throw new InvalidOperationException("JWT không có định danh nhân viên hợp lệ.");
+            }
+
+            return employeeId;
         }
     }
 }

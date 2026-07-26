@@ -35,8 +35,7 @@ const fallbackTeamMembers = [
 ];
 
 const actionItems = [
-  { title: 'Giao và theo dõi 4 task', page: 'manager-tasks', icon: ClipboardList, tone: 'text-indigo-600 bg-indigo-50' },
-  { title: 'Duyệt 1 task hoàn thành', page: 'task-review', icon: ClipboardCheck, tone: 'text-amber-600 bg-amber-50' },
+  { title: 'Quản lý task và kết quả chờ duyệt', page: 'manager-tasks', icon: ClipboardList, tone: 'text-indigo-600 bg-indigo-50' },
   { title: 'Duyệt 3 đơn nghỉ phép', page: 'leave', icon: CalendarCheck, tone: 'text-orange-600 bg-orange-50' },
   { title: 'Kiểm tra 2 đơn chấm công', page: 'attendance-approval', icon: CheckCircle2, tone: 'text-blue-600 bg-blue-50' },
   { title: 'Xem 2 khuyến nghị AI', page: 'competency', icon: BrainCircuit, tone: 'text-indigo-600 bg-indigo-50' },
@@ -89,7 +88,7 @@ export function ManagerDashboard({ departmentName, onNavigate }: ManagerDashboar
         }
 
         const waitingTasks = tasks.filter((task) => task.status === 'SUBMITTED' || task.status === 'REVISION_REQUIRED').length;
-        const waitingAttendance = attendanceRequests.filter((request) => request.status === 'pending').length;
+        const waitingAttendance = attendanceRequests.filter((request) => request.status === 'PENDING').length;
         setPendingWork(waitingTasks + (leaveDashboard?.pending || 0) + waitingAttendance);
         setApiStatus('');
       })

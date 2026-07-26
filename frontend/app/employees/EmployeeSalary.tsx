@@ -1,14 +1,13 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Clock3, DollarSign, Eye, ShieldCheck, Wallet } from 'lucide-react';
-import Swal from 'sweetalert2';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { getCurrentEmployeeId } from '@/services/tasks';
-import { HRM_SYNC_KEYS, getEmployeePortalIdentity, readSyncedRecords } from './hrmSync';
+import { fetchEmployeeSalaryRows, type SalaryRowApiItem } from '@/services/salary';
 
 type SalaryStatus = 'pending' | 'calculated' | 'approved' | 'paid';
 
@@ -100,115 +99,79 @@ function netSalary(record: SalaryRecord) {
   return Math.round(totalIncome(record) - totalDeductions(record));
 }
 
-function buildDemoSalaryRecords(employeeId: string, name: string, department: string): SalaryRecord[] {
-  return [
-    {
-      id: 1,
-      employeeId,
-      name,
-      department,
-      position: 'Developer',
-      month: monthKey(0),
-      baseSalary: 15000000,
-      mealAllowance: 730000,
-      transportAllowance: 400000,
-      phoneAllowance: 200000,
-      housingAllowance: 0,
-      standardDays: 22,
-      workDays: 21,
-      overtimeHours: 6,
-      overtimeRate: 1.5,
-      kpiBonus: 1500000,
-      projectBonus: 1000000,
-      holidayBonus: 0,
-      socialInsurance: 1200000,
-      healthInsurance: 225000,
-      unemploymentInsurance: 150000,
-      personalIncomeTax: 620000,
-      advancePayment: 0,
-      penalties: 0,
-      status: 'calculated',
-      calculatedDate: `${monthKey(0)}-24`,
-    },
-    {
-      id: 2,
-      employeeId,
-      name,
-      department,
-      position: 'Developer',
-      month: monthKey(-1),
-      baseSalary: 15000000,
-      mealAllowance: 730000,
-      transportAllowance: 400000,
-      phoneAllowance: 200000,
-      housingAllowance: 0,
-      standardDays: 22,
-      workDays: 22,
-      overtimeHours: 8,
-      overtimeRate: 1.5,
-      kpiBonus: 2000000,
-      projectBonus: 500000,
-      holidayBonus: 0,
-      socialInsurance: 1200000,
-      healthInsurance: 225000,
-      unemploymentInsurance: 150000,
-      personalIncomeTax: 760000,
-      advancePayment: 0,
-      penalties: 0,
-      status: 'paid',
-      calculatedDate: `${monthKey(-1)}-24`,
-      approvedDate: `${monthKey(-1)}-26`,
-      paidDate: `${monthKey(0)}-05`,
-    },
-    {
-      id: 3,
-      employeeId,
-      name,
-      department,
-      position: 'Developer',
-      month: monthKey(-2),
-      baseSalary: 15000000,
-      mealAllowance: 730000,
-      transportAllowance: 400000,
-      phoneAllowance: 200000,
-      housingAllowance: 0,
-      standardDays: 22,
-      workDays: 20,
-      overtimeHours: 2,
-      overtimeRate: 1.5,
-      kpiBonus: 1000000,
-      projectBonus: 0,
-      holidayBonus: 0,
-      socialInsurance: 1200000,
-      healthInsurance: 225000,
-      unemploymentInsurance: 150000,
-      personalIncomeTax: 480000,
-      advancePayment: 0,
-      penalties: 0,
-      salaryDeduction: 680000,
-      status: 'paid',
-      calculatedDate: `${monthKey(-2)}-24`,
-      approvedDate: `${monthKey(-2)}-26`,
-      paidDate: `${monthKey(-1)}-05`,
-    },
-  ];
+function normalizeSalaryStatus(value: string): SalaryStatus {
+  const status = value.trim().toLowerCase();
+  if (status.includes('paid') || status.includes('đã thanh toán')) return 'paid';
+  if (status.includes('approved') || status.includes('chờ thanh toán')) return 'approved';
+  if (status.includes('calculated') || status.includes('chờ duyệt')) return 'calculated';
+  return 'pending';
+}
+
+function mapSalaryRow(row: SalaryRowApiItem, month: string): SalaryRecord {
+  const totalDeduction = Number(row.totalDeduction ?? Math.max(0, row.totalIncome - row.netPay));
+  const allowance = Number(row.allowance ?? Math.max(0, row.totalIncome - row.salaryBase - row.bonus));
+
+  return {
+    id: row.id,
+    employeeId: row.employeeCode || `NV${String(row.employeeId).padStart(3, '0')}`,
+    name: row.employeeName,
+    department: row.department || 'Chưa phân phòng',
+    position: row.position || 'Chưa có chức vụ',
+    month,
+    baseSalary: Number(row.salaryBase) || 0,
+    mealAllowance: allowance,
+    transportAllowance: 0,
+    phoneAllowance: 0,
+    housingAllowance: 0,
+    standardDays: Number(row.standardDays) || 22,
+    workDays: Number(row.workDays) || 0,
+    overtimeHours: Number(row.overtimeHours) || 0,
+    overtimeRate: 1.5,
+    kpiBonus: Number(row.bonus) || 0,
+    projectBonus: 0,
+    holidayBonus: 0,
+    socialInsurance: totalDeduction,
+    healthInsurance: 0,
+    unemploymentInsurance: 0,
+    personalIncomeTax: 0,
+    advancePayment: 0,
+    penalties: 0,
+    salaryDeduction: 0,
+    status: normalizeSalaryStatus(row.status),
+  };
 }
 
 export function EmployeeSalary() {
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
-  const [records] = useState<SalaryRecord[]>(() => {
-    const demo = buildDemoSalaryRecords(employeeIdentity.employeeId, employeeIdentity.employeeName, employeeIdentity.department);
-    const synced = readSyncedRecords<SalaryRecord>(HRM_SYNC_KEYS.salaryRecords).filter(
-      (record) => record.employeeId === employeeIdentity.employeeId,
-    );
-    if (synced.length === 0) return demo;
-    const months = new Set(synced.map((record) => record.month));
-    return [...synced, ...demo.filter((record) => !months.has(record.month))];
-  });
+  const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(monthKey(0));
   const [selectedSalary, setSelectedSalary] = useState<SalaryRecord | null>(null);
+  const [apiStatus, setApiStatus] = useState('Đang tải bảng lương...');
 
-  const currentRecord = records.find((record) => record.month === selectedMonth) || records[0];
+  const periodOptions = useMemo(
+    () => Array.from({ length: 6 }, (_, index) => monthKey(-index)),
+    [],
+  );
+
+  const loadSalary = useCallback(async () => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    setApiStatus('Đang tải bảng lương...');
+    try {
+      const rows = await fetchEmployeeSalaryRows(getCurrentEmployeeId(), month, year);
+      setRecords(rows.map((row) => mapSalaryRow(row, selectedMonth)));
+      setApiStatus('');
+    } catch (error) {
+      console.error('Không tải được lương nhân viên:', error);
+      setRecords([]);
+      setApiStatus('Không tải được bảng lương từ hệ thống.');
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void loadSalary(), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadSalary]);
+
+  const currentRecord = records.find((record) => record.month === selectedMonth);
   const paidRecords = records.filter((record) => record.status === 'paid');
   const yearSummary = {
     totalNet: paidRecords.reduce((sum, record) => sum + netSalary(record), 0),
@@ -233,10 +196,19 @@ export function EmployeeSalary() {
           className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
           aria-label="Chọn tháng lương"
         >
-          {records.map((record) => <option key={record.month} value={record.month}>{formatMonth(record.month)}</option>)}
+          {periodOptions.map((period) => <option key={period} value={period}>{formatMonth(period)}</option>)}
         </select>
       </div>
 
+      {apiStatus && <p className="text-sm text-amber-700">{apiStatus}</p>}
+      {!currentRecord && !apiStatus && (
+        <Card className="p-8 text-center text-sm text-slate-500">
+          Chưa có bảng lương cho {formatMonth(selectedMonth)}.
+        </Card>
+      )}
+
+      {currentRecord && (
+        <>
       <section className="rounded-lg bg-slate-950 p-6 text-white shadow-sm">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div>
@@ -296,6 +268,8 @@ export function EmployeeSalary() {
           ))}
         </div>
       </Card>
+        </>
+      )}
 
       <Dialog open={Boolean(selectedSalary)} onOpenChange={(open) => !open && setSelectedSalary(null)}>
         <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">

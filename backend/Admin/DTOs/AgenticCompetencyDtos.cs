@@ -1,11 +1,5 @@
 namespace Admin.DTOs
 {
-    public class GenerateCompetencyReviewDto
-    {
-        public int Month { get; set; }
-        public int Year { get; set; }
-    }
-
     public class CompetencyInputDataDto
     {
         public int EmployeeId { get; set; }

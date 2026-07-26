@@ -199,20 +199,27 @@ Du lieu tra ve gom:
 - Du lieu cham cong.
 - Du lieu nghi phep da duyet.
 
-### 4.3. Generate ket qua danh gia bang Agentic AI
+### 4.3. Chay workflow Agentic AI
 
 ```http
-POST /api/manager/competency/{employeeId}/generate?managerId=2
+POST /api/manager/agentic-ai/analyze
+Authorization: Bearer <token>
 ```
 
 Request:
 
 ```json
 {
+  "managerId": 0,
+  "employeeId": 6,
   "month": 6,
-  "year": 2026
+  "year": 2026,
+  "goal": "Danh gia nang luc va de xuat hanh dong",
+  "persistReview": true
 }
 ```
+
+Backend lay ManagerId that tu JWT, khong tin ManagerId do frontend gui len.
 
 Cong thuc:
 

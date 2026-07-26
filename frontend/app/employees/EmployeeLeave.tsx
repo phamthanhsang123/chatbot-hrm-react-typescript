@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Plus, Eye } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { Card } from '../components/ui/card';
@@ -16,8 +16,12 @@ import {
 import { Label } from '../components/ui/label';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
-import { createLeaveRequest, fetchLeaveRequests, type LeaveRequestApiItem } from '@/services/leave';
 import { getCurrentEmployeeId } from '@/services/tasks';
+import {
+  createEmployeeLeaveRequest,
+  fetchEmployeeLeaveRequests,
+  type LeaveRequestApiItem,
+} from '@/services/leave';
 import { getEmployeePortalIdentity } from './hrmSync';
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected';
@@ -58,54 +62,47 @@ interface LeaveRequest {
   reviewNote?: string;
 }
 
-function normalizeLeaveStatus(status?: string): LeaveStatus {
-  const normalized = (status || '').toLowerCase();
-  if (normalized.includes('reject') || normalized.includes('từ') || normalized.includes('tu choi')) return 'rejected';
-  if (normalized.includes('chờ') || normalized.includes('cho duyet') || normalized.includes('pending')) return 'pending';
-  if (normalized.includes('approve') || normalized.includes('đã duyệt') || normalized.includes('da duyet')) return 'approved';
+function normalizeLeaveStatus(value: string): LeaveStatus {
+  const status = value.trim().toLowerCase();
+  if (status === 'approved' || status.includes('đã duyệt')) return 'approved';
+  if (status === 'rejected' || status.includes('từ chối')) return 'rejected';
   return 'pending';
 }
 
-function normalizeLeaveType(type?: string): LeaveType {
-  const normalized = (type || '').toLowerCase();
-  if (normalized.includes('sick') || normalized.includes('ốm') || normalized.includes('om')) return 'sick';
-  if (normalized.includes('unpaid') || normalized.includes('không lương') || normalized.includes('khong luong')) return 'unpaid';
-  if (normalized.includes('maternity') || normalized.includes('thai')) return 'maternity';
-  if (normalized.includes('marriage') || normalized.includes('cưới') || normalized.includes('cuoi')) return 'marriage';
-  if (normalized.includes('funeral') || normalized.includes('tang')) return 'funeral';
+function normalizeLeaveType(value: string): LeaveType {
+  const type = value.trim().toLowerCase();
+  if (type.includes('sick') || type.includes('ốm')) return 'sick';
+  if (type.includes('unpaid') || type.includes('không lương')) return 'unpaid';
+  if (type.includes('maternity') || type.includes('thai sản')) return 'maternity';
+  if (type.includes('marriage') || type.includes('cưới')) return 'marriage';
+  if (type.includes('funeral') || type.includes('tang')) return 'funeral';
   return 'annual';
 }
 
-function toDateOnly(value?: string) {
-  return value ? value.slice(0, 10) : new Date().toISOString().slice(0, 10);
-}
-
-function mapApiLeaveRequest(item: LeaveRequestApiItem, fallback: ReturnType<typeof getEmployeePortalIdentity>): LeaveRequest {
+function mapLeaveRequest(item: LeaveRequestApiItem, department: string): LeaveRequest {
   return {
     id: item.id,
     employeeId: `NV${String(item.employeeId).padStart(3, '0')}`,
-    name: item.employeeName || fallback.employeeName,
-    department: fallback.department,
+    name: item.employeeName,
+    department,
     type: normalizeLeaveType(item.leaveType),
-    from: toDateOnly(item.startDate),
-    to: toDateOnly(item.endDate),
-    days: Number(item.totalDays) || 1,
-    reason: item.reason || '',
+    from: item.startDate.slice(0, 10),
+    to: item.endDate.slice(0, 10),
+    days: Number(item.totalDays) || 0,
+    reason: item.reason,
     status: normalizeLeaveStatus(item.status),
-    appliedDate: toDateOnly(item.startDate),
+    appliedDate: item.startDate.slice(0, 10),
   };
 }
 
 export function EmployeeLeave() {
-  const numericEmployeeId = useMemo(() => getCurrentEmployeeId(), []);
-  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(numericEmployeeId), [numericEmployeeId]);
+  const employeeIdentity = useMemo(() => getEmployeePortalIdentity(getCurrentEmployeeId()), []);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
 
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [isLoadingApi, setIsLoadingApi] = useState(false);
-  const [apiError, setApiError] = useState('');
+  const [apiStatus, setApiStatus] = useState('Đang tải đơn nghỉ phép...');
 
   const [newLeave, setNewLeave] = useState({
     type: 'annual' as LeaveType,
@@ -113,6 +110,24 @@ export function EmployeeLeave() {
     to: '',
     reason: '',
   });
+
+  const loadLeaveRequests = useCallback(async () => {
+    setApiStatus('Đang tải đơn nghỉ phép...');
+    try {
+      const rows = await fetchEmployeeLeaveRequests(getCurrentEmployeeId());
+      setLeaveRequests(rows.map((item) => mapLeaveRequest(item, employeeIdentity.department)));
+      setApiStatus('');
+    } catch (error) {
+      console.error('Không tải được đơn nghỉ phép nhân viên:', error);
+      setLeaveRequests([]);
+      setApiStatus('Không tải được đơn nghỉ phép từ hệ thống.');
+    }
+  }, [employeeIdentity.department]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void loadLeaveRequests(), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadLeaveRequests]);
 
   const leaveBalance = {
     annual: { used: 5, total: 12 },
@@ -128,33 +143,6 @@ export function EmployeeLeave() {
   };
 
   const formatLeaveDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN');
-
-  useEffect(() => {
-    let mounted = true;
-    setIsLoadingApi(true);
-    setApiError('');
-
-    fetchLeaveRequests()
-      .then((items) => {
-        if (!mounted) return;
-        const apiRequests = items
-          .filter((item) => item.employeeId === numericEmployeeId)
-          .map((item) => mapApiLeaveRequest(item, employeeIdentity));
-
-        setLeaveRequests(apiRequests);
-      })
-      .catch((error) => {
-        console.error('fetch employee leave requests failed:', error);
-        if (mounted) setApiError('Không tải được dữ liệu nghỉ phép từ Render API.');
-      })
-      .finally(() => {
-        if (mounted) setIsLoadingApi(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [employeeIdentity, numericEmployeeId]);
 
   const handleCreateLeave = async () => {
     if (!newLeave.from || !newLeave.to || !newLeave.reason) {
@@ -179,38 +167,33 @@ export function EmployeeLeave() {
       });
       return;
     }
+    
     try {
-      const created = await createLeaveRequest({
-        employeeId: numericEmployeeId,
+      await createEmployeeLeaveRequest({
+        employeeId: getCurrentEmployeeId(),
         leaveTypeId: leaveTypeIds[newLeave.type],
         startDate: newLeave.from,
         endDate: newLeave.to,
         reason: newLeave.reason,
       });
-      const request = mapApiLeaveRequest(created, employeeIdentity);
-      setLeaveRequests((current) => [request, ...current.filter((item) => item.id !== request.id)]);
+      await loadLeaveRequests();
       setShowCreateDialog(false);
       setNewLeave({ type: 'annual', from: '', to: '', reason: '' });
 
       void Swal.fire({
         icon: 'success',
         title: 'Đã gửi đơn nghỉ phép',
-        text: 'Đơn nghỉ phép đã được lưu vào Render API và đang chờ HR phê duyệt.',
+        text: `${leaveTypeLabels[newLeave.type]} (${days} ngày) đang chờ quản lý phê duyệt.`,
         confirmButtonText: 'Hoàn tất',
         confirmButtonColor: '#059669',
       });
-      return;
     } catch (error) {
-      console.error('create leave request failed:', error);
-      setApiError('Không gửi được đơn nghỉ phép lên Render API. Dữ liệu chưa được lưu.');
       void Swal.fire({
         icon: 'error',
-        title: 'Không lưu được đơn nghỉ phép',
-        text: 'API chưa lưu thành công nên giao diện không thêm dữ liệu tạm.',
+        title: 'Không thể gửi đơn',
+        text: error instanceof Error ? error.message : 'Hệ thống đang có lỗi.',
         confirmButtonText: 'Đóng',
-        confirmButtonColor: '#dc2626',
       });
-      return;
     }
   };
 
@@ -230,8 +213,7 @@ export function EmployeeLeave() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Nghỉ phép</h1>
           <p className="text-gray-500 mt-1">Quản lý đơn nghỉ phép của bạn</p>
-          {isLoadingApi && <p className="mt-1 text-xs text-blue-600">Đang đồng bộ dữ liệu nghỉ phép từ Render API...</p>}
-          {apiError && <p className="mt-1 text-xs text-amber-600">{apiError}</p>}
+          {apiStatus && <p className="mt-2 text-sm text-amber-700">{apiStatus}</p>}
         </div>
         <Button
           className="gap-2 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700"

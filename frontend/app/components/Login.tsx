@@ -41,6 +41,12 @@ const mapApiRole = (role?: string): UserRole => {
   return 'employee';
 };
 
+const quickLoginAccounts: Record<UserRole, { email: string; password: string }> = {
+  admin: { email: 'admin@hrm.local', password: '123456' },
+  manager: { email: 'Kienquan@gmail.com', password: '123456' },
+  employee: { email: 'thanhsang3213121@gmail.com', password: '123456' },
+};
+
 export function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,12 +55,14 @@ export function Login({ onLogin }: LoginProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [message, setMessage] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const loginWithCredentials = async (
+    loginEmail: string,
+    loginPassword: string,
+    expectedRole?: UserRole,
+  ) => {
     setMessage('');
-    setSelectedRole(null);
 
-    if (!email.trim() || !password) {
+    if (!loginEmail.trim() || !loginPassword) {
       setMessage('Vui lòng nhập email và mật khẩu.');
       return;
     }
@@ -66,8 +74,8 @@ export function Login({ onLogin }: LoginProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: email.trim(),
-          password,
+          username: loginEmail.trim(),
+          password: loginPassword,
         }),
       });
 
@@ -80,8 +88,16 @@ export function Login({ onLogin }: LoginProps) {
         return;
       }
 
+      const apiRole = mapApiRole(data.role);
+      if (expectedRole && apiRole !== expectedRole) {
+        setMessage(`Tài khoản ${loginEmail} không có vai trò ${expectedRole}.`);
+        return;
+      }
+
       if (data.token) {
         localStorage.setItem('hrm_token', data.token);
+      } else {
+        localStorage.removeItem('hrm_token');
       }
       localStorage.setItem('hrm_role', data.role || '');
       const employeeId = Number(data.employeeId || data.user?.employeeId || data.id);
@@ -103,13 +119,19 @@ export function Login({ onLogin }: LoginProps) {
         localStorage.removeItem('hrm_employee_department');
       }
 
-      onLogin(mapApiRole(data.role));
+      onLogin(apiRole);
     } catch (error) {
       console.error('Login request error:', error);
       setMessage(`Không kết nối được API đăng nhập (${API_BASE}). Kiểm tra backend đang chạy chưa.`);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSelectedRole(null);
+    await loginWithCredentials(email, password);
   };
 
   const resetPasswordByEmail = async () => {
@@ -135,20 +157,13 @@ export function Login({ onLogin }: LoginProps) {
     }
   };
 
-  const handleQuickLogin = (role: UserRole) => {
-    setMessage('Đăng nhập nhanh chỉ để xem giao diện demo. Muốn dùng dữ liệu thật hãy nhập email/mật khẩu từ MySQL.');
+  const handleQuickLogin = async (role: UserRole) => {
+    const account = quickLoginAccounts[role];
+
     setSelectedRole(role);
-    setIsLoading(true);
-
-    if (role === 'employee') {
-      localStorage.setItem('hrm_employee_id', '1');
-    } else if (role === 'manager') {
-      localStorage.setItem('hrm_employee_id', '2');
-    }
-
-    setTimeout(() => {
-      onLogin(role);
-    }, 600);
+    setEmail(account.email);
+    setPassword(account.password);
+    await loginWithCredentials(account.email, account.password, role);
   };
 
   return (
@@ -238,19 +253,17 @@ export function Login({ onLogin }: LoginProps) {
                   type="button"
                   onClick={() => handleQuickLogin('admin')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
-                    selectedRole === 'admin'
-                      ? 'border-blue-600 bg-blue-50 scale-95'
-                      : 'border-gray-200 hover:border-blue-300 hover:shadow-lg'
-                  } ${isLoading && selectedRole !== 'admin' ? 'opacity-50' : ''}`}
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'admin'
+                    ? 'border-blue-600 bg-blue-50 scale-95'
+                    : 'border-gray-200 hover:border-blue-300 hover:shadow-lg'
+                    } ${isLoading && selectedRole !== 'admin' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
                     <div
-                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                        selectedRole === 'admin'
-                          ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg'
-                          : 'bg-gradient-to-br from-blue-400 to-indigo-500 text-white group-hover:scale-110 group-hover:shadow-md'
-                      }`}
+                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedRole === 'admin'
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg'
+                        : 'bg-gradient-to-br from-blue-400 to-indigo-500 text-white group-hover:scale-110 group-hover:shadow-md'
+                        }`}
                     >
                       <Shield className="size-8" />
                     </div>
@@ -265,19 +278,17 @@ export function Login({ onLogin }: LoginProps) {
                   type="button"
                   onClick={() => handleQuickLogin('manager')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
-                    selectedRole === 'manager'
-                      ? 'border-indigo-600 bg-indigo-50 scale-95'
-                      : 'border-gray-200 hover:border-indigo-300 hover:shadow-lg'
-                  } ${isLoading && selectedRole !== 'manager' ? 'opacity-50' : ''}`}
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'manager'
+                    ? 'border-indigo-600 bg-indigo-50 scale-95'
+                    : 'border-gray-200 hover:border-indigo-300 hover:shadow-lg'
+                    } ${isLoading && selectedRole !== 'manager' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
                     <div
-                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                        selectedRole === 'manager'
-                          ? 'bg-gradient-to-br from-indigo-500 to-sky-600 text-white shadow-lg'
-                          : 'bg-gradient-to-br from-indigo-400 to-sky-500 text-white group-hover:scale-110 group-hover:shadow-md'
-                      }`}
+                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedRole === 'manager'
+                        ? 'bg-gradient-to-br from-indigo-500 to-sky-600 text-white shadow-lg'
+                        : 'bg-gradient-to-br from-indigo-400 to-sky-500 text-white group-hover:scale-110 group-hover:shadow-md'
+                        }`}
                     >
                       <BriefcaseBusiness className="size-8" />
                     </div>
@@ -292,19 +303,17 @@ export function Login({ onLogin }: LoginProps) {
                   type="button"
                   onClick={() => handleQuickLogin('employee')}
                   disabled={isLoading}
-                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${
-                    selectedRole === 'employee'
-                      ? 'border-green-600 bg-green-50 scale-95'
-                      : 'border-gray-200 hover:border-green-300 hover:shadow-lg'
-                  } ${isLoading && selectedRole !== 'employee' ? 'opacity-50' : ''}`}
+                  className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${selectedRole === 'employee'
+                    ? 'border-green-600 bg-green-50 scale-95'
+                    : 'border-gray-200 hover:border-green-300 hover:shadow-lg'
+                    } ${isLoading && selectedRole !== 'employee' ? 'opacity-50' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-3">
                     <div
-                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                        selectedRole === 'employee'
-                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg'
-                          : 'bg-gradient-to-br from-green-400 to-emerald-500 text-white group-hover:scale-110 group-hover:shadow-md'
-                      }`}
+                      className={`size-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedRole === 'employee'
+                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg'
+                        : 'bg-gradient-to-br from-green-400 to-emerald-500 text-white group-hover:scale-110 group-hover:shadow-md'
+                        }`}
                     >
                       <UserRound className="size-8" />
                     </div>
@@ -416,7 +425,7 @@ export function Login({ onLogin }: LoginProps) {
                 </p>
                 <div className="text-xs text-blue-700 space-y-1">
                   <p>
-                    <strong>Admin:</strong> tạo 1 tài khoản role ADMIN trong MySQL
+                    <strong>Admin:</strong> admin@hrm.local / 123456
                   </p>
                   <p>
                     <strong>Manager:</strong> Kienquan@gmail.com / 123456

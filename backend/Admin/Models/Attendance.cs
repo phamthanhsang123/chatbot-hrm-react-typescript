@@ -16,10 +16,19 @@ namespace Admin.Models
         public DateTime Date { get; set; }
 
         [Column("check_in_time")]
-        public DateTime? CheckInTime { get; set; }
+        public TimeSpan? CheckInTime { get; set; }
 
         [Column("check_out_time")]
-        public DateTime? CheckOutTime { get; set; }
+        public TimeSpan? CheckOutTime { get; set; }
+
+        [Column("work_report_title")]
+        public string? WorkReportTitle { get; set; }
+
+        [Column("work_report_description")]
+        public string? WorkReportDescription { get; set; }
+
+        [Column("work_report_note")]
+        public string? WorkReportNote { get; set; }
 
         [Column("total_hours")]
         public decimal TotalHours { get; set; }
